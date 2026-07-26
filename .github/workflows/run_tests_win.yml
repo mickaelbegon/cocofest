@@ -2,11 +2,14 @@ name: Run the tests
 
 on: [pull_request]
 
-env:
-  PREFIX_WINDOWS: C:\Miniconda3\envs\cocofest
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   build:
+    env:
+      PREFIX_WINDOWS: C:\Miniconda3\envs\cocofest
     strategy:
       fail-fast: false
       matrix:
@@ -25,15 +28,16 @@ jobs:
         if: matrix.os == 'windows-latest'
 
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup environment
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
         with:
           miniforge-version: 24.11.3-2
-          use-mamba: true
+          mamba-version: "*"
           activate-environment: cocofest
           environment-file: environment.yml
+          conda-remove-defaults: true
 
       - name: Print mamba info
         run: |
@@ -48,7 +52,7 @@ jobs:
 
       - name: Archive coverage report
         id: archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: coverage${{ matrix.shard }}
           path: |
@@ -64,35 +68,23 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     defaults:
       run:
-        shell: bash -l {0}
+        shell: bash
 
     steps:
-      - name: Set prefix windows
-        run: |
-          echo "PREFIX=${{ env.PREFIX_WINDOWS }}" >> $GITHUB_ENV
-
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - name: Setup environment
-        uses: conda-incubator/setup-miniconda@v2
+      - name: Set up Python 3.11
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          miniforge-version: 24.11.3-2
-          use-mamba: true
-          activate-environment: cocofest
-          environment-file: environment.yml
+          python-version: "3.11"
 
-      - name: Print mamba info
-        run: |
-          conda info
-          conda list
-
-      - name: Install extra dependencies
-        run: pip install coverage
+      - name: Install coverage
+        run: python -m pip install coverage==7.15.2
 
       - name: Download all workflow run artifacts
         id: download
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
 
       - name: Rename coverage files
         run: |
@@ -105,19 +97,19 @@ jobs:
         run: pwd; ls -a -l
 
       - name: Merge coverage reports
-        run: coverage combine .coverage1 .coverage2
+        run: python -m coverage combine .coverage1 .coverage2
 
       - name: Show current dir content with new .coverage file
         run: pwd; ls -a
 
       - name: Generate XML report
         run: |
-          coverage xml
-          coverage report -m
+          python -m coverage xml
+          python -m coverage report -m
 
       - name: Upload combined coverage to Codecov
         if: env.CODECOV_TOKEN != ''
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
           token: ${{ env.CODECOV_TOKEN }}
           files: ./coverage.xml
