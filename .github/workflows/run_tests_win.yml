@@ -60,6 +60,8 @@ jobs:
   merge-coverage:
     needs: build
     runs-on: windows-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     defaults:
       run:
         shell: bash -l {0}
@@ -113,9 +115,12 @@ jobs:
           coverage xml
           coverage report -m
 
-      - uses: codecov/codecov-action@v5
+      - name: Upload combined coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v5
         with:
-          file: ./coverage.xml
+          token: ${{ env.CODECOV_TOKEN }}
+          files: ./coverage.xml
           flags: unittests
           fail_ci_if_error: true
           verbose: true
