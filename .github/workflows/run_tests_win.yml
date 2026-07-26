@@ -34,12 +34,12 @@ jobs:
         uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
         with:
           miniforge-version: 24.11.3-2
-          mamba-version: "*"
+          conda-solver: libmamba
           activate-environment: cocofest
           environment-file: environment.yml
           conda-remove-defaults: true
 
-      - name: Print mamba info
+      - name: Print Conda environment info
         run: |
           conda info
           conda list
