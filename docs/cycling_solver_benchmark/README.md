@@ -185,7 +185,8 @@ ne suffit pas à valider une fenêtre, encore moins une chaîne d'endurance.
 
 ## 2. Problème recommandé
 
-### 2.1 États musculaires
+### 2.
+1 États musculaires
 
 Pour chacun des quatre muscles, conserver exactement les cinq états de Ding :
 
@@ -719,6 +720,31 @@ scientifique commune :
 La question de performance devient alors : « quelle méthode résout le plus
 vite le problème corrigé avec le même niveau d'erreur? », et non « quelle
 méthode reproduit le mieux l'ancienne référence? ».
+
+### 6.1 Homotopie full-horizon
+
+Le mode CI `full_horizon` vise maintenant le plus grand nombre de cycles dans
+un OCP unique sur les runners Linux GitHub. Il construit d'abord la trajectoire
+RHO reduced concaténée, puis explore les horizons full/MX avec MadNLP/MUMPS :
+pas de 1 cycle jusqu'à 30, de 5 jusqu'à 60, puis de 10 au-delà. Après chaque
+succès, la solution full certifiée initialise exactement les cycles déjà
+résolus; seuls les cycles ajoutés conservent l'initialisation RHO. Une seconde
+chance RHO seule distingue un mauvais raccordement d'un échec du problème.
+Le pic RSS de tout l'arbre de processus est mesuré et le job s'arrête à
+`12.5 GiB` sur une allocation de 16 GiB ou `97.5 GiB` sur 128 GiB.
+
+TODO :
+
+- lancer et suivre cette campagne sur le runner GitHub Linux standard;
+- confirmer que chaque frontière `30k` respecte le tour de pédale imposé et
+  enregistrer l'écart de raccord full/RHO;
+- raffiner à l'unité le dernier intervalle lorsqu'une limite mémoire est
+  rencontrée;
+- comparer temps, RSS, faisabilité et objectif au RHO reduced apparié;
+- dans un second temps, préparer un runner Linux à forte RAM avec GPU et
+  intégrer le chemin de calcul CuSADI de la branche Bioptim pertinente; fixer
+  son SHA et ajouter un benchmark CPU/GPU reproductible avant de conclure sur
+  l'accélération.
 
 ## 7. Reproductibilité
 

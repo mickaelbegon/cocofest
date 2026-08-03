@@ -2339,7 +2339,7 @@ jobs:
           done
 
   full-horizon:
-    name: MadNLP/MUMPS — RHO-reduced seeded full-horizon sweep (MX)
+    name: MadNLP/MUMPS — full-horizon size homotopy (MX)
     if: inputs.cycles == 'full_horizon'
     needs: [prepare-seed, prepare-madnlp-stack]
     runs-on: ${{ inputs.runner_label }}

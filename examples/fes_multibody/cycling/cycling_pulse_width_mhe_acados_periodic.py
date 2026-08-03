@@ -6,7 +6,7 @@ therefore stored internally as a signed ``-0.2 N.m`` generalized torque.
 
 import argparse
 import ctypes
-from copy import deepcopy
+from copy import copy, deepcopy
 import hashlib
 import json
 import os
@@ -1207,6 +1207,16 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help=(
             "Save the first converged and independently feasible target window "
             "as a reusable solver-neutral initial solution."
+        ),
+    )
+    parser.add_argument(
+        "--full-horizon-prefix-solution",
+        type=Path,
+        default=None,
+        help=(
+            "Shorter certified full-mechanics solution copied over the matching "
+            "cycle prefix of --common-initial-solution. Remaining cycles keep "
+            "the RHO seed for size homotopy."
         ),
     )
     parser.add_argument(
@@ -3704,6 +3714,130 @@ def _validate_common_initial_solution_metadata(
             f"Common initial solution '{seed_path}' uses signed crank torque "
             f"{seed_torque}, expected {expected['constant_crank_torque']}."
         )
+
+
+def apply_full_horizon_prefix_to_initial_guess(
+    periodic_nmpc,
+    prefix_solution: "_WarmupSolutionAdapter",
+    args: argparse.Namespace,
+    prefix_path: Path,
+) -> dict:
+    """Overlay a shorter certified full solution without stretching its cycles."""
+
+    metadata = getattr(prefix_solution, "metadata", None)
+    if not metadata:
+        raise ValueError(f"Full-horizon prefix '{prefix_path}' has no metadata.")
+    prefix_cycles = metadata.get("cycles_per_window")
+    if (
+        isinstance(prefix_cycles, bool)
+        or not isinstance(prefix_cycles, (int, np.integer))
+        or int(prefix_cycles) < 1
+    ):
+        raise ValueError(
+            f"Full-horizon prefix '{prefix_path}' has invalid "
+            f"cycles_per_window={prefix_cycles!r}."
+        )
+    prefix_cycles = int(prefix_cycles)
+    target_cycles = int(args.cycles_per_window)
+    if prefix_cycles >= target_cycles:
+        raise ValueError(
+            f"Full-horizon prefix '{prefix_path}' spans {prefix_cycles} cycles; "
+            f"the target must be strictly longer than that ({target_cycles})."
+        )
+    if (
+        metadata.get("mechanical_formulation") != "full"
+        or args.mechanical_formulation != "full"
+    ):
+        raise ValueError(
+            "--full-horizon-prefix-solution requires full mechanics for both "
+            "the prefix and target."
+        )
+
+    prefix_args = copy(args)
+    prefix_args.cycles_per_window = prefix_cycles
+    _validate_common_initial_solution_metadata(prefix_solution, prefix_args, prefix_path)
+
+    nlp = periodic_nmpc.nlp[0]
+    source_states = prefix_solution.decision_states(to_merge=SolutionMerge.NODES)
+    source_controls = prefix_solution.decision_controls(to_merge=SolutionMerge.NODES)
+    maximum_boundary_change = 0.0
+
+    for key in nlp.x_init.keys():
+        if key not in source_states:
+            raise KeyError(f"Full-horizon prefix is missing target state '{key}'.")
+        source = np.asarray(source_states[key], dtype=float)
+        target = nlp.x_init[key].init
+        if source.ndim != 2:
+            raise ValueError(
+                f"Full-horizon prefix state '{key}' must be two-dimensional, "
+                f"got shape {source.shape}."
+            )
+        source_intervals, source_remainder = divmod(
+            source.shape[1] - 1, prefix_cycles
+        )
+        target_intervals, target_remainder = divmod(
+            target.shape[1] - 1, target_cycles
+        )
+        if (
+            source.shape[0] != target.shape[0]
+            or source_remainder
+            or target_remainder
+            or source_intervals != target_intervals
+            or not np.all(np.isfinite(source))
+        ):
+            raise ValueError(
+                f"Full-horizon prefix state '{key}' has shape {source.shape}, "
+                f"incompatible with target shape {target.shape} and cycle layout "
+                f"{prefix_cycles}->{target_cycles}."
+            )
+        boundary_column = source.shape[1] - 1
+        maximum_boundary_change = max(
+            maximum_boundary_change,
+            float(np.max(np.abs(source[:, -1] - target[:, boundary_column]))),
+        )
+        target[:, : source.shape[1]] = source
+
+    for key in nlp.u_init.keys():
+        if key not in source_controls:
+            raise KeyError(f"Full-horizon prefix is missing target control '{key}'.")
+        source = np.asarray(source_controls[key], dtype=float)
+        target = nlp.u_init[key].init
+        if source.ndim != 2:
+            raise ValueError(
+                f"Full-horizon prefix control '{key}' must be two-dimensional, "
+                f"got shape {source.shape}."
+            )
+        source_nodes, source_remainder = divmod(source.shape[1], prefix_cycles)
+        target_nodes, target_remainder = divmod(target.shape[1], target_cycles)
+        if (
+            source.shape[0] != target.shape[0]
+            or source_remainder
+            or target_remainder
+            or source_nodes != target_nodes
+            or not np.all(np.isfinite(source))
+        ):
+            raise ValueError(
+                f"Full-horizon prefix control '{key}' has shape {source.shape}, "
+                f"incompatible with target shape {target.shape} and cycle layout "
+                f"{prefix_cycles}->{target_cycles}."
+            )
+        target[:, : source.shape[1]] = source
+
+    prefix_seam_errors = [
+        item
+        for item in wheel_cycle_boundary_initial_guess_errors(periodic_nmpc)
+        if int(item["cycle_index"]) <= prefix_cycles
+    ]
+    return {
+        "prefix_cycles": prefix_cycles,
+        "target_cycles": target_cycles,
+        "appended_rho_cycles": target_cycles - prefix_cycles,
+        "maximum_boundary_change": maximum_boundary_change,
+        "maximum_cycle_boundary_error": max(
+            (abs(float(item["error"])) for item in prefix_seam_errors),
+            default=0.0,
+        ),
+    }
 
 
 def _adopt_common_initial_solution_warmup_cycles(
@@ -13680,6 +13814,12 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 "--common-initial-solution and "
                 "--common-initial-solution-output must not be the same file."
             )
+    if getattr(args, "full_horizon_prefix_solution", None) is not None:
+        if not args.single_shot or args.common_initial_solution is None:
+            raise ValueError(
+                "--full-horizon-prefix-solution requires --single-shot and "
+                "--common-initial-solution."
+            )
     if args.receding_horizon_solution_output is not None and args.single_shot:
         raise ValueError(
             "--receding-horizon-solution-output cannot be used with --single-shot."
@@ -15318,6 +15458,30 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     f"projected_muscles={common_projection['projected_muscles']} "
                     f"max_defect_before={common_projection['max_defect_before']:.6g} "
                     f"max_defect_after={common_projection['max_defect_after']:.6g}"
+                )
+
+        if getattr(args, "full_horizon_prefix_solution", None) is not None:
+            prefix_path = _resolve_standard_warmup_seed(
+                args.full_horizon_prefix_solution
+            )
+            prefix_solution = _load_warmup_cache(prefix_path)
+            prefix_summary = apply_full_horizon_prefix_to_initial_guess(
+                nmpc, prefix_solution, args, prefix_path
+            )
+            # The exact prefix changes the internal cycle seam at its endpoint.
+            # Re-establish the absolute terminal target for the longer RHO tail.
+            finalize_absolute_wheel_q_initial_guess(
+                nmpc, project_terminal_contact=False
+            )
+            if echo:
+                print(
+                    "full_horizon_prefix_solution: applied "
+                    f"({prefix_path}, prefix_cycles={prefix_summary['prefix_cycles']}, "
+                    f"appended_rho_cycles={prefix_summary['appended_rho_cycles']}, "
+                    "maximum_boundary_change="
+                    f"{prefix_summary['maximum_boundary_change']:.6g}, "
+                    "maximum_cycle_boundary_error="
+                    f"{prefix_summary['maximum_cycle_boundary_error']:.6g})"
                 )
 
     if echo and args.pulse_width_active_set != "none":

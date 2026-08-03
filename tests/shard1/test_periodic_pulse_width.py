@@ -9145,6 +9145,73 @@ def test_horizon_seed_recenters_kinematic_boundary_bounds():
     np.testing.assert_allclose(nlp.x_bounds["qdot"].max[:, [0, 2]], [[-0.8, -2.8]])
 
 
+def test_full_horizon_prefix_overlays_only_certified_cycles(tmp_path):
+    args = SimpleNamespace(
+        model_formulation="periodic_node",
+        mechanical_formulation="full",
+        cycles_per_window=2,
+        stimulations_per_cycle=2,
+        objective="fatigue",
+        objective_shape="quadratic",
+        constant_crank_torque=-0.2,
+        torque_application="constant",
+        enforce_start_constraints=False,
+        acados_wheel_q_slack=0.0,
+        acados_terminal_wheel_q_slack=0.002,
+        terminal_wheel_q_reference_mode="absolute_initial",
+        pulse_width_scaling=0.0025,
+        pulse_width_active_set="none",
+        ode_solver="collocation",
+        nlp_ordering_strategy="time_major",
+        solver="madnlp",
+        warmup_cycles_consumed=1,
+    )
+    prefix_args = SimpleNamespace(**vars(args))
+    prefix_args.cycles_per_window = 1
+    metadata = periodic_example._common_initial_solution_metadata(prefix_args)
+    prefix = periodic_example._WarmupSolutionAdapter(
+        states={
+            "q": np.arange(5, dtype=float).reshape(1, 5),
+            "qdot": np.arange(10, 15, dtype=float).reshape(1, 5),
+        },
+        controls={
+            "last_pulse_width_Biceps": np.array([[0.0002, 0.0003]])
+        },
+        metadata=metadata,
+    )
+
+    def guess(values):
+        return SimpleNamespace(init=np.asarray(values, dtype=float))
+
+    nlp = SimpleNamespace(
+        x_init={
+            "q": guess(np.full((1, 9), 90.0)),
+            "qdot": guess(np.full((1, 9), 80.0)),
+        },
+        u_init={
+            "last_pulse_width_Biceps": guess(np.full((1, 4), 0.0004))
+        },
+    )
+    nmpc = SimpleNamespace(
+        nlp=[nlp],
+        _correct_init_guess_to_fit_bounds=lambda corrected_input: None,
+        _sync_acados_state_bounds=lambda: None,
+    )
+
+    summary = periodic_example.apply_full_horizon_prefix_to_initial_guess(
+        nmpc, prefix, args, tmp_path / "one-cycle-full.npz"
+    )
+
+    np.testing.assert_allclose(nlp.x_init["q"].init[:, :5], [[0, 1, 2, 3, 4]])
+    np.testing.assert_allclose(nlp.x_init["q"].init[:, 5:], 90.0)
+    np.testing.assert_allclose(
+        nlp.u_init["last_pulse_width_Biceps"].init,
+        [[0.0002, 0.0003, 0.0004, 0.0004]],
+    )
+    assert summary["prefix_cycles"] == 1
+    assert summary["appended_rho_cycles"] == 1
+
+
 def test_full_dynamics_transfer_rollout_reintegrates_appended_cycle():
     class Variables(dict):
         def __init__(self, *args, shape, **kwargs):

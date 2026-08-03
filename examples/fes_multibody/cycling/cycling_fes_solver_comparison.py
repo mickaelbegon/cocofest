@@ -197,6 +197,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "standard_warmup_seed_continuation",
     "legacy_standard_warmup_seed_signed_torque",
     "common_initial_solution",
+    "full_horizon_prefix_solution",
     "common_initial_solution_output",
     "allow_partial_receding_horizon_solution_output",
     "rho_replay_checkpoint_output",
@@ -2086,6 +2087,7 @@ def _run_benchmark_case(
             for path_attribute in (
                 "standard_warmup_seed",
                 "common_initial_solution",
+                "full_horizon_prefix_solution",
                 "common_initial_solution_output",
                 "receding_horizon_solution_output",
                 "reduced_cycling_profile",
@@ -3159,6 +3161,7 @@ def main(
     standard_warmup_seed_continuation: bool = False,
     legacy_standard_warmup_seed_signed_torque: float | None = None,
     common_initial_solution: str | Path | None = None,
+    full_horizon_prefix_solution: str | Path | None = None,
     adopt_common_initial_solution_warmup_cycles: bool = False,
     common_initial_solution_output: str | Path | None = None,
     receding_horizon_solution_output: str | Path | None = None,
@@ -3391,6 +3394,9 @@ def main(
     # and C-compiled runs retain CLI-relative path semantics.
     standard_warmup_seed = resolve_invocation_path(standard_warmup_seed)
     common_initial_solution = resolve_invocation_path(common_initial_solution)
+    full_horizon_prefix_solution = resolve_invocation_path(
+        full_horizon_prefix_solution
+    )
     common_initial_solution_output = resolve_invocation_path(
         common_initial_solution_output
     )
@@ -3675,6 +3681,8 @@ def main(
     )
     ipopt_args.common_initial_solution = common_initial_solution
     acados_args.common_initial_solution = common_initial_solution
+    ipopt_args.full_horizon_prefix_solution = full_horizon_prefix_solution
+    acados_args.full_horizon_prefix_solution = full_horizon_prefix_solution
     ipopt_args.adopt_common_initial_solution_warmup_cycles = (
         adopt_common_initial_solution_warmup_cycles
     )
@@ -4317,6 +4325,15 @@ def build_cli() -> argparse.ArgumentParser:
         help=(
             "Write the first converged target window as a solver-neutral "
             "periodic initial solution."
+        ),
+    )
+    parser.add_argument(
+        "--full-horizon-prefix-solution",
+        type=Path,
+        default=None,
+        help=(
+            "Shorter certified full-horizon solution overlaid on the RHO seed "
+            "to continue toward a larger single-shot OCP."
         ),
     )
     parser.add_argument(
@@ -5375,6 +5392,7 @@ if __name__ == "__main__":
             args.legacy_standard_warmup_seed_signed_torque
         ),
         common_initial_solution=args.common_initial_solution,
+        full_horizon_prefix_solution=args.full_horizon_prefix_solution,
         adopt_common_initial_solution_warmup_cycles=(
             args.adopt_common_initial_solution_warmup_cycles
         ),

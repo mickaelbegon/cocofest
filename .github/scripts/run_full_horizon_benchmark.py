@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Run an RSS-bounded RHO-seeded full-horizon MadNLP size sweep.
+"""Run an RSS-bounded RHO/full-prefix homotopy for full-horizon MadNLP.
 
 The reduced one-cycle RHO is solved once up to the requested ceiling.  Its
-concatenated trajectory is then sliced into solver-neutral seeds for
-full-mechanics, single-shot horizons of increasing size. Each problem is
-warm-started from the matching RHO prefix rather than from the previous
-full-horizon solution, keeping the comparison paired while progressively
-increasing the NLP size.
+concatenated trajectory supplies the complete seed for each target size.  Once
+a full-mechanics horizon is certified, that solution replaces the matching
+prefix of the next target while the newly appended cycles remain RHO-seeded.
+An independent RHO-only retry remains available after a solver failure.
 """
 
 from __future__ import annotations
@@ -31,15 +30,11 @@ LARGE_RUNNER_RSS_LIMIT_GIB = 97.5
 
 
 def horizon_sweep_targets(max_cycles: int) -> list[int]:
-    """Return the adaptive sparse/5/10-cycle size ladder."""
+    """Return the +1 to 30, +5 to 60, then +10-cycle size ladder."""
 
     if max_cycles < 1:
         raise ValueError("max_cycles must be strictly positive.")
-    targets = [
-        value
-        for value in (1, 2, 3, 5, 10, 15, 20, 25, 30)
-        if value <= max_cycles
-    ]
+    targets = list(range(1, min(max_cycles, 30) + 1))
     if max_cycles > 30:
         targets.extend(range(35, min(max_cycles, 60) + 1, 5))
     if max_cycles > 60:
@@ -494,6 +489,7 @@ def _full_horizon_command(
     solution_path: Path,
     *,
     mechanical_formulation: str = "full",
+    prefix_solution_path: Path | None = None,
 ) -> list[str]:
     if mechanical_formulation not in {"full", "reduced"}:
         raise ValueError("mechanical_formulation must be 'full' or 'reduced'.")
@@ -546,6 +542,10 @@ def _full_horizon_command(
         str(result_path),
         ]
     )
+    if prefix_solution_path is not None:
+        command.extend(
+            ["--full-horizon-prefix-solution", str(prefix_solution_path)]
+        )
     return command
 
 
@@ -556,6 +556,8 @@ def _attempt_record(
     result_path: Path,
     *,
     mechanical_formulation: str = "full",
+    solution_path: Path | None = None,
+    prefix_solution_path: Path | None = None,
 ) -> dict:
     unknown_mumps_warning = _log_has_unknown_mumps_warning(
         Path(monitored.log_path)
@@ -567,6 +569,7 @@ def _attempt_record(
         expected_solver="madnlp",
         expected_mechanics=mechanical_formulation,
     )
+    solution_available = solution_path is None or solution_path.is_file()
     infrastructure_error = bool(
         not monitored.memory_limit_exceeded
         and not monitored.timed_out
@@ -574,10 +577,12 @@ def _attempt_record(
             monitored.return_code != 0
             or not _benchmark_payload_is_readable(result_path)
             or unknown_mumps_warning
+            or (certificate and not solution_available)
         )
     )
     success = bool(
         certificate
+        and solution_available
         and monitored.return_code == 0
         and not monitored.memory_limit_exceeded
         and not monitored.timed_out
@@ -600,9 +605,19 @@ def _attempt_record(
         "success": success,
         "failure_kind": failure_kind,
         "certificate_valid": certificate,
+        "solution_available": solution_available,
         "infrastructure_error": infrastructure_error,
         "unknown_mumps_warning": unknown_mumps_warning,
         "result_path": str(result_path),
+        "solution_path": None if solution_path is None else str(solution_path),
+        "seed_origin": (
+            "rho_plus_certified_full_prefix"
+            if prefix_solution_path is not None
+            else "rho_prefix"
+        ),
+        "prefix_solution_path": (
+            None if prefix_solution_path is None else str(prefix_solution_path)
+        ),
         "peak_rss_bytes": monitored.peak_rss_bytes,
         "peak_rss_gib": monitored.peak_rss_bytes / GIB,
         "return_code": monitored.return_code,
@@ -623,14 +638,17 @@ def _write_report(path: Path, report: dict) -> None:
 
 def _write_markdown(path: Path, report: dict) -> None:
     lines = [
-        "# RHO reduced vs full-horizon independent size sweep",
+        "# RHO reduced vs full-horizon size homotopy",
         "",
         f"- Limite RSS : `{report['rss_limit_gib']:.3f} GiB`",
         f"- Plafond demandé : `{report['max_cycles']} cycles`",
         f"- Préfixe RHO disponible : `{report['rho_available_cycles']} cycles`",
         f"- Plus grand full horizon validé : `{report['largest_successful_cycles']}`",
         f"- Trous de convergence : `{report.get('solver_gap_cycles', [])}`",
-        "- Initialisation de chaque taille : `préfixe RHO reduced indépendant`",
+        (
+            "- Initialisation : `dernière solution full certifiée + queue RHO`; "
+            "seconde chance `RHO seul`"
+        ),
         (
             "- RHO reduced concaténé : "
             f"`{'succès' if report['rho']['success'] else 'échec'}`, "
@@ -663,14 +681,15 @@ def _write_markdown(path: Path, report: dict) -> None:
         [
         "## Sweep full/MX",
         "",
-        "| Cycles | Phase | Chance | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
-        "|---:|:---|---:|:---:|:---|---:|---:|",
+        "| Cycles | Phase | Chance | Seed | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
+        "|---:|:---|---:|:---|:---:|:---|---:|---:|",
         ]
     )
     for attempt in report["full_horizon_attempts"]:
         lines.append(
             f"| {attempt['cycles']} | {attempt['phase']} | "
             f"{attempt.get('chance', 1)} | "
+            f"{attempt.get('seed_origin', 'rho_prefix')} | "
             f"{'oui' if attempt['success'] else 'non'} | "
             f"{attempt.get('failure_kind') or '—'} | "
             f"{attempt['peak_rss_gib']:.3f} | {attempt['elapsed_s']:.1f} |"
@@ -722,6 +741,7 @@ def _run_horizon_attempt(
     chance: int,
     rss_limit_bytes: int,
     mechanical_formulation: str = "full",
+    prefix_solution_path: Path | None = None,
 ) -> dict:
     if chance < 1:
         raise ValueError("chance must be strictly positive.")
@@ -747,6 +767,7 @@ def _run_horizon_attempt(
             result_path,
             solution_path,
             mechanical_formulation=mechanical_formulation,
+            prefix_solution_path=prefix_solution_path,
         ),
         cwd=args.workspace,
         log_path=case_dir / "solver.log",
@@ -760,6 +781,8 @@ def _run_horizon_attempt(
         monitored,
         result_path,
         mechanical_formulation=mechanical_formulation,
+        solution_path=solution_path,
+        prefix_solution_path=prefix_solution_path,
     )
 
 
@@ -795,7 +818,7 @@ def run(args: argparse.Namespace) -> int:
         "rho_solver": "ipopt",
         "full_horizon_solver": "madnlp",
         "linear_solver": "mumps",
-        "initialization": "independent_reduced_rho_prefix",
+        "initialization": "rho_tail_with_last_certified_full_prefix",
         "rho": None,
         "paired_reduced_control_attempts": [],
         "full_horizon_attempts": [],
@@ -880,11 +903,17 @@ def run(args: argparse.Namespace) -> int:
         *,
         mechanical_formulation: str = "full",
         destination: list[dict] | None = None,
+        certified_prefix_solution: Path | None = None,
     ) -> dict:
         if destination is None:
             destination = report["full_horizon_attempts"]
         last_attempt = None
         for chance in (1, 2):
+            prefix_solution_path = (
+                certified_prefix_solution
+                if chance == 1 and mechanical_formulation == "full"
+                else None
+            )
             attempt = _run_horizon_attempt(
                 args,
                 rho_seed=rho_seed_path,
@@ -893,6 +922,7 @@ def run(args: argparse.Namespace) -> int:
                 chance=chance,
                 rss_limit_bytes=rss_limit_bytes,
                 mechanical_formulation=mechanical_formulation,
+                prefix_solution_path=prefix_solution_path,
             )
             attempt["chance"] = chance
             destination.append(attempt)
@@ -916,9 +946,14 @@ def run(args: argparse.Namespace) -> int:
 
     first_memory_failure = None
     last_success = 0
+    last_success_solution = None
     solver_gap_cycles = []
     for cycles in horizon_sweep_targets(rho_available_cycles):
-        attempt = run_with_two_solver_chances(cycles, "coarse")
+        attempt = run_with_two_solver_chances(
+            cycles,
+            "coarse",
+            certified_prefix_solution=last_success_solution,
+        )
         if attempt["infrastructure_error"]:
             report["stop_reason"] = "infrastructure_error"
             _write_report(report_path, report)
@@ -926,6 +961,7 @@ def run(args: argparse.Namespace) -> int:
             return 3
         if attempt["success"]:
             last_success = cycles
+            last_success_solution = Path(attempt["solution_path"])
             report["largest_successful_cycles"] = cycles
             if cycles == rho_available_cycles:
                 report["stop_reason"] = (
@@ -953,7 +989,11 @@ def run(args: argparse.Namespace) -> int:
         and first_memory_failure - last_success > 1
     ):
         for cycles in refinement_targets(last_success, first_memory_failure):
-            attempt = run_with_two_solver_chances(cycles, "refinement")
+            attempt = run_with_two_solver_chances(
+                cycles,
+                "refinement",
+                certified_prefix_solution=last_success_solution,
+            )
             if attempt["infrastructure_error"]:
                 report["stop_reason"] = "infrastructure_error"
                 _write_report(report_path, report)
@@ -964,6 +1004,7 @@ def run(args: argparse.Namespace) -> int:
                 break
             if attempt["success"]:
                 last_success = cycles
+                last_success_solution = Path(attempt["solution_path"])
                 report["largest_successful_cycles"] = cycles
             else:
                 solver_gap_cycles.append(cycles)

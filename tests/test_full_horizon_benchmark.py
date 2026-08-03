@@ -27,7 +27,7 @@ SPEC.loader.exec_module(full_horizon)
     ("maximum", "expected_tail"),
     (
         (3, [1, 2, 3]),
-        (32, [25, 30, 32]),
+        (32, [29, 30, 32]),
         (60, [50, 55, 60]),
         (67, [55, 60, 67]),
         (100, [80, 90, 100]),
@@ -246,6 +246,58 @@ def test_solver_chances_keep_independent_logs_and_results(tmp_path, monkeypatch)
     expected_dir = tmp_path / "output" / "full-horizon-0002" / "chance-2"
     assert observed["log_path"] == expected_dir / "solver.log"
     assert attempt["result_path"] == str(expected_dir / "result.json")
+    assert attempt["seed_origin"] == "rho_prefix"
+
+
+def test_horizon_attempt_passes_the_certified_full_prefix(tmp_path, monkeypatch):
+    observed = {}
+    args = SimpleNamespace(
+        output_dir=tmp_path / "output",
+        workspace=tmp_path,
+        poll_interval_s=0.5,
+        attempt_timeout_s=30.0,
+    )
+    prefix = tmp_path / "certified-full.npz"
+    monkeypatch.setattr(
+        full_horizon,
+        "write_rho_seed_prefix",
+        lambda source, destination, cycles: destination.parent.mkdir(
+            parents=True, exist_ok=True
+        ),
+    )
+
+    def fake_command(*command_args, **command_kwargs):
+        observed["prefix"] = command_kwargs["prefix_solution_path"]
+        return ["solver"]
+
+    monkeypatch.setattr(full_horizon, "_full_horizon_command", fake_command)
+    monkeypatch.setattr(
+        full_horizon,
+        "run_monitored",
+        lambda command, **kwargs: full_horizon.MonitoredRun(
+            command=command,
+            return_code=1,
+            peak_rss_bytes=0,
+            elapsed_s=1.0,
+            memory_limit_exceeded=False,
+            timed_out=False,
+            log_path=str(kwargs["log_path"]),
+        ),
+    )
+
+    attempt = full_horizon._run_horizon_attempt(
+        args,
+        rho_seed=tmp_path / "rho.npz",
+        cycles=2,
+        phase="coarse",
+        chance=1,
+        rss_limit_bytes=1024,
+        prefix_solution_path=prefix,
+    )
+
+    assert observed["prefix"] == prefix
+    assert attempt["seed_origin"] == "rho_plus_certified_full_prefix"
+    assert attempt["prefix_solution_path"] == str(prefix)
 
 
 def test_workflow_has_an_isolated_mx_mumps_full_horizon_mode():
@@ -291,6 +343,7 @@ def test_rho_and_full_horizon_use_the_intended_solver_contract(tmp_path):
         tmp_path / "prefix.npz",
         tmp_path / "full.json",
         tmp_path / "full.npz",
+        prefix_solution_path=tmp_path / "previous-full.npz",
     )
     one_cycle_full = full_horizon._full_horizon_command(
         args,
@@ -316,6 +369,9 @@ def test_rho_and_full_horizon_use_the_intended_solver_contract(tmp_path):
     assert "--ipopt-no-use-sx" not in rho
     assert rho[rho.index("--ipopt-max-iter") + 1] == "2000"
     assert "--single-shot" in full
+    assert full[full.index("--full-horizon-prefix-solution") + 1] == str(
+        tmp_path / "previous-full.npz"
+    )
     assert (
         paired_reduced[paired_reduced.index("--mechanical-formulation") + 1]
         == "reduced"
