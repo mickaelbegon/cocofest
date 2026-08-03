@@ -938,7 +938,7 @@ jobs:
                 --acados-transfer-active-set-threshold 1e-6
               )
             fi
-            if [[ "$variant" == *"phase-one-mechanical" ]]; then
+            if [[ "$variant" == *"phase-one-mechanical"* ]]; then
               # Change only q/qdot during the proximal projection. The 20 Ding
               # states remain the exact shifted continuation from the last
               # certified RHO.

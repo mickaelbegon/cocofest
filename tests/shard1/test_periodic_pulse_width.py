@@ -5983,6 +5983,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
     assert "--acados-transfer-phase-one-screen-threshold 1e-3" in workflow
+    assert 'if [[ "$variant" == *"phase-one-mechanical"* ]]; then' in workflow
+    assert 'if [[ "$variant" == *"phase-one-mechanical" ]]; then' not in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-all" in workflow
     assert "sqp-byrd-fast-guard-2p6" in workflow
     assert "--allow-partial-receding-horizon-solution-output" in workflow
