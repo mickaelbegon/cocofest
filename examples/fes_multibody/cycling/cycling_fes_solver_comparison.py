@@ -3285,6 +3285,9 @@ def main(
     acados_maxiter_retries: int = 0,
     acados_maxiter_retry_iterations: int = 20,
     acados_maxiter_retry_feasibility_tolerance: float = 2.5e-3,
+    acados_madnlp_recovery: bool = False,
+    acados_madnlp_recovery_max_iterations: int = 2000,
+    acados_madnlp_recovery_collocation_degree: int = 5,
     acados_reset_solver_before_solve: bool = False,
     acados_check_reuse_possible: bool = False,
     acados_code_reuse_tolerance: float = 1e-12,
@@ -3763,6 +3766,13 @@ def main(
     acados_args.acados_maxiter_retry_iterations = acados_maxiter_retry_iterations
     acados_args.acados_maxiter_retry_feasibility_tolerance = (
         acados_maxiter_retry_feasibility_tolerance
+    )
+    acados_args.acados_madnlp_recovery = acados_madnlp_recovery
+    acados_args.acados_madnlp_recovery_max_iterations = (
+        acados_madnlp_recovery_max_iterations
+    )
+    acados_args.acados_madnlp_recovery_collocation_degree = (
+        acados_madnlp_recovery_collocation_degree
     )
     acados_args.acados_reset_solver_before_solve = acados_reset_solver_before_solve
     acados_args.acados_check_reuse_possible = acados_check_reuse_possible
@@ -5194,6 +5204,20 @@ def build_cli() -> argparse.ArgumentParser:
         type=float,
         default=2.5e-3,
     )
+    parser.add_argument(
+        "--acados-madnlp-recovery",
+        action="store_true",
+        help=(
+            "After an uncertified reduced ACADOS RHO, obtain a certified "
+            "MadNLP/Radau-5 seed and retry the same ACADOS RHO without advancing."
+        ),
+    )
+    parser.add_argument(
+        "--acados-madnlp-recovery-max-iterations", type=int, default=2000
+    )
+    parser.add_argument(
+        "--acados-madnlp-recovery-collocation-degree", type=int, default=5
+    )
     parser.add_argument("--acados-reset-solver-before-solve", action="store_true")
     parser.add_argument("--acados-check-reuse-possible", action="store_true")
     parser.add_argument("--acados-code-reuse-tolerance", type=float, default=1e-12)
@@ -5571,6 +5595,13 @@ if __name__ == "__main__":
         acados_maxiter_retry_iterations=(args.acados_maxiter_retry_iterations),
         acados_maxiter_retry_feasibility_tolerance=(
             args.acados_maxiter_retry_feasibility_tolerance
+        ),
+        acados_madnlp_recovery=args.acados_madnlp_recovery,
+        acados_madnlp_recovery_max_iterations=(
+            args.acados_madnlp_recovery_max_iterations
+        ),
+        acados_madnlp_recovery_collocation_degree=(
+            args.acados_madnlp_recovery_collocation_degree
         ),
         acados_reset_solver_before_solve=args.acados_reset_solver_before_solve,
         acados_check_reuse_possible=args.acados_check_reuse_possible,

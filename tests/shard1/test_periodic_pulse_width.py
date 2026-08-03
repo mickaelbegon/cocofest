@@ -837,6 +837,43 @@ def test_solution_trace_comparisons_reports_scaled_differences():
     np.testing.assert_allclose(control_row["max_abs_error"], 1.0)
 
 
+def test_acados_madnlp_recovery_compatibility_reports_pulse_width_in_us():
+    failed_acados = periodic_example._WarmupSolutionAdapter(
+        states={"theta": np.array([[0.0, 1.0, 2.0]])},
+        controls={"last_pulse_width_Biceps": np.array([[131.405e-6, 300e-6]])},
+    )
+    madnlp = periodic_example._WarmupSolutionAdapter(
+        states={"theta": np.array([[0.0, 1.2, 2.0]])},
+        controls={"last_pulse_width_Biceps": np.array([[131.405e-6, 350e-6]])},
+    )
+
+    summary = periodic_example.solution_trace_compatibility_summary(
+        failed_acados, madnlp
+    )
+
+    assert summary["pulse_width"]["unit"] == "us"
+    assert summary["pulse_width"]["compared_components"] == 1
+    assert summary["pulse_width"]["max_abs_error"] == pytest.approx(50.0)
+    assert summary["states"]["max_abs_error"] == pytest.approx(0.2)
+
+
+def test_acados_madnlp_recovery_cli_is_opt_in():
+    parser = periodic_example.build_argument_parser()
+    args = parser.parse_args(
+        [
+            "--acados-madnlp-recovery",
+            "--acados-madnlp-recovery-max-iterations",
+            "800",
+            "--acados-madnlp-recovery-collocation-degree",
+            "5",
+        ]
+    )
+
+    assert args.acados_madnlp_recovery is True
+    assert args.acados_madnlp_recovery_max_iterations == 800
+    assert args.acados_madnlp_recovery_collocation_degree == 5
+
+
 def test_pulse_width_trust_region_keeps_nodewise_centers():
     bounds = SimpleNamespace(
         min=np.array([[0.1, 0.1, 0.1]]), max=np.array([[0.6, 0.6, 0.6]])

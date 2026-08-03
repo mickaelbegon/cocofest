@@ -10,7 +10,7 @@ on:
         default: ubuntu-24.04
         type: string
       cycles:
-        description: Number of RHO solves, or "screen", "acados", "acados_guard", "acados_recovery", "acados_homotopy", "acados_reduced_100", "radau5_100", "radau35_comparison", "fatigue_endurance", "fatigue_endurance_radau5", or "full_horizon"
+        description: Number of RHO solves, or "screen", "acados", "acados_guard", "acados_recovery", "acados_homotopy", "acados_reduced_100", "acados_hybrid", "radau5_100", "radau35_comparison", "fatigue_endurance", "fatigue_endurance_radau5", or "full_horizon"
         required: true
         default: "100"
         type: string
@@ -281,7 +281,7 @@ jobs:
     # The standard long benchmark MadNLP runner restores/builds its own stack
     # so IPOPT never waits for it. The focused option screen and isolated
     # full-horizon mode share this explicit pre-warm job.
-    if: ${{ inputs.cycles == 'screen' || inputs.cycles == 'full_horizon' }}
+    if: ${{ inputs.cycles == 'screen' || inputs.cycles == 'full_horizon' || inputs.cycles == 'acados_hybrid' }}
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: 90
     env:
@@ -388,9 +388,145 @@ jobs:
           path: ${{ env.CONDA }}/envs/${{ env.CONDA_ENV_NAME }}
           key: numerical-stack-${{ env.NUMERICAL_STACK_CACHE_VERSION }}-${{ inputs.runner_label }}-${{ runner.arch }}-madnlp-mumps-${{ env.CASADI_MADNLP_COMMIT }}-${{ env.LIBMAD_COMMIT }}-${{ hashFiles('.github/cycling-benchmark-linux-environment.yml', '.github/scripts/install_biorbd_casadi_linux.sh', '.github/scripts/install_casadi_madnlp_linux.sh') }}
 
+  acados-madnlp-hybrid:
+    name: ACADOS reduced — MadNLP/Radau-5 recovery wiring
+    if: ${{ inputs.cycles == 'acados_hybrid' }}
+    needs: [prepare-seed, prepare-madnlp-stack]
+    runs-on: ${{ inputs.runner_label }}
+    timeout-minutes: 240
+    env:
+      CASADI_CXX_ABI: "1"
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+      - name: Checkout Cocofest
+        uses: actions/checkout@v6
+
+      - name: Checkout the pinned Bioptim and ACADOS sources
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.BIOPTIM_REPOSITORY }}
+          ref: ${{ env.BIOPTIM_PRODUCTION_COMMIT }}
+          path: .benchmark-deps/bioptim
+          submodules: recursive
+
+      - name: Set up the Linux benchmark environment
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          miniforge-version: latest
+          activate-environment: ${{ env.CONDA_ENV_NAME }}
+          conda-remove-defaults: true
+
+      - name: Restore the MadNLP numerical stack
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CONDA }}/envs/${{ env.CONDA_ENV_NAME }}
+          key: numerical-stack-${{ env.NUMERICAL_STACK_CACHE_VERSION }}-${{ inputs.runner_label }}-${{ runner.arch }}-madnlp-mumps-${{ env.CASADI_MADNLP_COMMIT }}-${{ env.LIBMAD_COMMIT }}-${{ hashFiles('.github/cycling-benchmark-linux-environment.yml', '.github/scripts/install_biorbd_casadi_linux.sh', '.github/scripts/install_casadi_madnlp_linux.sh') }}
+          fail-on-cache-miss: true
+
+      - name: Restore the MadNLP MUMPS runtime
+        uses: actions/cache/restore@v6
+        with:
+          path: .cache/madnlp-mumps
+          key: libmad-mumps-${{ inputs.runner_label }}-${{ runner.arch }}-julia-${{ env.JULIA_VERSION }}-${{ env.LIBMAD_COMMIT }}-${{ env.JULIAC_COMMIT }}
+          fail-on-cache-miss: true
+
+      - name: Configure the shared MadNLP runtime
+        run: |
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/.cache/madnlp-mumps/lib:$GITHUB_WORKSPACE/.cache/madnlp-mumps/share/julia/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
+      - name: Detect the CPU allocation
+        run: |
+          available_cores="$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc)"
+          test "$available_cores" -ge 1
+          echo "BENCHMARK_THREADS=$available_cores" >> "$GITHUB_ENV"
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$available_cores" >> "$GITHUB_ENV"
+          lscpu
+
+      - name: Install Bioptim and ACADOS alongside libMad
+        run: |
+          python -m pip install --no-deps -e .benchmark-deps/bioptim
+          observed_commit="$(git -C .benchmark-deps/bioptim/external/acados rev-parse HEAD)"
+          test "$observed_commit" = "$ACADOS_COMMIT"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends librhash-dev
+          bash .benchmark-deps/bioptim/external/acados_install_linux.sh \
+            "$BENCHMARK_THREADS" "$CONDA_PREFIX"
+
+      - name: Validate the combined solver process
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          test -f "$CONDA_PREFIX/lib/libacados.so"
+          python - <<'PY'
+          import acados_template
+          import casadi as cas
+
+          assert cas.has_nlpsol("ipopt")
+          assert cas.has_nlpsol("madnlp")
+          print(f"CasADi {cas.__version__}; acados_template={acados_template.__file__}")
+          PY
+          python -m pytest -q \
+            tests/shard1/test_periodic_pulse_width.py::test_acados_madnlp_recovery_compatibility_reports_pulse_width_in_us \
+            tests/shard1/test_periodic_pulse_width.py::test_acados_madnlp_recovery_cli_is_opt_in
+
+      - name: Download the validated reduced seed
+        uses: actions/download-artifact@v8
+        with:
+          name: cycling-assisted-common-seed-${{ github.run_id }}
+          path: benchmark-seed
+
+      - name: Run the reduced hybrid recovery gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          ACADOS_SOURCE_DIR: ${{ github.workspace }}/.benchmark-deps/bioptim/external/acados
+        run: |
+          mkdir -p acados-madnlp-hybrid-results
+          python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
+            --solvers acados \
+            --n-windows "${{ inputs.acados_option_rhos }}" \
+            --n-threads "$BENCHMARK_THREADS" \
+            --mechanical-formulation reduced \
+            --experimental-reduced-acados \
+            --compact-rho-output \
+            --common-initial-solution benchmark-seed/common-reduced.npz \
+            --adopt-common-initial-solution-warmup-cycles \
+            --disable-standard-ipopt-warmup \
+            --disable-periodic-ipopt-refinement \
+            --retry-failed-rho-without-advance \
+            --max-consecutive-failing 2 \
+            --acados-integrator-type IRK \
+            --acados-sim-stages 4 \
+            --acados-sim-steps 5 \
+            --acados-max-iter 100 \
+            --acados-store-iterates \
+            --acados-maxiter-retries 1 \
+            --acados-maxiter-retry-iterations 20 \
+            --acados-madnlp-recovery \
+            --acados-madnlp-recovery-max-iterations "${{ inputs.solver_max_iterations }}" \
+            --acados-madnlp-recovery-collocation-degree 5 \
+            --madnlp-linear-solver mumps \
+            --madnlp-c-compile \
+            --output-json acados-madnlp-hybrid-results/result.json
+          jq -e '
+            .configurations.acados.acados_madnlp_recovery == true and
+            .configurations.acados.mechanical_formulation == "reduced"
+          ' acados-madnlp-hybrid-results/result.json
+
+      - name: Upload the hybrid gate logs and result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cycling-acados-madnlp-hybrid-${{ github.run_id }}
+          path: acados-madnlp-hybrid-results/
+          if-no-files-found: warn
+          retention-days: 30
+
   prepare-acados-stack:
     name: Prepare the cached ACADOS numerical stack
-    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'full_horizon' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles_per_window == '1' }}
+    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'full_horizon' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'acados_hybrid' && inputs.cycles_per_window == '1' }}
     needs: prepare-seed
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: 120
@@ -503,7 +639,7 @@ jobs:
 
   acados-smoke:
     name: ACADOS — sequential full/reduced and option screen
-    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'full_horizon' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles_per_window == '1' }}
+    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'full_horizon' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'acados_hybrid' && inputs.cycles_per_window == '1' }}
     needs: [prepare-seed, prepare-acados-stack]
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: 240
@@ -1629,7 +1765,7 @@ jobs:
 
   benchmark:
     name: ${{ matrix.case_slug }} — sequential full/reduced
-    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'full_horizon' }}
+    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'full_horizon' }}
     needs: prepare-seed
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
@@ -2517,7 +2653,7 @@ jobs:
 
   report:
     name: Aggregate Kevin benchmark
-    if: ${{ always() && inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'full_horizon' }}
+    if: ${{ always() && inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'full_horizon' }}
     needs: [benchmark, acados-smoke]
     runs-on: ubuntu-24.04
     permissions:
