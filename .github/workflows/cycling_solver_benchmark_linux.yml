@@ -946,6 +946,14 @@ jobs:
                 --acados-transfer-phase-one
                 --acados-transfer-phase-one-mode mechanical
               )
+              if [[ "$variant" == *"screen-1e-3" ]]; then
+                # Screen the same q/qdot defect before Phase-I.  This is an
+                # ablation: its certification and online time are compared to
+                # the unscreened mechanical projection below.
+                solver_options+=(
+                  --acados-transfer-phase-one-screen-threshold 1e-3
+                )
+              fi
             elif [[ "$variant" == *"-phase-one" || "$variant" == *"phase-one-all" ]]; then
               # Strict inter-RHO state bounds can make the cyclically shifted
               # guess discontinuous at node 0, especially for omega. Repair
@@ -1041,6 +1049,7 @@ jobs:
             run_case sqp-irk-reference full 1 SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-baseline full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-phase-one-mechanical full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-phase-one-all full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-byrd-fast-guard-2p6 full "$ACADOS_SMOKE_RHOS" SQP_WITH_FEASIBLE_QP IRK 5 5
           elif [[ "$ACADOS_CADENCE_GUARD_ONLY" == "true" ]]; then

@@ -4819,6 +4819,7 @@ def test_endurance_cli_stops_on_failure_and_keeps_robust_irk_defaults():
     assert args.acados_sim_steps == 5
     assert args.acados_dual_warm_start_mode == "reset"
     assert args.acados_transfer_phase_one is False
+    assert args.acados_transfer_phase_one_screen_threshold is None
     assert args.acados_cyclical_transfer_mode == "extrapolate"
     assert args.acados_transfer_phase_one_proximity_weight == 1.0
     assert args.acados_transfer_phase_one_defect_weight == 10.0
@@ -5980,6 +5981,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "inputs.cycles == 'acados_recovery'" in workflow
     assert "ACADOS_RECOVERY_ONLY" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
+    assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
+    assert "--acados-transfer-phase-one-screen-threshold 1e-3" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-all" in workflow
     assert "sqp-byrd-fast-guard-2p6" in workflow
     assert "--allow-partial-receding-horizon-solution-output" in workflow
@@ -7747,6 +7750,34 @@ def test_proximal_phase_one_update_balances_reference_and_dynamics():
     )
 
     np.testing.assert_allclose(observed, [1.0, 17.5])
+
+
+def test_transfer_phase_one_screen_preserves_the_primal_when_defect_is_small(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        periodic_example,
+        "_full_dynamics_rollout_defect_details",
+        lambda *_args, **_kwargs: {
+            "scaled_by_block": {"q": 1e-4, "qdot": 2e-4, "fes": 4.0}
+        },
+    )
+    monkeypatch.setattr(
+        periodic_example,
+        "_maximum_state_initial_guess_bound_violation",
+        lambda _nmpc: 0.0,
+    )
+
+    screen = periodic_example.transfer_phase_one_screen(
+        SimpleNamespace(),
+        n_substeps=5,
+        mutable_blocks=("q", "qdot"),
+        threshold=2e-4,
+    )
+
+    assert screen["skipped"] is True
+    assert screen["reason"] == "mechanical_defect_within_threshold"
+    assert screen["mutable_scaled_defect"] == pytest.approx(2e-4)
 
 
 def test_proximal_phase_one_rejects_collocation_layout():

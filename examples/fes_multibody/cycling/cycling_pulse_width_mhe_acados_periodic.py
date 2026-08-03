@@ -1742,6 +1742,16 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--acados-transfer-phase-one-screen-threshold",
+        type=float,
+        default=None,
+        help=(
+            "Skip transfer phase I when the maximum scaled q/qdot dynamics defect "
+            "is at or below this threshold. Disabled by default; the screen is "
+            "reported separately from a phase-I projection."
+        ),
+    )
+    parser.add_argument(
         "--acados-transfer-bound-homotopy",
         action="store_true",
         help=(
@@ -8622,6 +8632,50 @@ def _maximum_state_initial_guess_bound_violation(nmpc) -> float:
     return maximum
 
 
+def transfer_phase_one_screen(
+    nmpc,
+    *,
+    n_substeps: int,
+    mutable_blocks: tuple[str, ...],
+    threshold: float,
+) -> dict:
+    """Cheaply reject a phase-I call when its mutable defect is already small.
+
+    The screen deliberately measures the same RK4 defect used by Phase-I, but
+    does not alter the primal, allocate a candidate trajectory, or perform the
+    backtracking loop.  It is therefore safe to use before a mechanical
+    projection: the 20 Ding states are merely inspected, never modified.
+    """
+
+    if threshold < 0 or not np.isfinite(threshold):
+        raise ValueError("The phase-I screen threshold must be finite and non-negative.")
+    details = _full_dynamics_rollout_defect_details(nmpc, n_substeps=n_substeps)
+    scaled_by_block = details.get("scaled_by_block", {})
+    mutable_scaled_defect = max(
+        (float(scaled_by_block.get(block, np.inf)) for block in mutable_blocks),
+        default=np.inf,
+    )
+    bound_violation = _maximum_state_initial_guess_bound_violation(nmpc)
+    skipped = bool(
+        np.isfinite(mutable_scaled_defect)
+        and mutable_scaled_defect <= threshold
+        and bound_violation <= 1e-10
+    )
+    return {
+        "enabled": True,
+        "threshold": float(threshold),
+        "mutable_blocks": tuple(mutable_blocks),
+        "mutable_scaled_defect": float(mutable_scaled_defect),
+        "bound_violation": float(bound_violation),
+        "skipped": skipped,
+        "reason": (
+            "mechanical_defect_within_threshold"
+            if skipped
+            else "projection_still_required"
+        ),
+    }
+
+
 def project_full_dynamics_initial_guess(
     nmpc,
     proximity_weight: float = 1.0,
@@ -13637,6 +13691,14 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         raise ValueError(
             "--acados-transfer-phase-one-lookback-nodes must be non-negative."
         )
+    if args.acados_transfer_phase_one_screen_threshold is not None and (
+        not np.isfinite(args.acados_transfer_phase_one_screen_threshold)
+        or args.acados_transfer_phase_one_screen_threshold < 0
+    ):
+        raise ValueError(
+            "--acados-transfer-phase-one-screen-threshold must be finite and "
+            "non-negative."
+        )
     if args.acados_continuation_source_max_iterations < 1:
         raise ValueError(
             "--acados-continuation-source-max-iterations must be strictly positive."
@@ -16270,21 +16332,56 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 ),
             )
             phase_one_start = perf_counter()
-            phase_one_summary = project_full_dynamics_initial_guess(
-                _nmpc,
-                proximity_weight=args.full_dynamics_phase_one_proximity_weight,
-                defect_weight=args.full_dynamics_phase_one_defect_weight,
-                n_substeps=args.full_dynamics_phase_one_substeps,
-                max_state_change=args.full_dynamics_phase_one_max_state_change,
-                max_state_change_by_block=phase_one_max_state_change_by_block,
-                start_node=transfer_phase_one_start_node,
-                mutable_blocks=transfer_phase_one_blocks,
-                monotone_blocks=(
-                    transfer_phase_one_blocks
-                    if args.acados_transfer_phase_one_mode == "mechanical"
-                    else None
-                ),
-            )
+            phase_one_screen = None
+            if args.acados_transfer_phase_one_screen_threshold is not None:
+                phase_one_screen = transfer_phase_one_screen(
+                    _nmpc,
+                    n_substeps=args.full_dynamics_phase_one_substeps,
+                    mutable_blocks=transfer_phase_one_blocks,
+                    threshold=args.acados_transfer_phase_one_screen_threshold,
+                )
+            if phase_one_screen is not None and phase_one_screen["skipped"]:
+                # The shifted candidate is already within the explicitly
+                # chosen mechanical-defect tolerance.  Keep it untouched:
+                # particularly, never move the Ding states merely to run a
+                # restoration that cannot be justified by the screen.
+                phase_one_summary = {
+                    "accepted": False,
+                    "skipped": True,
+                    "accepted_step": 0.0,
+                    "scaled_defect_before": phase_one_screen[
+                        "mutable_scaled_defect"
+                    ],
+                    "scaled_defect_after": phase_one_screen[
+                        "mutable_scaled_defect"
+                    ],
+                    "candidate_scaled_defect_after": None,
+                    "max_state_change": 0.0,
+                    "state_change_by_block": {},
+                    "start_node": transfer_phase_one_start_node,
+                    "mutable_blocks": transfer_phase_one_blocks,
+                    "scaled_by_block_before": {},
+                    "scaled_by_block_after": {},
+                }
+            else:
+                phase_one_summary = project_full_dynamics_initial_guess(
+                    _nmpc,
+                    proximity_weight=args.full_dynamics_phase_one_proximity_weight,
+                    defect_weight=args.full_dynamics_phase_one_defect_weight,
+                    n_substeps=args.full_dynamics_phase_one_substeps,
+                    max_state_change=args.full_dynamics_phase_one_max_state_change,
+                    max_state_change_by_block=phase_one_max_state_change_by_block,
+                    start_node=transfer_phase_one_start_node,
+                    mutable_blocks=transfer_phase_one_blocks,
+                    monotone_blocks=(
+                        transfer_phase_one_blocks
+                        if args.acados_transfer_phase_one_mode == "mechanical"
+                        else None
+                    ),
+                )
+                phase_one_summary["skipped"] = False
+            if phase_one_screen is not None:
+                phase_one_summary["screen"] = phase_one_screen
             phase_one_summary["window"] = cycle_idx
             phase_one_summary["wall_time_s"] = perf_counter() - phase_one_start
             transfer_phase_one_summaries.append(phase_one_summary)
@@ -16292,11 +16389,12 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 print(
                     "transfer_phase_one: "
                     f"accepted={phase_one_summary['accepted']} "
+                    f"skipped={phase_one_summary['skipped']} "
                     f"accepted_step={phase_one_summary['accepted_step']:.6g} "
                     f"scaled_defect_before={phase_one_summary['scaled_defect_before']:.6g} "
                     f"scaled_defect_after={phase_one_summary['scaled_defect_after']:.6g} "
                     f"candidate_scaled_defect_after="
-                    f"{phase_one_summary['candidate_scaled_defect_after']:.6g} "
+                    f"{phase_one_summary['candidate_scaled_defect_after']} "
                     f"max_state_change={phase_one_summary['max_state_change']:.6g} "
                     f"state_change_by_block="
                     f"{phase_one_summary['state_change_by_block']} "

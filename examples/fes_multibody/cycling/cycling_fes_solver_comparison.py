@@ -3266,6 +3266,7 @@ def main(
     acados_transfer_phase_one: bool = False,
     acados_transfer_phase_one_mode: str = "all",
     acados_transfer_phase_one_lookback_nodes: int | None = None,
+    acados_transfer_phase_one_screen_threshold: float | None = None,
     acados_cyclical_transfer_mode: str = "extrapolate",
     acados_transfer_phase_one_proximity_weight: float = 1.0,
     acados_transfer_phase_one_defect_weight: float = 10.0,
@@ -3840,6 +3841,9 @@ def main(
     acados_args.acados_transfer_phase_one_mode = acados_transfer_phase_one_mode
     acados_args.acados_transfer_phase_one_lookback_nodes = (
         acados_transfer_phase_one_lookback_nodes
+    )
+    acados_args.acados_transfer_phase_one_screen_threshold = (
+        acados_transfer_phase_one_screen_threshold
     )
     acados_args.acados_cyclical_transfer_mode = acados_cyclical_transfer_mode
     acados_args.full_dynamics_phase_one_proximity_weight = (
@@ -4502,6 +4506,11 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument(
         "--acados-transfer-phase-one-lookback-nodes",
         type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--acados-transfer-phase-one-screen-threshold",
+        type=float,
         default=None,
     )
     parser.add_argument(
@@ -5523,6 +5532,9 @@ if __name__ == "__main__":
         acados_transfer_phase_one_mode=args.acados_transfer_phase_one_mode,
         acados_transfer_phase_one_lookback_nodes=(
             args.acados_transfer_phase_one_lookback_nodes
+        ),
+        acados_transfer_phase_one_screen_threshold=(
+            args.acados_transfer_phase_one_screen_threshold
         ),
         acados_cyclical_transfer_mode=args.acados_cyclical_transfer_mode,
         acados_transfer_phase_one_proximity_weight=(
