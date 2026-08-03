@@ -762,6 +762,21 @@ def test_solver_comparison_cli_exposes_high_accuracy_trace_audit():
     )
 
 
+def test_solver_comparison_cli_relays_same_rho_retry_policy():
+    parser = comparison_example.build_cli()
+    args = parser.parse_args(["--retry-failed-rho-without-advance"])
+    ipopt_args = SimpleNamespace()
+    acados_args = SimpleNamespace()
+
+    comparison_example._set_rho_retry_without_advance(
+        (ipopt_args, acados_args), args.retry_failed_rho_without_advance
+    )
+
+    assert args.retry_failed_rho_without_advance is True
+    assert ipopt_args.retry_failed_rho_without_advance is True
+    assert acados_args.retry_failed_rho_without_advance is True
+
+
 def test_wheel_periodicity_diagnostic_supports_reduced_theta_state():
     class Variables(dict):
         def __init__(self, values, shape):
@@ -4767,6 +4782,7 @@ def test_endurance_cli_stops_on_failure_and_keeps_robust_irk_defaults():
     args = comparison_example.build_cli().parse_args([])
 
     assert args.max_consecutive_failing == 1
+    assert args.retry_failed_rho_without_advance is False
     assert args.n_threads == (comparison_example.os.cpu_count() or 1)
     assert args.acados_integrator_type == "IRK"
     assert args.acados_sim_stages == 4
@@ -6056,6 +6072,22 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "--retry-failed-rho-without-advance" in workflow
     assert "fatigue_endurance_radau5" in workflow
     assert "Run compiled reduced Radau-5 fatigue endurance" in workflow
+    assert workflow.count("inputs.cycles != 'fatigue_endurance_radau5'") >= 8
+    assert (
+        "matrix.solver == 'ipopt' && inputs.cycles != 'radau5_100' && "
+        "inputs.cycles != 'fatigue_endurance' && "
+        "inputs.cycles != 'fatigue_endurance_radau5'"
+    ) in workflow
+    assert (
+        "matrix.solver == 'madnlp' && inputs.cycles != 'radau5_100' && "
+        "inputs.cycles != 'fatigue_endurance' && "
+        "inputs.cycles != 'fatigue_endurance_radau5'"
+    ) in workflow
+    assert (
+        "matrix.solver == 'fatrop' && inputs.cycles != 'radau5_100' && "
+        "inputs.cycles != 'fatigue_endurance' && "
+        "inputs.cycles != 'fatigue_endurance_radau5'"
+    ) in workflow
     assert "cycling-acados-smoke-${{ github.run_id }}" in workflow
     assert workflow.count("name: Save the MadNLP numerical stack") == 2
     assert (

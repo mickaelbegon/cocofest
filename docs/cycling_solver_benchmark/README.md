@@ -85,6 +85,38 @@ gh workflow run cycling_solver_benchmark_linux.yml \
   -f cycles=fatigue_endurance_radau5 -f fatigue_endurance_max_rhos=2000
 ```
 
+### Tableau de synthèse pour Kevin
+
+Ce tableau sépare les gains effectivement mesurés des améliorations de
+fiabilité scientifique. Une correction qui empêche un résultat faux est un
+gain important, même lorsqu'elle ne réduit pas le temps de calcul.
+
+| Changement réalisé | Pourquoi | Gain ou conséquence mesurée | Statut / réserve |
+|---|---|---|---|
+| Mécanique reduced avec seulement `theta` et `omega`, sans imposer une cadence constante; conservation des 20 états de Ding | Éliminer quatre états mécaniques redondants tout en projetant exactement la dynamique sur la variété de pédalage | Sur 100 RHO R3 avec IPOPT : médiane chaude `4.595 -> 1.031 s` (`4.46x`) et mur-à-mur `615.4 -> 260.9 s` (`2.36x`); écart de fatigue full/reduced `0.097 %` | Meilleur compromis actuel pour le RHO; l'équivalence reste contrôlée à chaque nouvelle transcription |
+| Graphes SX pour tous les solveurs RHO | Les expressions sont connues et répétées; SX donne ici des dérivées plus compactes que MX | Réduction mesurée de `57.5 à 60.5 %` de la médiane chaude face à MX, à objectif comparable | MX reste réservé au diagnostic des grands horizons monolithiques |
+| Compilation C persistante des NLP reduced et paramètres runtime pour l'état initial, la cible angulaire et les bornes | Éviter de reconstruire/recompiler le graphe à chacun des RHO | Une seule bibliothèque observée et réutilisée sur 100 à 1 000 RHO, sans reconstruction du graphe malgré les bornes mobiles | Gain isolé de compilation dépendant de la machine; la CI vérifie surtout la réutilisation effective |
+| Angle terminal défini par une référence absolue de nombre de tours | Une cible relative au cycle précédent peut intégrer l'erreur et créer un drift lent | Suppression de l'accumulation autorisée de l'erreur angulaire; chaque RHO est audité contre la trajectoire absolue | Gain de fiabilité, pas un gain de temps |
+| Bornes de cadence contrôlées aux étages internes de collocation | Une solution peut respecter les nœuds de tir tout en violant la cadence entre les nœuds | L'ancien écart massif et artificiel de fatigue full/reduced disparaît; à 100 RHO IPOPT il reste inférieur à `0.1 %` | Audit continu obligatoire, notamment pour ACADOS |
+| Force passive incluse et axe du pédalier maintenu sur la variété de contact | L'ancienne référence n'était pas une cible physique suffisamment sûre si ces termes étaient omis ou trop faiblement discrétisés | Évite de sous-estimer le couple musculaire et la fatigue; rend full et reduced comparables sur les mêmes équations | Correction scientifique; aucun gain de vitesse revendiqué |
+| PW bornées et seeds validées dans `[pd0 ≈ 131.405 µs, 600 µs]` | Dans Ding, `pd0` est le vrai zéro de recrutement; une PW à zéro ou sous `pd0` est incohérente avec le modèle utilisé | Plus de warm-start historique hors bornes et warning explicite lors d'une correction de seed | Améliore la reproductibilité; ne change pas les bornes finales de l'OCP |
+| Seed commun, projection mécanique et raffinement IPOPT préalable pour MadNLP | MadNLP était très sensible à la branche non convexe sélectionnée par le warm-start | À 100 RHO R3, le premier échec reduced a été déplacé du RHO 1 au RHO 99; médiane chaude `0.806 s` sur le préfixe | Le RHO 99 n'était pas une preuve de fatigue et doit être retesté avec la nouvelle politique de reprise |
+| MUMPS retenu pour IPOPT et MadNLP; PARDISO/MKL écarté | PARDISO n'a pas apporté le gain attendu dans les campagnes appariées, tandis que MUMPS est portable et reproductible en CI | Une pile Linux commune et stable; suppression d'une dépendance complexe sans perte de performance démontrée | MA57 peut rester une ablation IPOPT locale, mais n'est pas le backend CI portable |
+| Collocation du calcium raffinée | R3 sous-estime le calcium périodique isolé de `6.3864 %` | Erreur isolée ramenée à `0.0173 %` en R5 et `0.000415 %` en R6 | R5 est le compromis d'endurance en cours; le rollout DOP853 favorise provisoirement R6 pour la cible scientifique |
+| Après un échec, aucun shift ni transfert du primal; deux essais sur le même RHO | L'ancien loop Bioptim avançait parfois une solution non convergée, créant un faux motif « échec puis succès » | Le préfixe d'endurance ne peut plus être artificiellement prolongé après une non-convergence | Correctif `ae42595`; une première CI a révélé un relais CLI manquant, corrigé avant la relance |
+| Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
+| ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
+| Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
+
+Les premiers dispatches
+[R3 à 2 000 RHO](https://github.com/mickaelbegon/cocofest/actions/runs/30821227084)
+et
+[R5 IPOPT/MadNLP à 2 000 RHO](https://github.com/mickaelbegon/cocofest/actions/runs/30821244931)
+ont échoué avant tout NLP, parce que le comparateur ne relayait pas encore la
+nouvelle option de reprise. Ils ne constituent donc pas des résultats. La
+relance doit commencer par deux smokes de cinq RHO, puis seulement par les
+campagnes à 2 000 RHO.
+
 ## Réponse courte
 
 Pour obtenir aujourd'hui la meilleure combinaison de robustesse et de vitesse :

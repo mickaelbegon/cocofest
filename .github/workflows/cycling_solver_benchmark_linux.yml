@@ -1901,6 +1901,7 @@ jobs:
             tests/shard1/test_reduced_cycling.py \
             tests/shard1/test_periodic_pulse_width.py::test_stimulation_snapshots_use_one_based_cycles_and_real_crank_phase \
             tests/shard1/test_periodic_pulse_width.py::test_common_primal_threshold_is_independent_of_nlp_solver_tolerance \
+            tests/shard1/test_periodic_pulse_width.py::test_solver_comparison_cli_relays_same_rho_retry_policy \
             tests/shard1/test_periodic_pulse_width.py::test_full_contact_stabilization_is_opt_in_on_both_clis \
             tests/shard1/test_periodic_pulse_width.py::test_github_benchmark_compares_physical_threshold_not_solver_tolerance
 
@@ -1925,7 +1926,7 @@ jobs:
           fi
 
       - name: Run IPOPT full
-        if: ${{ matrix.solver == 'ipopt' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' }}
+        if: ${{ matrix.solver == 'ipopt' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' }}
         # Compiling the full 26-state collocation NLP repeatedly terminates the
         # hosted runner with SIGTERM 143 before any artifact can be checkpointed.
         # Keep the scientific full reference interpreted; the reduced case
@@ -1956,7 +1957,7 @@ jobs:
           retention-days: 30
 
       - name: Run IPOPT reduced
-        if: ${{ matrix.solver == 'ipopt' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' }}
+        if: ${{ matrix.solver == 'ipopt' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' }}
         run: bash .github/scripts/run_cycling_benchmark_case.sh ipopt ipopt reduced mumps collocation benchmark-results "$BENCHMARK_CYCLES" "${{ inputs.compile_nlp_evaluators }}"
       - name: Checkpoint IPOPT reduced
         if: ${{ always() && matrix.solver == 'ipopt' }}
@@ -2014,7 +2015,7 @@ jobs:
           retention-days: 30
 
       - name: Run MadNLP MUMPS full
-        if: ${{ matrix.solver == 'madnlp' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' }}
+        if: ${{ matrix.solver == 'madnlp' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' }}
         run: bash .github/scripts/run_cycling_benchmark_case.sh madnlp-mumps madnlp full mumps collocation benchmark-results "$BENCHMARK_CYCLES" false
       - name: Checkpoint MadNLP MUMPS full
         if: ${{ always() && matrix.solver == 'madnlp' }}
@@ -2041,7 +2042,7 @@ jobs:
           retention-days: 30
 
       - name: Run MadNLP MUMPS reduced
-        if: ${{ matrix.solver == 'madnlp' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' }}
+        if: ${{ matrix.solver == 'madnlp' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' }}
         run: bash .github/scripts/run_cycling_benchmark_case.sh madnlp-mumps madnlp reduced mumps collocation benchmark-results "$BENCHMARK_CYCLES" "${{ inputs.compile_nlp_evaluators }}"
       - name: Checkpoint MadNLP MUMPS reduced
         if: ${{ always() && matrix.solver == 'madnlp' }}
@@ -2096,7 +2097,7 @@ jobs:
           retention-days: 30
 
       - name: Run FATROP collocation full
-        if: ${{ matrix.solver == 'fatrop' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' }}
+        if: ${{ matrix.solver == 'fatrop' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' }}
         # The full SX graph generates a roughly 200 MB monolithic C file.
         # Clang remained active for more than 40 minutes on macOS and two
         # hosted Linux runners were reclaimed during GCC compilation. The
@@ -2114,7 +2115,7 @@ jobs:
           retention-days: 30
 
       - name: Run FATROP collocation reduced
-        if: ${{ matrix.solver == 'fatrop' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' }}
+        if: ${{ matrix.solver == 'fatrop' && inputs.cycles != 'radau5_100' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' }}
         run: bash .github/scripts/run_cycling_benchmark_case.sh fatrop-collocation fatrop reduced fatrop collocation benchmark-results "$BENCHMARK_CYCLES" "${{ inputs.compile_nlp_evaluators }}" sx none
       - name: Checkpoint FATROP collocation reduced
         if: ${{ always() && matrix.solver == 'fatrop' }}

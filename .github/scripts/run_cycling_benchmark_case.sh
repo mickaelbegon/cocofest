@@ -203,7 +203,7 @@ python "$workspace/examples/fes_multibody/cycling/cycling_fes_solver_comparison.
   --compact-rho-output \
   --print-traces \
   --output-json "$result" \
-  "${trajectory_options[@]}" \
+  "${trajectory_options[@]+"${trajectory_options[@]}"}" \
   "${solver_options[@]}" \
   2>&1 | tee "$case_dir/solver.log"
 solver_exit="${PIPESTATUS[0]}"

@@ -177,6 +177,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "crank_assistance_nm",
     "expected_external_crank_power_w",
     "max_consecutive_failing",
+    "retry_failed_rho_without_advance",
     "nlp_tolerance",
     "primal_feasibility_threshold",
     "ipopt_linear_solver",
@@ -3093,6 +3094,13 @@ def _set_common_primal_feasibility_threshold(
         args.primal_feasibility_threshold = threshold
 
 
+def _set_rho_retry_without_advance(solver_args, enabled: bool) -> None:
+    """Apply the endurance retry policy to every backend built by the benchmark."""
+
+    for args in solver_args:
+        args.retry_failed_rho_without_advance = bool(enabled)
+
+
 def main(
     objective: str = "fatigue",
     objective_shape: str = "quadratic",
@@ -3336,6 +3344,7 @@ def main(
     ipopt_fatigue_warmstart_mode: str | None = None,
     ipopt_disable_historical_initial_guess: bool = False,
     max_consecutive_failing: int = 1,
+    retry_failed_rho_without_advance: bool = False,
     output_json: str | Path | None = None,
 ):
     invocation_cwd = Path.cwd()
@@ -3614,6 +3623,9 @@ def main(
     )
     ipopt_args.max_consecutive_failing = max_consecutive_failing
     acados_args.max_consecutive_failing = max_consecutive_failing
+    _set_rho_retry_without_advance(
+        (ipopt_args, acados_args), retry_failed_rho_without_advance
+    )
     ipopt_args.warmup_ipopt_linear_solver = warmup_ipopt_linear_solver
     ipopt_args.standard_warmup_seed = standard_warmup_seed
     acados_args.standard_warmup_seed = standard_warmup_seed
@@ -4162,6 +4174,14 @@ def build_cli() -> argparse.ArgumentParser:
             "Stop the endurance benchmark after this many consecutive failed "
             "windows. The default avoids benchmarking trajectories returned by "
             "failed solves."
+        ),
+    )
+    parser.add_argument(
+        "--retry-failed-rho-without-advance",
+        action="store_true",
+        help=(
+            "Retry a non-certified RHO from the last certified checkpoint "
+            "without applying the cyclic shift first."
         ),
     )
     torque_group = parser.add_mutually_exclusive_group()
@@ -5653,4 +5673,5 @@ if __name__ == "__main__":
             args.ipopt_disable_historical_initial_guess
         ),
         max_consecutive_failing=args.max_consecutive_failing,
+        retry_failed_rho_without_advance=args.retry_failed_rho_without_advance,
     )
