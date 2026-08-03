@@ -3529,6 +3529,38 @@ def _save_receding_horizon_solution(
     )
 
 
+def _try_save_receding_horizon_solution(
+    output_path: Path,
+    summary: dict,
+    args: argparse.Namespace,
+    *,
+    echo: bool,
+) -> bool:
+    """Persist an optional RHO seed without discarding the run diagnostics."""
+
+    try:
+        _save_receding_horizon_solution(output_path, summary, args)
+    except RuntimeError as error:
+        # This output is an optional continuation seed, never a condition for
+        # retaining the numerical evidence of the RHO run itself.  In
+        # particular, a strict-prefix failure must remain available to the
+        # benchmark reporter (including its failed-window IPOPT stats), rather
+        # than being converted by the outer solver wrapper into a misleading
+        # construction/setup failure.
+        summary["receding_horizon_solution_output_error"] = (
+            f"{type(error).__name__}: {error}"
+        )
+        if echo:
+            print(
+                "receding_horizon_solution_output: not saved "
+                f"({summary['receding_horizon_solution_output_error']})"
+            )
+        return False
+    if echo:
+        print(f"receding_horizon_solution_output: saved ({output_path})")
+    return True
+
+
 def _validate_common_initial_solution_metadata(
     seed: "_WarmupSolutionAdapter",
     args: argparse.Namespace,
@@ -17131,9 +17163,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         rho_output_path = (
             Path(args.receding_horizon_solution_output).expanduser().resolve()
         )
-        _save_receding_horizon_solution(rho_output_path, summary, args)
-        if echo:
-            print(f"receding_horizon_solution_output: saved ({rho_output_path})")
+        _try_save_receding_horizon_solution(
+            rho_output_path, summary, args, echo=echo
+        )
     return summary
 
 

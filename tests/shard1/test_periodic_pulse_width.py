@@ -2379,6 +2379,36 @@ def test_receding_horizon_solution_rejects_an_incomplete_physical_prefix(
         )
 
 
+def test_optional_rho_export_keeps_an_incomplete_prefix_diagnostic(tmp_path):
+    args = periodic_example.build_argument_parser().parse_args([])
+    args.single_shot = False
+    args.cycles_per_window = 1
+    args.n_windows = 5
+    summary = {
+        "success": False,
+        "covered_cycles": 1,
+        "window_statuses": [0, 1, 1],
+        "nlp_solver_stats": [
+            {"window": 0, "status": 0, "iterations": 91},
+            {"window": 1, "status": 1, "iterations": 2000},
+            {"window": 2, "status": 1, "iterations": 2000},
+        ],
+        "state_traces": {"theta": np.zeros((1, 2))},
+        "control_traces": {"Biceps": np.zeros((1, 1))},
+    }
+
+    saved = periodic_example._try_save_receding_horizon_solution(
+        tmp_path / "invalid.npz", summary, args, echo=False
+    )
+
+    assert saved is False
+    assert "strict physical prefix covers 1/5 cycles" in summary[
+        "receding_horizon_solution_output_error"
+    ]
+    assert summary["nlp_solver_stats"][-1]["iterations"] == 2000
+    assert not (tmp_path / "invalid.npz").exists()
+
+
 def test_receding_horizon_solution_can_export_an_explicit_partial_prefix(
     tmp_path,
 ):
@@ -5960,7 +5990,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "ipopt-radau5-full" in workflow
     assert "madnlp-mumps-radau5-full" in workflow
     assert "Scientific collocation gate is not strict-successful" in workflow
-    assert workflow.count("5 scientific-radau5") == 7
+    assert workflow.count("5 scientific-radau5") >= 7
     assert '"$BENCHMARK_CYCLES" "${{ inputs.compile_nlp_evaluators }}"' in workflow
     assert (
         "run_cycling_benchmark_case.sh ipopt ipopt full mumps collocation "
@@ -6072,19 +6102,28 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "--retry-failed-rho-without-advance" in workflow
     assert "fatigue_endurance_radau5" in workflow
     assert "Run compiled reduced Radau-5 fatigue endurance" in workflow
+    assert "radau35_comparison_rhos:" in workflow
+    assert "Run compiled reduced Radau-3 long comparison" in workflow
+    assert "Run compiled reduced Radau-5 long comparison" in workflow
+    assert "inputs.cycles == 'radau35_comparison'" in workflow
+    assert "5 scientific-radau5 off true" in workflow
     assert workflow.count("inputs.cycles != 'fatigue_endurance_radau5'") >= 8
+    assert workflow.count("inputs.cycles != 'radau35_comparison'") >= 8
     assert (
         "matrix.solver == 'ipopt' && inputs.cycles != 'radau5_100' && "
+        "inputs.cycles != 'radau35_comparison' && "
         "inputs.cycles != 'fatigue_endurance' && "
         "inputs.cycles != 'fatigue_endurance_radau5'"
     ) in workflow
     assert (
         "matrix.solver == 'madnlp' && inputs.cycles != 'radau5_100' && "
+        "inputs.cycles != 'radau35_comparison' && "
         "inputs.cycles != 'fatigue_endurance' && "
         "inputs.cycles != 'fatigue_endurance_radau5'"
     ) in workflow
     assert (
         "matrix.solver == 'fatrop' && inputs.cycles != 'radau5_100' && "
+        "inputs.cycles != 'radau35_comparison' && "
         "inputs.cycles != 'fatigue_endurance' && "
         "inputs.cycles != 'fatigue_endurance_radau5'"
     ) in workflow

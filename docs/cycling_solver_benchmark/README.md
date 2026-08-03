@@ -37,13 +37,14 @@ reste la source de vérité exécutable.
 
 ### Campagnes CI d'endurance
 
-Le champ `cycles` du workflow distingue maintenant quatre campagnes longues,
+Le champ `cycles` du workflow distingue maintenant cinq campagnes longues,
 afin de ne pas mélanger précision de transcription, vitesse et perte de
 capacité musculaire :
 
 | Valeur de `cycles` | Cas exécutés | Critère de sortie |
 |---|---|---|
 | `radau5_100` | IPOPT/MUMPS, MadNLP/MUMPS et FATROP, chacun en full et reduced, Radau 5, 100 RHO | certification stricte des 100 RHO; fonctions interprétées pour isoler l'effet du degré |
+| `radau35_comparison` | IPOPT/MUMPS et MadNLP/MUMPS reduced, SX et compilés, Radau 3 puis Radau 5 sur le même runner | comparaison longue appariée, par défaut 300 RHO; chaque degré doit certifier tout son horizon |
 | `acados_reduced_100` | ACADOS SQP-IRK reduced, 100 RHO, après un seed ACADOS-native | résultat sérialisé et audité, y compris si la chaîne s'arrête avant 100 |
 | `fatigue_endurance` | IPOPT, MadNLP/MUMPS et FATROP reduced, SX et compilés, Radau 3; ACADOS SQP-IRK full avec garde rapide `2.60` et Phase-I mécanique | horizon atteint ou arrêt candidat de fatigue après deux fenêtres non certifiées consécutives |
 | `fatigue_endurance_radau5` | IPOPT/MUMPS et MadNLP/MUMPS reduced, SX et compilés, Radau 5 | même contrat d'endurance, afin de vérifier que le stop MadNLP R3 n'est pas un artefact de transcription |
@@ -71,6 +72,10 @@ Exemples de lancement manuel :
 gh workflow run cycling_solver_benchmark_linux.yml \
   --ref codex/acados-pr-refresh \
   -f cycles=radau5_100 -f radau5_endurance_rhos=100
+
+gh workflow run cycling_solver_benchmark_linux.yml \
+  --ref codex/acados-pr-refresh \
+  -f cycles=radau35_comparison -f radau35_comparison_rhos=300
 
 gh workflow run cycling_solver_benchmark_linux.yml \
   --ref codex/acados-pr-refresh \
@@ -103,6 +108,8 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Seed commun, projection mécanique et raffinement IPOPT préalable pour MadNLP | MadNLP était très sensible à la branche non convexe sélectionnée par le warm-start | À 100 RHO R3, le premier échec reduced a été déplacé du RHO 1 au RHO 99; médiane chaude `0.806 s` sur le préfixe | Le RHO 99 n'était pas une preuve de fatigue et doit être retesté avec la nouvelle politique de reprise |
 | MUMPS retenu pour IPOPT et MadNLP; PARDISO/MKL écarté | PARDISO n'a pas apporté le gain attendu dans les campagnes appariées, tandis que MUMPS est portable et reproductible en CI | Une pile Linux commune et stable; suppression d'une dépendance complexe sans perte de performance démontrée | MA57 peut rester une ablation IPOPT locale, mais n'est pas le backend CI portable |
 | Collocation du calcium raffinée | R3 sous-estime le calcium périodique isolé de `6.3864 %` | Erreur isolée ramenée à `0.0173 %` en R5 et `0.000415 %` en R6 | R5 est le compromis d'endurance en cours; le rollout DOP853 favorise provisoirement R6 pour la cible scientifique |
+| Comparaison longue R3/R5 appariée | Une comparaison à cinq cycles ne permet pas d'attribuer un écart de fatigue à la transcription plutôt qu'au transitoire du seed | Nouvelle campagne reduced, SX et compilée à 300 RHO par défaut, IPOPT/MUMPS et MadNLP/MUMPS séquentiellement sur la même machine | IPOPT/R5 doit d'abord réussir le bridge cible; aucun résultat long ne sera interprété avant ce gate |
+| Bridge de warm-start propre à R5 | Le seed commun est produit en R3; l'injecter directement dans le NLP R5 a conduit IPOPT au plafond d'itérations, bien que le primal soit faisable | R5 relance maintenant un raffinement IPOPT sur la transcription cible et ne transfère pas les multiplicateurs R3 | Le coût de bridge est exclu des statistiques chaudes et reste rapporté séparément |
 | Après un échec, aucun shift ni transfert du primal; deux essais sur le même RHO | L'ancien loop Bioptim avançait parfois une solution non convergée, créant un faux motif « échec puis succès » | Le préfixe d'endurance ne peut plus être artificiellement prolongé après une non-convergence | Correctif `ae42595`; une première CI a révélé un relais CLI manquant, corrigé avant la relance |
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
