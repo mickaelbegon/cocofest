@@ -486,8 +486,14 @@ jobs:
           mkdir -p acados-madnlp-hybrid-results
           python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
             --solvers acados \
+            --objective fatigue \
+            --cycles-per-window "${{ inputs.cycles_per_window }}" \
+            --stimulations-per-cycle 30 \
             --n-windows "${{ inputs.acados_option_rhos }}" \
             --n-threads "$BENCHMARK_THREADS" \
+            --crank-assistance "${{ inputs.crank_assistance_nm }}" \
+            --first-node-wheel-q-slack 0 \
+            --terminal-wheel-q-slack "${{ inputs.terminal_wheel_q_slack }}" \
             --mechanical-formulation reduced \
             --experimental-reduced-acados \
             --compact-rho-output \

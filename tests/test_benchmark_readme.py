@@ -76,3 +76,25 @@ def test_linux_32core_setup_tracks_workflow_solver_pins():
     assert "cocofest-madnlp32" in setup
     assert "OMP_NUM_THREADS=1" in setup
     assert "CMAKE_BUILD_PARALLEL_LEVEL=32" in setup
+
+
+def test_acados_madnlp_hybrid_reuses_the_shared_seed_physical_parameters():
+    """The hybrid consumer must represent the exact OCP certified by its seed."""
+
+    workflow = (
+        Path(__file__).resolve().parents[1]
+        / ".github"
+        / "workflows"
+        / "cycling_solver_benchmark_linux.yml"
+    ).read_text(encoding="utf-8")
+    hybrid_job = workflow.split("\n  acados-madnlp-hybrid:", maxsplit=1)[1].split(
+        "\n  prepare-acados-stack:", maxsplit=1
+    )[0]
+
+    assert '--common-initial-solution benchmark-seed/common-reduced.npz' in hybrid_job
+    assert '--objective fatigue' in hybrid_job
+    assert '--cycles-per-window "${{ inputs.cycles_per_window }}"' in hybrid_job
+    assert '--stimulations-per-cycle 30' in hybrid_job
+    assert '--crank-assistance "${{ inputs.crank_assistance_nm }}"' in hybrid_job
+    assert '--first-node-wheel-q-slack 0' in hybrid_job
+    assert '--terminal-wheel-q-slack "${{ inputs.terminal_wheel_q_slack }}"' in hybrid_job
