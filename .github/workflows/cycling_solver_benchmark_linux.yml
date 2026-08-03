@@ -493,7 +493,7 @@ jobs:
             --compact-rho-output \
             --common-initial-solution benchmark-seed/common-reduced.npz \
             --adopt-common-initial-solution-warmup-cycles \
-            --disable-standard-ipopt-warmup \
+            --acados-disable-standard-ipopt-warmup \
             --disable-periodic-ipopt-refinement \
             --retry-failed-rho-without-advance \
             --max-consecutive-failing 2 \

@@ -147,6 +147,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "acados_anderson_activation_threshold",
     "acados_byrd_omojokon_slack_relaxation_factor",
     "acados_assisted_hot_start",
+    "disable_standard_ipopt_warmup",
     "acados_control_homotopy_radii",
     "acados_control_homotopy_tolerance",
     "acados_control_homotopy_stage_iterations",
@@ -3212,6 +3213,7 @@ def main(
     optional_nlp_periodic_ipopt_hot_start: bool = True,
     acados_max_iter: int = 100,
     acados_assisted_hot_start: bool = True,
+    acados_disable_standard_ipopt_warmup: bool = False,
     acados_control_homotopy_radii: tuple[float, ...] | None = None,
     acados_control_homotopy_tolerance: float = 5e-4,
     acados_control_homotopy_stage_iterations: int = 50,
@@ -3432,6 +3434,13 @@ def main(
     if invalid_solvers or not solvers:
         raise ValueError(
             "solvers must contain at least one of: " f"{', '.join(BENCHMARK_SOLVERS)}."
+        )
+    if acados_disable_standard_ipopt_warmup and (
+        "acados" not in solvers or common_initial_solution is None
+    ):
+        raise ValueError(
+            "--acados-disable-standard-ipopt-warmup requires --solvers acados "
+            "and --common-initial-solution."
         )
     objective_names = {
         item.strip().lower() for item in objective.split(",") if item.strip()
@@ -3671,6 +3680,9 @@ def main(
     acados_args.max_consecutive_failing = max_consecutive_failing
     _set_rho_retry_without_advance(
         (ipopt_args, acados_args), retry_failed_rho_without_advance
+    )
+    acados_args.disable_standard_ipopt_warmup = (
+        acados_disable_standard_ipopt_warmup
     )
     ipopt_args.warmup_ipopt_linear_solver = warmup_ipopt_linear_solver
     ipopt_args.standard_warmup_seed = standard_warmup_seed
@@ -4870,6 +4882,14 @@ def build_cli() -> argparse.ArgumentParser:
         action="store_false",
     )
     parser.add_argument(
+        "--acados-disable-standard-ipopt-warmup",
+        action="store_true",
+        help=(
+            "Skip ACADOS's redundant standard IPOPT warmup. Requires a "
+            "validated common periodic seed for a physically meaningful run."
+        ),
+    )
+    parser.add_argument(
         "--acados-control-homotopy-radii",
         type=parse_control_homotopy_radii,
         default=None,
@@ -5473,6 +5493,9 @@ if __name__ == "__main__":
         ),
         acados_max_iter=args.acados_max_iter,
         acados_assisted_hot_start=args.acados_assisted_hot_start,
+        acados_disable_standard_ipopt_warmup=(
+            args.acados_disable_standard_ipopt_warmup
+        ),
         acados_control_homotopy_radii=args.acados_control_homotopy_radii,
         acados_control_homotopy_tolerance=(args.acados_control_homotopy_tolerance),
         acados_control_homotopy_stage_iterations=(

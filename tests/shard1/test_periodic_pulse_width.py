@@ -874,6 +874,38 @@ def test_acados_madnlp_recovery_cli_is_opt_in():
     assert args.acados_madnlp_recovery_collocation_degree == 5
 
 
+def test_comparison_relays_acados_standard_warmup_skip(monkeypatch):
+    captured = {}
+
+    def fake_run(solver_name, args, **_):
+        captured[solver_name] = args
+        return {}
+
+    monkeypatch.setattr(comparison_example, "_run_benchmark_case", fake_run)
+    monkeypatch.setattr(comparison_example, "print_solver_overview", lambda _: None)
+
+    cli_args = comparison_example.build_cli().parse_args(
+        ["--solvers", "acados", "--acados-disable-standard-ipopt-warmup"]
+    )
+    comparison_example.main(
+        solvers=("acados",),
+        n_windows=1,
+        common_initial_solution="common-reduced.npz",
+        acados_disable_standard_ipopt_warmup=(
+            cli_args.acados_disable_standard_ipopt_warmup
+        ),
+    )
+
+    assert captured["acados"].disable_standard_ipopt_warmup is True
+
+    with pytest.raises(ValueError, match="common-initial-solution"):
+        comparison_example.main(
+            solvers=("acados",),
+            n_windows=1,
+            acados_disable_standard_ipopt_warmup=True,
+        )
+
+
 def test_pulse_width_trust_region_keeps_nodewise_centers():
     bounds = SimpleNamespace(
         min=np.array([[0.1, 0.1, 0.1]]), max=np.array([[0.6, 0.6, 0.6]])
