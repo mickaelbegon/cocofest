@@ -33,7 +33,7 @@ if ! [[ "$collocation_degree" =~ ^[2-9]$ ]]; then
   exit 2
 fi
 case "$ipopt_profile" in
-  historical|periodic_collocation|periodic-collocation|scientific_radau4|scientific-radau4|scientific_radau5|scientific-radau5|scientific_radau6|scientific-radau6|acados_like|acados-like) ;;
+  historical|periodic_collocation|periodic-collocation|scientific_radau3|scientific-radau3|scientific_radau4|scientific-radau4|scientific_radau5|scientific-radau5|scientific_radau6|scientific-radau6|acados_like|acados-like) ;;
   *) echo "IPOPT_PROFILE is not supported: '$ipopt_profile'." >&2; exit 2 ;;
 esac
 case "$dual_warm_start" in
@@ -45,14 +45,17 @@ case "$target_refinement" in
   *) echo "TARGET_REFINEMENT must be auto, true, or false; got '$target_refinement'." >&2; exit 2 ;;
 esac
 
-if [[ "$ipopt_profile" =~ ^scientific[-_]radau[456]$ ]]; then
+if [[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]; then
   # Keep the complete certified primal, not only compact JSON checkpoints.
-  # The next scientific gate reuses these exact PW vectors across R4/R5/R6
+  # The next scientific gate reuses these exact PW vectors across R3/R4/R5/R6
   # and full/reduced before any re-optimization.
   trajectory_options+=(
     --validate-integrator-maps
     --receding-horizon-solution-output
     "$case_dir/validated-rho-trajectory.npz"
+    --allow-partial-receding-horizon-solution-output
+    --rho-replay-checkpoint-output
+    "$case_dir/last-certified-rho-replay.npz"
   )
 fi
 
@@ -228,7 +231,7 @@ then
   exit 1
 fi
 
-if [[ -f "$result" && "$ipopt_profile" =~ ^scientific[-_]radau[456]$ ]]
+if [[ -f "$result" && "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]
 then
   normalized_profile="${ipopt_profile//_/-}"
   scientific_status="diagnostic"

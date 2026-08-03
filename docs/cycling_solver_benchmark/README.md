@@ -108,8 +108,9 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Seed commun, projection mécanique et raffinement IPOPT préalable pour MadNLP | MadNLP était très sensible à la branche non convexe sélectionnée par le warm-start | À 100 RHO R3, le premier échec reduced a été déplacé du RHO 1 au RHO 99; médiane chaude `0.806 s` sur le préfixe | Le RHO 99 n'était pas une preuve de fatigue et doit être retesté avec la nouvelle politique de reprise |
 | MUMPS retenu pour IPOPT et MadNLP; PARDISO/MKL écarté | PARDISO n'a pas apporté le gain attendu dans les campagnes appariées, tandis que MUMPS est portable et reproductible en CI | Une pile Linux commune et stable; suppression d'une dépendance complexe sans perte de performance démontrée | MA57 peut rester une ablation IPOPT locale, mais n'est pas le backend CI portable |
 | Collocation du calcium raffinée | R3 sous-estime le calcium périodique isolé de `6.3864 %` | Erreur isolée ramenée à `0.0173 %` en R5 et `0.000415 %` en R6 | R5 est le compromis d'endurance en cours; le rollout DOP853 favorise provisoirement R6 pour la cible scientifique |
-| Comparaison longue R3/R5 appariée | Une comparaison à cinq cycles ne permet pas d'attribuer un écart de fatigue à la transcription plutôt qu'au transitoire du seed | Nouvelle campagne reduced, SX et compilée à 300 RHO par défaut, IPOPT/MUMPS et MadNLP/MUMPS séquentiellement sur la même machine | IPOPT/R5 doit d'abord réussir le bridge cible; aucun résultat long ne sera interprété avant ce gate |
+| Comparaison longue R3/R5 appariée | Une comparaison à cinq cycles ne permet pas d'attribuer un écart de fatigue à la transcription plutôt qu'au transitoire du seed | Nouvelle campagne reduced, SX et compilée à 300 RHO par défaut, IPOPT/MUMPS et MadNLP/MUMPS séquentiellement sur la même machine | R3 et R5 emploient désormais le même contrat scientifique (SX, `periodic_node`, Radau, contraintes initiales, bridge primale cible et audit DOP853); seul le degré change |
 | Bridge de warm-start propre à R5 | Le seed commun est produit en R3; l'injecter directement dans le NLP R5 a conduit IPOPT au plafond d'itérations, bien que le primal soit faisable | R5 relance maintenant un raffinement IPOPT sur la transcription cible et ne transfère pas les multiplicateurs R3 | Le coût de bridge est exclu des statistiques chaudes et reste rapporté séparément |
+| Checkpoint exact du dernier RHO certifié | Séparer un échec numérique du RHO courant d'un déplacement accidentel vers le suivant | `last-certified-rho-replay.npz` contient la primale après le shift réellement appliqué, y compris lorsque la campagne conserve un préfixe partiel | C'est un seed de reprise primale; les multiplicateurs ne sont pas sérialisés et les modes dual `bounds`/`all` exigent encore une ablation dans le même processus |
 | Après un échec, aucun shift ni transfert du primal; deux essais sur le même RHO | L'ancien loop Bioptim avançait parfois une solution non convergée, créant un faux motif « échec puis succès » | Le préfixe d'endurance ne peut plus être artificiellement prolongé après une non-convergence | Correctif `ae42595`; une première CI a révélé un relais CLI manquant, corrigé avant la relance |
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
@@ -407,6 +408,22 @@ par défaut. Une solution non convergée ne doit jamais alimenter le RHO suivant
 Le retry doit repartir du dernier checkpoint certifié et résoudre à nouveau
 le **même** RHO.
 
+Pour chaque profil scientifique Radau, le wrapper exporte aussi
+`last-certified-rho-replay.npz`. Il contient le primal **après** le shift
+cyclique et la projection qui initialiseront le RHO suivant, ainsi que le
+nombre de fenêtres certifiées. Cet artefact permet donc de rejouer de manière
+contrôlée le premier RHO qui a échoué, sans reconstruire un seed approché à
+partir du JSON de synthèse. Il ne contient volontairement pas `lam_x` ni
+`lam_g` : la comparaison entre les warm-starts duals MadNLP `off`, `bounds` et
+`all` doit conserver ces multiplicateurs en mémoire dans le même processus, ou
+introduire une sérialisation explicite et vérifiée de leur ordre.
+
+Le même export active l'audit de la carte d'intégration sur le seed initial et
+localise l'intervalle, le cycle, le nœud local et l'état qui portent l'écart
+maximal. R3 et R5 peuvent ainsi être comparés sur le même diagnostic DOP853;
+un écart ne sera plus attribué au degré si les deux cas n'ont pas passé la même
+vérification de rollout.
+
 L'audit du run `30754413003` a aussi séparé une réussite aux nœuds d'une
 violation cachée entre nœuds : la vitesse moyenne d'intervalle dépasse la
 borne rapide de `0.376–0.403 rad/s`, alors que la vitesse nodale ne la dépasse
@@ -468,7 +485,10 @@ Le mode workflow `cycles=acados_guard` rejoue uniquement les deux références
 et ces quatre cas full/reduced, sans reconstruire l'écran historique complet.
 Le mode `cycles=acados_recovery` va plus loin au premier échec full : sur une
 seule machine, il compare le shift courant, une Phase-I mécanique, une Phase-I
-sur tous les états et `SQP_WITH_FEASIBLE_QP`/Byrd--Omojokun. Chaque cas exporte
+sur tous les états et `SQP_WITH_FEASIBLE_QP`/Byrd--Omojokun. Il compare aussi
+deux écrans de la Phase-I mécanique (`1e-3` et `1e-2`) : le seuil `1e-2` est
+l'ablation utile lorsque les défauts résiduels de transfert sont trop faibles
+pour justifier une projection qui sera rejetée. Chaque cas exporte
 son préfixe certifié exact dans `validated-rho-trajectory.npz`; une méthode de
 récupération ne peut donc pas masquer un échec en avançant la fenêtre.
 
@@ -601,8 +621,9 @@ porter le nom `reference` dans les nouveaux artefacts. Les nouveaux noms
 devraient décrire la méthode, par exemple `legacy-radau3`,
 `scientific-radau5` ou `irk-refined`.
 
-Les profils CLI `scientific-radau4`, `scientific-radau5` et
-`scientific-radau6` sont des contrats verrouillés : `periodic_node`, couple
+Les profils CLI `scientific-radau3`, `scientific-radau4`,
+`scientific-radau5` et `scientific-radau6` sont des contrats verrouillés :
+`periodic_node`, couple
 constant, SX, collocation Radau au degré annoncé et contraintes initiales
 actives. Une surcharge contradictoire est refusée. Les noms historiques des
 profils ne constituent pas une certification : le rollout DOP853 du run

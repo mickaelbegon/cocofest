@@ -750,6 +750,9 @@ def test_high_accuracy_trace_rollout_truncates_collocation_failed_window():
     assert diagnostic["interval_count"] == 2
     assert diagnostic["state_node_stride"] == 6
     assert diagnostic["maximum_absolute_endpoint_error"] < 1e-11
+    assert diagnostic["maximum_endpoint_error_interval"] is not None
+    assert diagnostic["maximum_endpoint_error_interval"]["cycle"] == 0
+    assert diagnostic["maximum_endpoint_error_interval"]["state_key"] == "A_Test"
 
 
 def test_solver_comparison_cli_exposes_high_accuracy_trace_audit():
@@ -1185,6 +1188,21 @@ def test_rho_retry_without_advance_is_opt_in_and_certification_requires_status_z
     assert not periodic_example._rho_solution_is_certified(
         0, {"passes_tolerance": False}
     )
+
+
+def test_rho_replay_checkpoint_requires_certified_window_retry(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        periodic_example,
+        "apply_assisted_hot_start_defaults",
+        lambda args: None,
+    )
+    args = SimpleNamespace(
+        rho_replay_checkpoint_output=tmp_path / "checkpoint.npz",
+        retry_failed_rho_without_advance=False,
+    )
+
+    with pytest.raises(ValueError, match="retry-failed-rho-without-advance"):
+        periodic_example.solve_case(args, echo=False)
 
 
 def test_acados_maxiter_retry_candidate_requires_nearly_feasible_history():
@@ -2321,8 +2339,8 @@ def test_receding_horizon_solution_is_exported_as_one_multi_cycle_seed(
     args = periodic_example.build_argument_parser().parse_args([])
     args.single_shot = False
     args.cycles_per_window = 1
-    args.n_windows = 2
     args.terminal_wheel_q_reference_mode = "absolute_initial"
+    args.n_windows = 2
     output_path = tmp_path / "two_cycle_rho_seed.npz"
     summary = {
         "success": True,
@@ -2442,6 +2460,33 @@ def test_receding_horizon_solution_can_export_an_explicit_partial_prefix(
 
     assert seed.metadata["cycles_per_window"] == 2
     assert seed.metadata["producer_requested_cycles"] == 3
+
+
+def test_rho_replay_checkpoint_is_the_shifted_next_window_seed(tmp_path):
+    args = periodic_example.build_argument_parser().parse_args([])
+    args.single_shot = False
+    args.cycles_per_window = 1
+    args.terminal_wheel_q_reference_mode = "absolute_initial"
+    nlp = SimpleNamespace(
+        x_init={"theta": SimpleNamespace(init=np.array([[2.0, 1.0]]))},
+        u_init={"Biceps": SimpleNamespace(init=np.array([[180e-6]]))},
+    )
+    output_path = tmp_path / "last-certified-rho-replay.npz"
+
+    periodic_example._save_rho_replay_checkpoint(
+        output_path,
+        SimpleNamespace(nlp=[nlp]),
+        args,
+        completed_windows=98,
+    )
+
+    seed = periodic_example._load_warmup_cache(output_path)
+    np.testing.assert_allclose(
+        seed.decision_states(to_merge=periodic_example.SolutionMerge.NODES)["theta"],
+        [[2.0, 1.0]],
+    )
+    assert seed.metadata["producer_mode"] == "rho_replay_checkpoint"
+    assert seed.metadata["producer_completed_windows"] == 98
 
 
 def test_periodic_node_projection_uses_all_five_ding_states():
@@ -5431,6 +5476,16 @@ def test_benchmark_json_summary_contains_comparable_fatigue_metrics(tmp_path):
     result["args"].ding_sum_stim_truncation = 6
     result["args"].activate_passive_force_relationship = True
     result["args"].enforce_start_constraints = True
+    result["args"].validate_integrator_maps = True
+    result["args"].acados_transfer_phase_one_mode = "mechanical"
+    result["args"].acados_transfer_phase_one_screen_threshold = 1e-2
+    result["integrator_map_initial_guess"] = [
+        {"node": 0, "trajectory_vs_reference": 1e-8}
+    ]
+    result["rho_replay_checkpoint"] = {
+        "available": True,
+        "completed_windows": 98,
+    }
     result["acados_maxiter_retry_summaries"] = [
         {"window": 13, "retry_status": 2}
     ]
@@ -5465,6 +5520,21 @@ def test_benchmark_json_summary_contains_comparable_fatigue_metrics(tmp_path):
         "activate_passive_force_relationship"
     ] is True
     assert payload["configurations"]["madnlp"]["enforce_start_constraints"] is True
+    assert payload["configurations"]["madnlp"]["validate_integrator_maps"] is True
+    assert (
+        payload["configurations"]["madnlp"]["acados_transfer_phase_one_mode"]
+        == "mechanical"
+    )
+    assert payload["configurations"]["madnlp"][
+        "acados_transfer_phase_one_screen_threshold"
+    ] == pytest.approx(1e-2)
+    assert payload["results"][0]["integrator_map_initial_guess"] == [
+        {"node": 0, "trajectory_vs_reference": 1e-8}
+    ]
+    assert payload["results"][0]["rho_replay_checkpoint"] == {
+        "available": True,
+        "completed_windows": 98,
+    }
     row = payload["results"][0]
     assert row["solver"] == "madnlp"
     assert row["success"] is True
@@ -5982,7 +6052,9 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "ACADOS_RECOVERY_ONLY" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
+    assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2" in workflow
     assert "--acados-transfer-phase-one-screen-threshold 1e-3" in workflow
+    assert "--acados-transfer-phase-one-screen-threshold 1e-2" in workflow
     assert 'if [[ "$variant" == *"phase-one-mechanical"* ]]; then' in workflow
     assert 'if [[ "$variant" == *"phase-one-mechanical" ]]; then' not in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-all" in workflow
@@ -6111,6 +6183,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "Run compiled reduced Radau-3 long comparison" in workflow
     assert "Run compiled reduced Radau-5 long comparison" in workflow
     assert "inputs.cycles == 'radau35_comparison'" in workflow
+    assert "3 scientific-radau3 off true" in workflow
     assert "5 scientific-radau5 off true" in workflow
     assert workflow.count("inputs.cycles != 'fatigue_endurance_radau5'") >= 8
     assert workflow.count("inputs.cycles != 'radau35_comparison'") >= 8
@@ -6275,7 +6348,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert 'dual_warm_start="${13:-auto}"' in benchmark_runner
     assert 'target_refinement="${14:-auto}"' in benchmark_runner
     assert 'trajectory_options=()' in benchmark_runner
-    assert '[[ "$ipopt_profile" =~ ^scientific[-_]radau[456]$ ]]' in benchmark_runner
+    assert '[[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]' in benchmark_runner
     assert '--receding-horizon-solution-output' in benchmark_runner
     assert '"$case_dir/validated-rho-trajectory.npz"' in benchmark_runner
     assert '"${trajectory_options[@]}"' in benchmark_runner
@@ -10859,6 +10932,7 @@ def test_scientific_radau5_profile_is_fixed_and_shared_by_nlp_solvers(monkeypatc
 
     diagnostic_hashes = set()
     for profile, degree, status in (
+        ("scientific-radau3", 3, "diagnostic"),
         ("scientific-radau4", 4, "diagnostic"),
         ("scientific-radau6", 6, "diagnostic"),
     ):
@@ -10875,7 +10949,7 @@ def test_scientific_radau5_profile_is_fixed_and_shared_by_nlp_solvers(monkeypatc
             assert args.scientific_status == status
             assert args.enforce_start_constraints is True
             diagnostic_hashes.add(args.profile_hash)
-    assert len(diagnostic_hashes) == 2
+    assert len(diagnostic_hashes) == 3
 
     with pytest.raises(ValueError, match="fixed scientific contract"):
         comparison_example.main(

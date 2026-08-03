@@ -1228,6 +1228,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--rho-replay-checkpoint-output",
+        type=Path,
+        default=None,
+        help=(
+            "Save the shifted primal initial guess for the next RHO after every "
+            "strictly certified window. The final file is a direct replay seed "
+            "for the first numerically failing RHO; requires "
+            "--retry-failed-rho-without-advance."
+        ),
+    )
+    parser.add_argument(
         "--acados-horizon-continuation",
         action="store_true",
         help=(
@@ -3569,6 +3580,41 @@ def _try_save_receding_horizon_solution(
     if echo:
         print(f"receding_horizon_solution_output: saved ({output_path})")
     return True
+
+
+def _save_rho_replay_checkpoint(
+    output_path: Path,
+    nmpc,
+    args: argparse.Namespace,
+    *,
+    completed_windows: int,
+) -> None:
+    """Persist the exact shifted primal that will initialize the next RHO."""
+
+    nlp = nmpc.nlp[0]
+    states = {
+        key: np.asarray(nlp.x_init[key].init, dtype=float).copy()
+        for key in nlp.x_init.keys()
+    }
+    controls = {
+        key: np.asarray(nlp.u_init[key].init, dtype=float).copy()
+        for key in nlp.u_init.keys()
+    }
+    if not states or not controls:
+        raise RuntimeError("The shifted RHO primal has no state or control trace.")
+    metadata = _common_initial_solution_metadata(args)
+    metadata.update(
+        {
+            "producer_mode": "rho_replay_checkpoint",
+            "producer_completed_windows": int(completed_windows),
+        }
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _save_warmup_cache(
+        output_path,
+        _WarmupSolutionAdapter(states, controls),
+        metadata=metadata,
+    )
 
 
 def _validate_common_initial_solution_metadata(
@@ -8417,6 +8463,7 @@ def high_accuracy_trace_rollout_diagnostics(
     )
     maximum_absolute_endpoint_error = 0.0
     maximum_scaled_endpoint_error = 0.0
+    maximum_endpoint_error_interval = None
     maximum_absolute_by_state = {key: 0.0 for key in nlp.states.keys()}
     reference_evaluations = 0
     state_scales = np.maximum(
@@ -8474,10 +8521,30 @@ def high_accuracy_trace_rollout_diagnostics(
         augmented = reference.y[:, -1]
         reference_evaluations += int(reference.nfev)
         endpoint_error = augmented[:n_states] - states[:, interval + 1]
-        maximum_absolute_endpoint_error = max(
-            maximum_absolute_endpoint_error,
-            float(np.max(np.abs(endpoint_error))),
-        )
+        interval_maximum_absolute_error = float(np.max(np.abs(endpoint_error)))
+        if (
+            maximum_endpoint_error_interval is None
+            or interval_maximum_absolute_error > maximum_absolute_endpoint_error
+        ):
+            worst_state_index = int(np.argmax(np.abs(endpoint_error)))
+            worst_state_key = next(
+                key
+                for key in nlp.states.keys()
+                if worst_state_index
+                in set(np.asarray(nlp.states[key].index).reshape(-1).tolist())
+            )
+            maximum_endpoint_error_interval = {
+                "interval": int(interval),
+                "cycle": int(interval // intervals_per_cycle),
+                "local_node": int(local_node),
+                "state_key": worst_state_key,
+                "absolute_error": interval_maximum_absolute_error,
+                "scaled_error": float(
+                    abs(endpoint_error[worst_state_index])
+                    / state_scales[worst_state_index]
+                ),
+            }
+            maximum_absolute_endpoint_error = interval_maximum_absolute_error
         maximum_scaled_endpoint_error = max(
             maximum_scaled_endpoint_error,
             float(np.max(np.abs(endpoint_error) / state_scales)),
@@ -8518,6 +8585,7 @@ def high_accuracy_trace_rollout_diagnostics(
         "reference_evaluations": int(reference_evaluations),
         "maximum_absolute_endpoint_error": maximum_absolute_endpoint_error,
         "maximum_scaled_endpoint_error": maximum_scaled_endpoint_error,
+        "maximum_endpoint_error_interval": maximum_endpoint_error_interval,
         "maximum_absolute_endpoint_error_by_state": maximum_absolute_by_state,
         "executed_fatigue_objective": float(
             objective_weight * np.sum(objective_values)
@@ -13546,6 +13614,14 @@ def _should_apply_transfer_phase_one(
 def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     preparation_start = perf_counter()
     apply_assisted_hot_start_defaults(args)
+    if (
+        getattr(args, "rho_replay_checkpoint_output", None) is not None
+        and not args.retry_failed_rho_without_advance
+    ):
+        raise ValueError(
+            "--rho-replay-checkpoint-output requires "
+            "--retry-failed-rho-without-advance."
+        )
     initial_guess_diagnostics_requested = bool(
         getattr(args, "initial_guess_diagnostics", False)
         or (args.solver == "acados" and args.acados_diagnostics)
@@ -13607,6 +13683,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     if args.receding_horizon_solution_output is not None and args.single_shot:
         raise ValueError(
             "--receding-horizon-solution-output cannot be used with --single-shot."
+        )
+    if args.rho_replay_checkpoint_output is not None and args.single_shot:
+        raise ValueError(
+            "--rho-replay-checkpoint-output cannot be used with --single-shot."
         )
     if (
         args.allow_partial_receding_horizon_solution_output
@@ -15557,8 +15637,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 f"{final_seed_finalization['maximum_state_bound_violation']:.6g}"
             )
 
+    integrator_map_initial_guess = None
     if args.validate_integrator_maps:
-        for row in high_accuracy_integrator_map_diagnostics(nmpc):
+        integrator_map_initial_guess = high_accuracy_integrator_map_diagnostics(nmpc)
+        for row in integrator_map_initial_guess:
             if echo:
                 print(
                     "integrator_map_validation: "
@@ -15650,6 +15732,12 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         if args.common_initial_solution_output is not None
         else None
     )
+    rho_replay_checkpoint_output = (
+        Path(args.rho_replay_checkpoint_output).expanduser().resolve()
+        if args.rho_replay_checkpoint_output is not None
+        else None
+    )
+    rho_replay_checkpoint_summary = None
 
     def save_common_initial_solution(solution) -> bool:
         if (
@@ -15779,9 +15867,31 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         original_before_window_advance = self.before_window_advance
         self.before_window_advance = None
         try:
-            return original_advance_window(solution, *advance_args, **advance_kwargs)
+            advance_result = original_advance_window(
+                solution, *advance_args, **advance_kwargs
+            )
         finally:
             self.before_window_advance = original_before_window_advance
+        nonlocal rho_replay_checkpoint_summary
+        if rho_replay_checkpoint_output is not None:
+            _save_rho_replay_checkpoint(
+                rho_replay_checkpoint_output,
+                self,
+                args,
+                completed_windows=int(self.total_optimization_run),
+            )
+            rho_replay_checkpoint_summary = {
+                "available": True,
+                "path": str(rho_replay_checkpoint_output),
+                "completed_windows": int(self.total_optimization_run),
+            }
+            if echo:
+                print(
+                    "rho_replay_checkpoint: saved "
+                    f"completed_windows={self.total_optimization_run} "
+                    f"({rho_replay_checkpoint_output})"
+                )
+        return advance_result
 
     if args.retry_failed_rho_without_advance:
         nmpc.advance_window = MethodType(advance_only_certified_window, nmpc)
@@ -17225,6 +17335,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     summary["control_bounds"] = _control_bounds_summary(nmpc)
     summary["pulse_width_active_set_summary"] = pulse_width_active_set_summary(nmpc)
     summary["initial_guess_audits"] = initial_guess_audits
+    summary["integrator_map_initial_guess"] = integrator_map_initial_guess
+    summary["rho_replay_checkpoint"] = rho_replay_checkpoint_summary
     summary["initial_guess_preparation_time_s"] = initial_guess_preparation_time_s
     summary["reduced_profile_build_time_s"] = getattr(
         args, "reduced_profile_build_time_s", 0.0

@@ -96,6 +96,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "activate_passive_force_relationship",
     "use_sx",
     "enforce_start_constraints",
+    "validate_integrator_maps",
     "nlp_ordering_strategy",
     "state_scaling",
     "pulse_width_scaling",
@@ -153,6 +154,16 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "acados_transfer_irk_rollout",
     "acados_transfer_rollout_max_bound_violation",
     "acados_transfer_phase_one",
+    "acados_transfer_phase_one_mode",
+    "acados_transfer_phase_one_lookback_nodes",
+    "acados_transfer_phase_one_screen_threshold",
+    "acados_transfer_phase_one_proximity_weight",
+    "acados_transfer_phase_one_defect_weight",
+    "acados_transfer_phase_one_substeps",
+    "acados_transfer_phase_one_max_state_change",
+    "acados_transfer_phase_one_max_q_change",
+    "acados_transfer_phase_one_max_qdot_change",
+    "acados_transfer_phase_one_max_fes_change",
     "acados_transfer_bound_homotopy",
     "acados_transfer_bound_homotopy_fractions",
     "acados_transfer_bound_homotopy_padding",
@@ -188,6 +199,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "common_initial_solution",
     "common_initial_solution_output",
     "allow_partial_receding_horizon_solution_output",
+    "rho_replay_checkpoint_output",
     "ipopt_hsl_library",
     "ipopt_c_compile",
     "ipopt_print_level",
@@ -267,6 +279,19 @@ IPOPT_PROFILE_DEFAULTS = {
         "collocation_method": "radau",
         "use_sx": True,
         "enforce_start_constraints": False,
+        "disable_standard_ipopt_warmup": False,
+        "disable_periodic_fes_warmup_projection": False,
+        "fatigue_warmstart_mode": None,
+    },
+    "scientific_radau3": {
+        "model_formulation": "periodic_node",
+        "torque_application": "constant",
+        "ode_solver": "collocation",
+        "rk_steps": 1,
+        "collocation_degree": 3,
+        "collocation_method": "radau",
+        "use_sx": True,
+        "enforce_start_constraints": True,
         "disable_standard_ipopt_warmup": False,
         "disable_periodic_fes_warmup_projection": False,
         "fatigue_warmstart_mode": None,
@@ -1420,7 +1445,7 @@ def _solver_config(
         if normalized_profile not in IPOPT_PROFILE_DEFAULTS:
             raise ValueError(
                 "--ipopt-profile must be 'historical', 'periodic_collocation', "
-                "'scientific_radau4', 'scientific_radau5', "
+                "'scientific_radau3', 'scientific_radau4', 'scientific_radau5', "
                 "'scientific_radau6', or 'acados_like'."
             )
 
@@ -2935,6 +2960,10 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 "high_accuracy_trace_rollout": result.get(
                     "high_accuracy_trace_rollout"
                 ),
+                "integrator_map_initial_guess": result.get(
+                    "integrator_map_initial_guess"
+                ),
+                "rho_replay_checkpoint": result.get("rho_replay_checkpoint"),
                 "pulse_width_cycle_variation": pulse_width_cycle_variation(
                     result, performance["validated_cycles"]
                 ),
@@ -3134,6 +3163,7 @@ def main(
     common_initial_solution_output: str | Path | None = None,
     receding_horizon_solution_output: str | Path | None = None,
     allow_partial_receding_horizon_solution_output: bool = False,
+    rho_replay_checkpoint_output: str | Path | None = None,
     ipopt_hsl_library: str | None = None,
     ipopt_c_compile: bool = False,
     ipopt_print_level: int = 0,
@@ -3366,6 +3396,9 @@ def main(
     )
     receding_horizon_solution_output = resolve_invocation_path(
         receding_horizon_solution_output
+    )
+    rho_replay_checkpoint_output = resolve_invocation_path(
+        rho_replay_checkpoint_output
     )
     reduced_cycling_profile = resolve_invocation_path(reduced_cycling_profile)
     ipopt_hsl_library = resolve_invocation_path(ipopt_hsl_library)
@@ -3658,6 +3691,8 @@ def main(
     acados_args.allow_partial_receding_horizon_solution_output = (
         allow_partial_receding_horizon_solution_output
     )
+    ipopt_args.rho_replay_checkpoint_output = rho_replay_checkpoint_output
+    acados_args.rho_replay_checkpoint_output = rho_replay_checkpoint_output
     acados_args.experimental_reduced_acados = experimental_reduced_acados
     for name, value in (
         ("ipopt_print_level", ipopt_print_level),
@@ -3956,6 +3991,7 @@ def main(
     ipopt_label = {
         "historical": "historical reference",
         "periodic_collocation": "periodic-collocation bridge",
+        "scientific_radau3": "scientific Radau-3 diagnostic",
         "scientific_radau4": "scientific Radau-4 diagnostic",
         "scientific_radau5": "scientific Radau-5",
         "scientific_radau6": "scientific Radau-6 diagnostic",
@@ -4667,6 +4703,8 @@ def build_cli() -> argparse.ArgumentParser:
             "historical",
             "periodic_collocation",
             "periodic-collocation",
+            "scientific_radau3",
+            "scientific-radau3",
             "scientific_radau4",
             "scientific-radau4",
             "scientific_radau5",
@@ -4682,7 +4720,7 @@ def build_cli() -> argparse.ArgumentParser:
             "problem; 'periodic_collocation' isolates the periodic dynamics and "
             "constant torque with robust collocation; the scientific Radau-4/5/6 "
             "profiles fix the corrected SX contracts (Radau-5 is the candidate; "
-            "4 and 6 are diagnostics); 'acados_like' additionally "
+            "3, 4 and 6 are diagnostics); 'acados_like' additionally "
             "switches IPOPT to the explicit RK setup used to diagnose ACADOS."
         ),
     )
@@ -5293,6 +5331,12 @@ def build_cli() -> argparse.ArgumentParser:
             "window fails."
         ),
     )
+    parser.add_argument(
+        "--rho-replay-checkpoint-output",
+        type=Path,
+        default=None,
+        help="Optional direct replay seed saved after each certified RHO shift.",
+    )
     return parser
 
 
@@ -5339,6 +5383,7 @@ if __name__ == "__main__":
         allow_partial_receding_horizon_solution_output=(
             args.allow_partial_receding_horizon_solution_output
         ),
+        rho_replay_checkpoint_output=args.rho_replay_checkpoint_output,
         ipopt_hsl_library=args.ipopt_hsl_library,
         ipopt_c_compile=args.ipopt_c_compile,
         ipopt_print_level=args.ipopt_print_level,
