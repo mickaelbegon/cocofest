@@ -98,3 +98,5 @@ def test_acados_madnlp_hybrid_reuses_the_shared_seed_physical_parameters():
     assert '--crank-assistance "${{ inputs.crank_assistance_nm }}"' in hybrid_job
     assert '--first-node-wheel-q-slack 0' in hybrid_job
     assert '--terminal-wheel-q-slack "${{ inputs.terminal_wheel_q_slack }}"' in hybrid_job
+    assert "ACADOS_SOURCE_DIR:" not in hybrid_job
+    assert "CONDA_PREFIX" in hybrid_job

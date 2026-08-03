@@ -481,8 +481,10 @@ jobs:
       - name: Run the reduced hybrid recovery gate
         env:
           PYTHONPATH: ${{ github.workspace }}
-          ACADOS_SOURCE_DIR: ${{ github.workspace }}/.benchmark-deps/bioptim/external/acados
         run: |
+          # ACADOS is installed in CONDA_PREFIX.  Do not override
+          # ACADOS_SOURCE_DIR with the unbuilt source checkout: doing so makes
+          # acados_template look for source/lib/libacados.so instead.
           mkdir -p acados-madnlp-hybrid-results
           python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
             --solvers acados \
