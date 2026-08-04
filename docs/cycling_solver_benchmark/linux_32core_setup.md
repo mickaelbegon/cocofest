@@ -26,7 +26,7 @@ chaque environnement avec l'ABI de son CasADi.
 | Python | `3.11` |
 | CasADi officiel | `3.7.2` |
 | CasADi MadNLP | `973b086f4dcda9f49cd9c1948432ae4b7ee54886` |
-| Bioptim | `4179bf076b724fe6c4702739b3462e29ae4adef4` |
+| Bioptim | `045961b3efeeffe69272712ec65b53ef14eead64` |
 | Branche Bioptim | `codex/cocofest-acados-v055-exploration` |
 | ACADOS | `59d93e17d2985fdd73fc58b8a83ed8f83a024171` |
 | libMad | `5529f23a6bff33c566ad954da38d352f1f172356` |
@@ -121,7 +121,7 @@ git clone --recurse-submodules \
   https://github.com/mickaelbegon/BiorbdOptim.git \
   "$COCOFEST_ROOT/.benchmark-deps/bioptim"
 git -C "$COCOFEST_ROOT/.benchmark-deps/bioptim" checkout \
-  4179bf076b724fe6c4702739b3462e29ae4adef4
+  045961b3efeeffe69272712ec65b53ef14eead64
 git -C "$COCOFEST_ROOT/.benchmark-deps/bioptim" submodule update \
   --init --recursive
 
@@ -131,7 +131,7 @@ git -C "$COCOFEST_ROOT/.benchmark-deps/libMad" checkout \
   5529f23a6bff33c566ad954da38d352f1f172356
 
 test "$(git -C "$COCOFEST_ROOT/.benchmark-deps/bioptim" rev-parse HEAD)" = \
-  4179bf076b724fe6c4702739b3462e29ae4adef4
+  045961b3efeeffe69272712ec65b53ef14eead64
 test "$(git -C "$COCOFEST_ROOT/.benchmark-deps/bioptim/external/acados" rev-parse HEAD)" = \
   59d93e17d2985fdd73fc58b8a83ed8f83a024171
 test "$(git -C "$COCOFEST_ROOT/.benchmark-deps/libMad" rev-parse HEAD)" = \

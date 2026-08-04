@@ -9506,6 +9506,37 @@ def test_acados_irk_transfer_rollout_uses_scaled_variables_and_stage_data():
     assert summary["max_scaled_bound_violation_by_key"] == {"q": 0.0, "qdot": 0.0}
 
 
+def test_initial_acados_irk_rollout_initializes_native_solver_without_solving():
+    events = []
+    native_solver = object()
+
+    class FakeInterface:
+        ocp_solver = None
+
+        def initialize_solver(self):
+            events.append("initialize")
+            self.ocp_solver = native_solver
+            return native_solver
+
+    interface = FakeInterface()
+    nmpc = SimpleNamespace(ocp_solver=None)
+
+    def set_ocp_solver(solver):
+        events.append(("set_ocp_solver", solver))
+        nmpc.ocp_solver = interface
+
+    nmpc.set_ocp_solver = set_ocp_solver
+    solver_options = object()
+
+    returned_interface = periodic_example.initialize_acados_native_solver_for_rollout(
+        nmpc, solver_options
+    )
+
+    assert returned_interface is interface
+    assert interface.ocp_solver is native_solver
+    assert events == [("set_ocp_solver", solver_options), "initialize"]
+
+
 def test_projected_acados_transfer_selector_keeps_mechanically_better_rollout(
     monkeypatch,
 ):

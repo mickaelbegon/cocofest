@@ -71,11 +71,11 @@ provenance humaine.
 
 | Composant | Version Bioptim réellement utilisée |
 |---|---|
-| Construction et certification des seeds | `4179bf076b724fe6c4702739b3462e29ae4adef4` |
-| IPOPT full/reduced | `4179bf076b724fe6c4702739b3462e29ae4adef4` |
-| MadNLP/MUMPS full/reduced | `4179bf076b724fe6c4702739b3462e29ae4adef4` |
-| FATROP/collocation full/reduced | `4179bf076b724fe6c4702739b3462e29ae4adef4` |
-| ACADOS full/reduced et variantes | `4179bf076b724fe6c4702739b3462e29ae4adef4` |
+| Construction et certification des seeds | `045961b3efeeffe69272712ec65b53ef14eead64` |
+| IPOPT full/reduced | `045961b3efeeffe69272712ec65b53ef14eead64` |
+| MadNLP/MUMPS full/reduced | `045961b3efeeffe69272712ec65b53ef14eead64` |
+| FATROP/collocation full/reduced | `045961b3efeeffe69272712ec65b53ef14eead64` |
+| ACADOS full/reduced et variantes | `045961b3efeeffe69272712ec65b53ef14eead64` |
 
 Ce commit appartient à la branche dédiée
 `codex/cocofest-acados-v055-exploration`. Il part exactement de
@@ -4450,3 +4450,25 @@ mêmes PW et comparer :
 Ce découpage dira si le drift vient de la transcription IRK, de l'accumulation
 dans les coordonnées redondantes ou d'une différence réelle entre full et
 reduced.
+
+## 25. Initialisation IRK native avant le premier SQP (3 août 2026)
+
+Le run hybride
+[30866802472](https://github.com/mickaelbegon/cocofest/actions/runs/30866802472)
+a confirmé la qualité du bridge IPOPT/Radau-5 : après `124.13 s`, IPOPT
+retourne une primale avec $\|g_{\mathrm{viol}}\|_\infty = 1.36\,10^{-9}$,
+certifiée sous le seuil public de $10^{-3}$. L'échec suivant n'était donc pas
+numérique. `OptimalControlProgram.set_ocp_solver()` construisait seulement
+l'interface Bioptim; le capsule natif `AcadosOcpSolver` restait nul jusqu'au
+premier appel à `AcadosInterface.solve()`. Le rollout IRK initial le demandait
+avant cet appel et s'arrêtait avec zéro RHO tenté.
+
+Bioptim `045961b3efeeffe69272712ec65b53ef14eead64` sépare maintenant les deux
+opérations. `AcadosInterface.initialize_solver()` génère le code, crée le
+solveur natif et charge les données numériques sans exécuter le SQP.
+`solve()` appelle la même méthode puis réutilise l'instance existante. Cocofest
+peut ainsi propager le seed avec la carte IRK générée, remplacer la primale,
+puis laisser le premier SQP linéariser autour de cette trajectoire. Un test
+Bioptim vérifie qu'aucun appel natif à `solve()` n'a lieu pendant
+l'initialisation et que la même instance est réutilisée ensuite; un test
+Cocofest vérifie l'ordre interface → capsule → rollout.

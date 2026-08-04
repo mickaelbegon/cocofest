@@ -113,7 +113,7 @@ env:
   BIOPTIM_REPOSITORY: mickaelbegon/BiorbdOptim
   # Dedicated multi-solver integration branch:
   # codex/cocofest-acados-v055-exploration
-  BIOPTIM_PRODUCTION_COMMIT: 4179bf076b724fe6c4702739b3462e29ae4adef4
+  BIOPTIM_PRODUCTION_COMMIT: 045961b3efeeffe69272712ec65b53ef14eead64
   BIOPTIM_ALPAQA_COMMIT: d84e7e43534360fc048e0be26a3bd69a2abc2d77
   ACADOS_COMMIT: 59d93e17d2985fdd73fc58b8a83ed8f83a024171
   ACADOS_INSTALL_SCRIPT_BLOB: 5ac8064ab613251e62560b5de8cbbb9550f5c5d0
@@ -1791,7 +1791,7 @@ jobs:
             timeout_minutes: 300
             benchmark_rhos: ${{ inputs.cycles == 'radau5_100' && inputs.radau5_endurance_rhos || inputs.cycles == 'radau35_comparison' && inputs.radau35_comparison_rhos || (inputs.cycles == 'fatigue_endurance' || inputs.cycles == 'fatigue_endurance_radau5') && inputs.fatigue_endurance_max_rhos || inputs.cycles }}
             cycles_per_window: ${{ inputs.cycles_per_window }}
-            bioptim_commit: 4179bf076b724fe6c4702739b3462e29ae4adef4
+            bioptim_commit: 045961b3efeeffe69272712ec65b53ef14eead64
             integration_branch: codex/cocofest-acados-v055-exploration
             casadi_cxx_abi: 0
           - solver: madnlp
@@ -1801,7 +1801,7 @@ jobs:
             timeout_minutes: 420
             benchmark_rhos: ${{ inputs.cycles == 'radau5_100' && inputs.radau5_endurance_rhos || inputs.cycles == 'radau35_comparison' && inputs.radau35_comparison_rhos || (inputs.cycles == 'fatigue_endurance' || inputs.cycles == 'fatigue_endurance_radau5') && inputs.fatigue_endurance_max_rhos || inputs.cycles }}
             cycles_per_window: ${{ inputs.cycles_per_window }}
-            bioptim_commit: 4179bf076b724fe6c4702739b3462e29ae4adef4
+            bioptim_commit: 045961b3efeeffe69272712ec65b53ef14eead64
             integration_branch: codex/cocofest-acados-v055-exploration
             casadi_cxx_abi: 1
           - solver: fatrop
@@ -1811,7 +1811,7 @@ jobs:
             timeout_minutes: 420
             benchmark_rhos: ${{ inputs.cycles == 'radau5_100' && inputs.radau5_endurance_rhos || inputs.cycles == 'radau35_comparison' && inputs.radau35_comparison_rhos || (inputs.cycles == 'fatigue_endurance' || inputs.cycles == 'fatigue_endurance_radau5') && inputs.fatigue_endurance_max_rhos || inputs.cycles }}
             cycles_per_window: ${{ inputs.cycles_per_window }}
-            bioptim_commit: 4179bf076b724fe6c4702739b3462e29ae4adef4
+            bioptim_commit: 045961b3efeeffe69272712ec65b53ef14eead64
             integration_branch: codex/cocofest-acados-v055-exploration
             casadi_cxx_abi: 0
     env:
@@ -2496,7 +2496,7 @@ jobs:
       COCOFEST_BENCHMARK_COMMIT: ${{ github.sha }}
       # Job-level env entries cannot reference another env entry. Keep this
       # literal synchronized with BIOPTIM_PRODUCTION_COMMIT above.
-      BIOPTIM_BENCHMARK_COMMIT: 4179bf076b724fe6c4702739b3462e29ae4adef4
+      BIOPTIM_BENCHMARK_COMMIT: 045961b3efeeffe69272712ec65b53ef14eead64
       BIOPTIM_INTEGRATION_BRANCH: codex/cocofest-acados-v055-exploration
     defaults:
       run:

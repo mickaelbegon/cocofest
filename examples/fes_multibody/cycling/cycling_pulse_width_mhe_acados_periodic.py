@@ -9784,6 +9784,26 @@ def _get_or_create_acados_sim_solver(periodic_nmpc):
     return simulator, needs_build
 
 
+def initialize_acados_native_solver_for_rollout(periodic_nmpc, solver):
+    """Build the native ACADOS capsule without executing an SQP iteration."""
+
+    periodic_nmpc.set_ocp_solver(solver)
+    interface = getattr(periodic_nmpc, "ocp_solver", None)
+    initialize_solver = getattr(interface, "initialize_solver", None)
+    if not callable(initialize_solver):
+        raise RuntimeError(
+            "--acados-initial-irk-rollout requires the pinned Bioptim "
+            "initialize_solver() API."
+        )
+    native_solver = initialize_solver()
+    if native_solver is None or getattr(interface, "ocp_solver", None) is None:
+        raise RuntimeError(
+            "Bioptim did not create the native ACADOS solver required by the "
+            "initial IRK rollout."
+        )
+    return interface
+
+
 def rollout_transferred_cycle_acados_irk(
     periodic_nmpc,
     max_allowed_bound_violation: float | None = None,
@@ -17429,7 +17449,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         # first SQP linearization. We deliberately retain any terminal-bound
         # diagnostic: the subsequent SQP is responsible for closing the cycle,
         # whereas silently clipping this trajectory would reintroduce defects.
-        nmpc.set_ocp_solver(solver)
+        initialize_acados_native_solver_for_rollout(nmpc, solver)
         initial_acados_irk_rollout_summary = rollout_transferred_cycle_acados_irk(
             nmpc,
             max_allowed_bound_violation=None,

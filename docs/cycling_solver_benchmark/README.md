@@ -23,7 +23,7 @@ La CI ne dépend pas d'un nom de branche flottant. Elle clone le fork
 effectue les checkouts par SHA complet :
 
 - intégration multi-solveurs active :
-  `4179bf076b724fe6c4702739b3462e29ae4adef4`;
+  `045961b3efeeffe69272712ec65b53ef14eead64`;
 - intégration Alpaqa archivée :
   `d84e7e43534360fc048e0be26a3bd69a2abc2d77`;
 - écran MadNLP/MUMPS historique, conservé uniquement pour diagnostic :
@@ -89,6 +89,11 @@ premier SQP. Ce choix est imposé par la version épinglée de Bioptim :
 `use_sx=True` et `OdeSolver.IRK` ne sont pas encore compatibles. Il ne faut
 donc pas interpréter ce raffinement comme une résolution IPOPT/IRK : seule la
 projection suivante est une intégration IRK native d'ACADOS.
+Le SHA Bioptim actif expose `AcadosInterface.initialize_solver()` : le capsule
+natif et son code IRK sont ainsi créés sans exécuter de SQP, puis la résolution
+ACADOS réutilise exactement la même instance après le rollout. Cette séparation
+évite de mesurer ou de masquer une première itération ACADOS dans la préparation
+du seed.
 Cette étape élimine les défauts de transcription du seed; elle n'est pas
 comptée dans le temps chaud des RHO. Le gate force ensuite une seule reprise
 sur le premier RHO afin de vérifier de façon déterministe que le chemin
