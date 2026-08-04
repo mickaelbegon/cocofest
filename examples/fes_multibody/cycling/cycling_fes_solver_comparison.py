@@ -5249,6 +5249,8 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument(
         "--acados-ipopt-recovery-collocation-degree", type=int, default=5
     )
+    parser.add_argument("--acados-ipopt-recovery-force-first-rho", action="store_true")
+    parser.add_argument("--acados-initial-irk-rollout", action="store_true")
     parser.add_argument("--acados-reset-solver-before-solve", action="store_true")
     parser.add_argument("--acados-check-reuse-possible", action="store_true")
     parser.add_argument("--acados-code-reuse-tolerance", type=float, default=1e-12)
