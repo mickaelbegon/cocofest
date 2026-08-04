@@ -5768,6 +5768,34 @@ def test_acados_dual_warm_start_summaries_survive_benchmark_serialization():
     ]
 
 
+def test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization():
+    result = _benchmark_result([0], solver_success=True, success=True)
+    result["initial_acados_irk_rollout"] = {
+        "applied": False,
+        "retained_collocation_seed": True,
+        "max_bound_violation": 3.0,
+    }
+    result["acados_ipopt_recovery"] = {
+        "enabled": True,
+        "attempt_count": 1,
+        "injected_count": 1,
+    }
+    result["acados_ipopt_recovery_summaries"] = [
+        {
+            "status": 1,
+            "accepted": True,
+            "provisional": True,
+            "quality": "feasible_nonconverged",
+        }
+    ]
+
+    row = comparison_example.solver_overview_rows({"acados": result})[0]
+
+    assert row["initial_acados_irk_rollout"]["retained_collocation_seed"] is True
+    assert row["acados_ipopt_recovery"]["injected_count"] == 1
+    assert row["acados_ipopt_recovery_summaries"][0]["provisional"] is True
+
+
 def test_failed_rho_checkpoints_preserve_neighboring_pw_active_sets():
     lower = 131.405e-6
     upper = 600e-6
@@ -9258,6 +9286,21 @@ def test_periodic_refinement_requires_measured_primal_feasibility():
     )
     assert provisional["accepted"] is True
     assert provisional["provisional"] is True
+
+
+def test_ipopt_inf_pr_is_restored_from_native_solver_stats():
+    solution = SimpleNamespace(inf_pr=None)
+    nmpc = SimpleNamespace(
+        ocp_solver=SimpleNamespace(
+            shaked_ocp_solver=SimpleNamespace(
+                stats=lambda: {"iterations": {"inf_pr": [1.0, 2e-8]}}
+            )
+        )
+    )
+
+    periodic_example.populate_solution_inf_pr_from_solver_stats(solution, nmpc)
+
+    np.testing.assert_allclose(solution.inf_pr, [1.0, 2e-8])
 
 
 def test_horizon_seed_recenters_kinematic_boundary_bounds():

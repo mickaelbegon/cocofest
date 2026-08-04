@@ -9734,6 +9734,7 @@ def rollout_transferred_cycle_full_dynamics(
 
     return {
         "applied": applied,
+        "reason": None if applied else "bound_violation_above_guard",
         "start_node": start_node,
         "max_bound_violation": max_bound_violation,
         "max_bound_violation_by_key": max_bound_violation_by_key,
@@ -12963,6 +12964,34 @@ def periodic_refinement_acceptance(
     }
 
 
+def populate_solution_inf_pr_from_solver_stats(solution, periodic_nmpc) -> None:
+    """Restore IPOPT's iteration infeasibility when Bioptim did not export it."""
+
+    if getattr(solution, "inf_pr", None) is not None:
+        return
+    casadi_solver = getattr(
+        getattr(periodic_nmpc, "ocp_solver", None),
+        "shaked_ocp_solver",
+        None,
+    )
+    solver_stats = (
+        casadi_solver.stats()
+        if casadi_solver is not None and hasattr(casadi_solver, "stats")
+        else {}
+    )
+    iteration_stats = (
+        solver_stats.get("iterations", {}) if isinstance(solver_stats, dict) else {}
+    )
+    native_inf_pr = (
+        iteration_stats.get("inf_pr") if isinstance(iteration_stats, dict) else None
+    )
+    if native_inf_pr is None:
+        return
+    native_inf_pr = np.asarray(native_inf_pr, dtype=float).reshape(-1)
+    if native_inf_pr.size and np.all(np.isfinite(native_inf_pr)):
+        solution.inf_pr = native_inf_pr
+
+
 def run_periodic_ipopt_refinement(
     refinement_nmpc,
     target_nmpc,
@@ -12987,27 +13016,7 @@ def run_periodic_ipopt_refinement(
             print("periodic_ipopt_refinement_applied: False")
         return None
 
-    if getattr(refinement_sol, "inf_pr", None) is None:
-        casadi_solver = getattr(
-            getattr(refinement_nmpc, "ocp_solver", None),
-            "shaked_ocp_solver",
-            None,
-        )
-        solver_stats = (
-            casadi_solver.stats()
-            if casadi_solver is not None and hasattr(casadi_solver, "stats")
-            else {}
-        )
-        iteration_stats = (
-            solver_stats.get("iterations", {}) if isinstance(solver_stats, dict) else {}
-        )
-        native_inf_pr = (
-            iteration_stats.get("inf_pr") if isinstance(iteration_stats, dict) else None
-        )
-        if native_inf_pr is not None:
-            native_inf_pr = np.asarray(native_inf_pr, dtype=float).reshape(-1)
-            if native_inf_pr.size and np.all(np.isfinite(native_inf_pr)):
-                refinement_sol.inf_pr = native_inf_pr
+    populate_solution_inf_pr_from_solver_stats(refinement_sol, refinement_nmpc)
 
     feasibility = _solution_feasibility_summary(
         refinement_sol, provisional_feasibility_tolerance
@@ -13119,8 +13128,9 @@ def run_periodic_ipopt_recovery(
     The caller copies the current ACADOS initial guesses, bounds and objective
     targets into ``recovery_nmpc`` immediately before this call.  IPOPT is
     therefore an auditable primal-restoration step, not an alternative RHO
-    transfer path: only status-zero, independently feasible output is copied
-    back and ACADOS still has to certify its subsequent retry.
+    transfer path. A status-zero solution or an iteration-limited primal with
+    measured feasibility may be copied back; ACADOS still has to certify its
+    subsequent retry before the physical RHO can advance.
     """
 
     summary: dict[str, object] = {
@@ -13149,8 +13159,10 @@ def run_periodic_ipopt_recovery(
             print(summary["traceback"], end="")
         return None, summary
 
+    populate_solution_inf_pr_from_solver_stats(solution, recovery_nmpc)
     feasibility = _solution_feasibility_summary(solution, tolerance)
-    accepted = _rho_solution_is_certified(solution.status, feasibility)
+    acceptance = periodic_refinement_acceptance(solution.status, feasibility)
+    accepted = acceptance["accepted"]
     solver_time = getattr(solution, "solver_time_to_optimize", None)
     wall_time = getattr(solution, "real_time_to_optimize", None)
     summary.update(
@@ -13160,6 +13172,15 @@ def run_periodic_ipopt_recovery(
             "wall_time_s": None if wall_time is None else float(wall_time),
             "feasibility": feasibility,
             "accepted": accepted,
+            "certified_feasibility": acceptance["certified"],
+            "provisional": acceptance["provisional"],
+            "quality": (
+                "converged"
+                if acceptance["success"]
+                else "feasible_nonconverged"
+                if accepted
+                else "rejected"
+            ),
             "compatibility_with_failed_acados": solution_trace_compatibility_summary(
                 failed_acados_solution, solution
             ),
@@ -13172,6 +13193,8 @@ def run_periodic_ipopt_recovery(
         print(
             "acados_ipopt_recovery: "
             f"status={solution.status} accepted={accepted} "
+            f"inf_pr={feasibility['final_inf_pr']} "
+            f"quality={summary['quality']} "
             f"solver_time_s={summary['solver_time_s']}"
         )
     return solution, summary
@@ -17455,25 +17478,32 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     if args.solver == "acados" and args.acados_initial_irk_rollout:
         # A collocation primal may satisfy its own defects while being a poor
         # seed for ACADOS multiple shooting. Build the generated capsule first
-        # and replace the trajectory by its exact IRK propagation before the
-        # first SQP linearization. We deliberately retain any terminal-bound
-        # diagnostic: the subsequent SQP is responsible for closing the cycle,
-        # whereas silently clipping this trajectory would reintroduce defects.
+        # and evaluate its exact IRK propagation before the first SQP
+        # linearization. Keep the collocation seed when that rollout violates
+        # the explicit bound guard; clipping it would reintroduce defects.
         initialize_acados_native_solver_for_rollout(nmpc, solver)
         initial_acados_irk_rollout_summary = rollout_transferred_cycle_acados_irk(
             nmpc,
-            max_allowed_bound_violation=None,
+            max_allowed_bound_violation=(
+                args.acados_transfer_rollout_max_bound_violation
+            ),
             start_node=0,
         )
         if not initial_acados_irk_rollout_summary["applied"]:
-            raise RuntimeError(
-                "ACADOS initial IRK rollout could not build a finite initial trajectory: "
-                f"{initial_acados_irk_rollout_summary.get('reason')}"
-            )
+            if "max_bound_violation" not in initial_acados_irk_rollout_summary:
+                raise RuntimeError(
+                    "ACADOS initial IRK rollout could not build a finite initial "
+                    "trajectory: "
+                    f"{initial_acados_irk_rollout_summary.get('reason')}"
+                )
+            initial_acados_irk_rollout_summary["retained_collocation_seed"] = True
         if echo:
             print(
                 "acados_initial_irk_rollout: "
-                f"applied=True simulator_built="
+                f"applied={initial_acados_irk_rollout_summary['applied']} "
+                "retained_collocation_seed="
+                f"{initial_acados_irk_rollout_summary.get('retained_collocation_seed', False)} "
+                f"simulator_built="
                 f"{initial_acados_irk_rollout_summary['simulator_built']} "
                 f"simulation_time_s="
                 f"{initial_acados_irk_rollout_summary['simulation_time_s']:.6g} "

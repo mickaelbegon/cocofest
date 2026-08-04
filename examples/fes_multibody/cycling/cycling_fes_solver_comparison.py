@@ -2983,6 +2983,13 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 "acados_maxiter_retry_summaries": (
                     result.get("acados_maxiter_retry_summaries") or []
                 ),
+                "initial_acados_irk_rollout": result.get(
+                    "initial_acados_irk_rollout"
+                ),
+                "acados_ipopt_recovery": result.get("acados_ipopt_recovery"),
+                "acados_ipopt_recovery_summaries": (
+                    result.get("acados_ipopt_recovery_summaries") or []
+                ),
                 "transfer_phase_one_summaries": (
                     phase_one_summaries
                 ),

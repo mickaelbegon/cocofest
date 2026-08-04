@@ -458,7 +458,10 @@ jobs:
           PY
           python -m pytest -q \
             tests/shard1/test_periodic_pulse_width.py::test_acados_ipopt_recovery_compatibility_reports_pulse_width_in_us \
-            tests/shard1/test_periodic_pulse_width.py::test_acados_ipopt_recovery_cli_is_opt_in
+            tests/shard1/test_periodic_pulse_width.py::test_acados_ipopt_recovery_cli_is_opt_in \
+            tests/shard1/test_periodic_pulse_width.py::test_acados_default_tolerance_falls_back_to_common_nlp_tolerance \
+            tests/shard1/test_periodic_pulse_width.py::test_ipopt_inf_pr_is_restored_from_native_solver_stats \
+            tests/shard1/test_periodic_pulse_width.py::test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization
 
       - name: Download the validated reduced seed
         uses: actions/download-artifact@v8
@@ -474,8 +477,9 @@ jobs:
           # ACADOS_SOURCE_DIR with the unbuilt source checkout: doing so makes
           # acados_template look for source/lib/libacados.so instead.
           # The pinned Bioptim version does not support SX + IPOPT/IRK. Build
-          # the robust SX seed with Radau-5; ACADOS' own IRK simulator below
-          # then puts that seed on its integration manifold.
+          # the robust SX seed with Radau-5. ACADOS' own IRK simulator below
+          # replaces it only when the rollout remains inside the explicit
+          # bound-violation guard; otherwise the feasible Radau seed is kept.
           mkdir -p acados-ipopt-hybrid-results
           python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
             --solvers acados \
@@ -520,7 +524,8 @@ jobs:
             .configurations.acados.mechanical_formulation == "reduced" and
             .results[0].success == true and
             .results[0].validated_cycles == 5 and
-            .results[0].initial_acados_irk_rollout.applied == true and
+            (.results[0].initial_acados_irk_rollout.applied == true or
+             .results[0].initial_acados_irk_rollout.retained_collocation_seed == true) and
             .results[0].acados_ipopt_recovery.attempt_count == 1 and
             .results[0].acados_ipopt_recovery.injected_count == 1
           ' acados-ipopt-hybrid-results/result.json
