@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import numpy as np
 import pytest
 import re
@@ -872,6 +873,24 @@ def test_acados_madnlp_recovery_cli_is_opt_in():
     assert args.acados_madnlp_recovery is True
     assert args.acados_madnlp_recovery_max_iterations == 800
     assert args.acados_madnlp_recovery_collocation_degree == 5
+
+
+def test_ensure_acados_environment_prefers_a_complete_conda_runtime(monkeypatch, tmp_path):
+    runtime = tmp_path / "acados-runtime"
+    include_dir = runtime / "include" / "acados_c"
+    lib_dir = runtime / "lib"
+    include_dir.mkdir(parents=True)
+    lib_dir.mkdir()
+    (include_dir / "ocp_nlp_interface.h").touch()
+    (lib_dir / "link_libs.json").write_text("{}", encoding="utf-8")
+    (lib_dir / "libacados.so").touch()
+
+    monkeypatch.setattr(periodic_example, "sys_platform", "linux")
+    monkeypatch.setenv("CONDA_PREFIX", str(runtime))
+    monkeypatch.setenv("ACADOS_SOURCE_DIR", str(tmp_path / "unbuilt-source"))
+
+    assert periodic_example.ensure_acados_environment() == runtime.resolve()
+    assert os.environ["ACADOS_SOURCE_DIR"] == str(runtime.resolve())
 
 
 def test_comparison_relays_acados_standard_warmup_skip(monkeypatch):

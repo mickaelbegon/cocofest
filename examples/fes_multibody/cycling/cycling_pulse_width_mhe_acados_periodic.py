@@ -2832,14 +2832,53 @@ def _historical_initial_guess_path(cycles_per_window: int, ode_solver) -> Path |
     return None
 
 
+def _is_usable_acados_runtime(acados_dir: Path) -> bool:
+    """Return whether *acados_dir* is a complete ACADOS 0.5.5 runtime."""
+
+    lib_dir = acados_dir / "lib"
+    return (
+        (acados_dir / "include" / "acados_c" / "ocp_nlp_interface.h").is_file()
+        and (lib_dir / "link_libs.json").is_file()
+        and any(lib_dir.glob("libacados.*"))
+    )
+
+
 def ensure_acados_environment(acados_source_dir: str | None = None) -> Path:
-    acados_dir = Path(
-        acados_source_dir
-        or os.environ.get(
-            "ACADOS_SOURCE_DIR",
-            str(Path.home() / "Documents/bioptim/external/acados"),
+    """Select a complete ACADOS runtime and expose its library directory.
+
+    ACADOS 0.5.5 needs both ``libacados`` and ``link_libs.json`` at code
+    generation time.  CI installs both in ``CONDA_PREFIX``; falling back to a
+    developer's historical source checkout there therefore breaks a portable
+    benchmark job.
+    """
+
+    if acados_source_dir is not None:
+        candidates = [("--acados-dir", acados_source_dir)]
+    else:
+        candidates = [
+            ("ACADOS_SOURCE_DIR", os.environ.get("ACADOS_SOURCE_DIR")),
+            ("CONDA_PREFIX", os.environ.get("CONDA_PREFIX")),
+            ("historical source checkout", str(Path.home() / "Documents/bioptim/external/acados")),
+        ]
+
+    attempted_paths: list[str] = []
+    acados_dir: Path | None = None
+    for source, candidate in candidates:
+        if not candidate:
+            continue
+        candidate_path = Path(candidate).expanduser().resolve()
+        attempted_paths.append(f"{source}={candidate_path}")
+        if _is_usable_acados_runtime(candidate_path):
+            acados_dir = candidate_path
+            break
+
+    if acados_dir is None:
+        raise RuntimeError(
+            "No complete ACADOS runtime was found. Expected include/acados_c/"
+            "ocp_nlp_interface.h, lib/libacados.*, and lib/link_libs.json; "
+            f"checked: {', '.join(attempted_paths) or 'no candidates'}."
         )
-    ).resolve()
+
     os.environ["ACADOS_SOURCE_DIR"] = str(acados_dir)
 
     acados_lib_dir = acados_dir / "lib"
