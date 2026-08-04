@@ -6039,6 +6039,24 @@ def _initial_guess_shooting_node_indices(nmpc) -> tuple[np.ndarray, int]:
     return indices, interval_columns
 
 
+def _collocation_interval_fractions(state_node_stride: int) -> np.ndarray:
+    """Return the internal state-column times for a direct-collocation interval."""
+
+    if state_node_stride < 1:
+        raise ValueError("The state-node stride must be strictly positive.")
+    if state_node_stride == 1:
+        return np.array([], dtype=float)
+    from casadi import collocation_points
+
+    degree = state_node_stride - 1
+    fractions = np.asarray(collocation_points(degree, "radau"), dtype=float)
+    if fractions.size != degree or not np.isclose(fractions[-1], 1.0):
+        raise ValueError(
+            "The inferred Radau collocation layout does not end at the interval endpoint."
+        )
+    return fractions
+
+
 def _lift_shooting_endpoint_update_to_state_columns(
     original: np.ndarray,
     projected_endpoints: np.ndarray,
@@ -6054,12 +6072,13 @@ def _lift_shooting_endpoint_update_to_state_columns(
         zip(shooting_indices[:-1], shooting_indices[1:], strict=True)
     ):
         width = int(stop - start)
+        interval_fractions = _collocation_interval_fractions(width)
         updated[:, start] = projected_endpoints[:, interval]
         for offset in range(1, width):
-            # Radau's last internal stage represents the interval endpoint;
-            # interpolating the correction also remains benign for other
-            # collocation layouts while preserving each original stage shape.
-            fraction = offset / max(width - 1, 1)
+            # Radau's last internal stage represents the interval endpoint.
+            # Interpolate the endpoint correction at the actual collocation
+            # abscissa instead of pretending that stages are equally spaced.
+            fraction = float(interval_fractions[offset - 1])
             correction = (
                 (1.0 - fraction) * corrections[:, interval]
                 + fraction * corrections[:, interval + 1]
@@ -9117,11 +9136,7 @@ def project_full_dynamics_initial_guess(
     first_control_key = next(iter(nlp.u_init.keys()))
     n_state_nodes = nlp.x_init[first_state_key].init.shape[1]
     n_control_nodes = nlp.u_init[first_control_key].init.shape[1]
-    if n_state_nodes != n_control_nodes + 1:
-        raise ValueError(
-            "The complete-dynamics phase-I projection currently requires one state node "
-            "per shooting endpoint; use RK4, RK8 or IRK instead of direct collocation."
-        )
+    shooting_indices, state_node_stride = _initial_guess_shooting_node_indices(nmpc)
     if start_node < 0 or start_node >= n_control_nodes:
         raise ValueError("Phase-I start_node must index a control node.")
     state_snapshot = {
@@ -9129,7 +9144,10 @@ def project_full_dynamics_initial_guess(
         for key in nlp.x_init.keys()
     }
     bound_violation_before = _maximum_state_initial_guess_bound_violation(nmpc)
-    states = _stack_initial_guess_values(nlp.x_init, nlp.states, n_state_nodes)
+    state_columns = _stack_initial_guess_values(
+        nlp.x_init, nlp.states, n_state_nodes
+    )
+    states = state_columns[:, shooting_indices].copy()
     reference = states.copy()
     controls = _stack_initial_guess_values(nlp.u_init, nlp.controls, n_control_nodes)
     lower = np.empty_like(states)
@@ -9139,8 +9157,8 @@ def project_full_dynamics_initial_guess(
         key_lower, key_upper = _trajectory_bounds_for_guess(
             nlp.x_bounds[key], n_state_nodes
         )
-        lower[indexes, :] = key_lower
-        upper[indexes, :] = key_upper
+        lower[indexes, :] = key_lower[:, shooting_indices]
+        upper[indexes, :] = key_upper[:, shooting_indices]
 
     phase_one_keys = _phase_one_state_keys(nlp)
     block_indexes = {
@@ -9163,9 +9181,12 @@ def project_full_dynamics_initial_guess(
     }
 
     def restore_fixed_states() -> None:
+        fixed_prefix_column = int(shooting_indices[start_node])
         for key in nlp.x_init.keys():
             values = nlp.x_init[key].init
-            values[:, : start_node + 1] = state_snapshot[key][:, : start_node + 1]
+            values[:, : fixed_prefix_column + 1] = state_snapshot[key][
+                :, : fixed_prefix_column + 1
+            ]
             block = next(
                 (
                     block_name
@@ -9210,7 +9231,12 @@ def project_full_dynamics_initial_guess(
 
     for key in nlp.states.keys():
         indexes = np.asarray(nlp.states[key].index).reshape((-1,)).tolist()
-        nlp.x_init[key].init[:, :] = states[indexes, :]
+        original_columns = state_snapshot[key]
+        nlp.x_init[key].init[:, :] = _lift_shooting_endpoint_update_to_state_columns(
+            original_columns,
+            states[indexes, :],
+            shooting_indices,
+        )
     nmpc._correct_init_guess_to_fit_bounds(corrected_input="states")
     if not historical_full_projection:
         restore_fixed_states()
@@ -9388,6 +9414,7 @@ def project_full_dynamics_initial_guess(
         "proximity_weight": proximity_weight,
         "defect_weight": defect_weight,
         "n_substeps": n_substeps,
+        "state_node_stride": state_node_stride,
         "max_backtracking_steps": max_backtracking_steps,
         "max_state_change_limit": max_state_change,
         "max_state_change_limits_by_block": max_state_change_by_block,
@@ -9714,18 +9741,21 @@ def rollout_transferred_cycle_full_dynamics(
     first_control_key = next(iter(nlp.u_init.keys()))
     n_state_nodes = nlp.x_init[first_state_key].init.shape[1]
     n_control_nodes = nlp.u_init[first_control_key].init.shape[1]
-    if n_state_nodes != n_control_nodes + 1:
-        raise ValueError(
-            "The transfer rollout requires one more state node than controls."
-        )
+    shooting_indices, state_node_stride = _initial_guess_shooting_node_indices(
+        periodic_nmpc
+    )
 
-    # The first control cycle is retained from the solved horizon. Only the
-    # intervals after that shared endpoint belong to the appended cycle.
-    start_node = periodic_nmpc.control_nodes_per_cycle
+    # Reintegrate the last transferred cycle. With a one-cycle RHO this starts
+    # at node zero; with a multi-cycle horizon the retained prefix is preserved.
+    start_node = n_control_nodes - periodic_nmpc.control_nodes_per_cycle
     if start_node < 0 or start_node >= n_control_nodes:
         raise ValueError("The transfer rollout start node is outside the horizon.")
 
-    states = _stack_initial_guess_values(nlp.x_init, nlp.states, n_state_nodes)
+    original_state_columns = _stack_initial_guess_values(
+        nlp.x_init, nlp.states, n_state_nodes
+    )
+    projected_state_columns = original_state_columns.copy()
+    states = original_state_columns[:, shooting_indices].copy()
     original_states = states.copy()
     controls = _stack_initial_guess_values(nlp.u_init, nlp.controls, n_control_nodes)
     dt = periodic_nmpc.cycle_duration / periodic_nmpc.cycle_len
@@ -9733,16 +9763,39 @@ def rollout_transferred_cycle_full_dynamics(
         _numerical_timeseries_at_node(nlp, node) for node in range(n_control_nodes)
     ]
 
+    interval_fractions = _collocation_interval_fractions(state_node_stride)
     for node in range(start_node, n_control_nodes):
-        states[:, node + 1] = _rk4_full_dynamics_step(
-            nlp,
-            states[:, node],
-            controls[:, node],
-            node * dt,
-            dt,
-            n_substeps=n_substeps,
-            numerical_timeseries=stage_numerical_timeseries[node],
-        )
+        interval_start = states[:, node]
+        if state_node_stride == 1:
+            interval_states = [
+                _rk4_full_dynamics_step(
+                    nlp,
+                    interval_start,
+                    controls[:, node],
+                    node * dt,
+                    dt,
+                    n_substeps=n_substeps,
+                    numerical_timeseries=stage_numerical_timeseries[node],
+                )
+            ]
+        else:
+            interval_states = [
+                _rk4_full_dynamics_step(
+                    nlp,
+                    interval_start,
+                    controls[:, node],
+                    node * dt,
+                    dt * float(fraction),
+                    n_substeps=max(1, int(np.ceil(n_substeps * float(fraction)))),
+                    numerical_timeseries=stage_numerical_timeseries[node],
+                )
+                for fraction in interval_fractions
+            ]
+            interval_column = int(shooting_indices[node])
+            for offset, stage_state in enumerate(interval_states, start=1):
+                projected_state_columns[:, interval_column + offset] = stage_state
+        states[:, node + 1] = interval_states[-1]
+        projected_state_columns[:, shooting_indices[node + 1]] = states[:, node + 1]
         if not np.all(np.isfinite(states[:, node + 1])):
             return {
                 "applied": False,
@@ -9759,10 +9812,13 @@ def rollout_transferred_cycle_full_dynamics(
     for key in nlp.states.keys():
         indexes = np.asarray(nlp.states[key].index).reshape((-1,)).tolist()
         values = states[indexes, :]
-        state_values[key] = values
+        column_values = projected_state_columns[indexes, :]
+        state_values[key] = column_values
         original_values = original_states[indexes, :]
         lower, upper = _trajectory_bounds_for_guess(nlp.x_bounds[key], n_state_nodes)
-        violations = np.maximum(lower - values, 0.0) + np.maximum(values - upper, 0.0)
+        violations = np.maximum(lower - column_values, 0.0) + np.maximum(
+            column_values - upper, 0.0
+        )
         key_bound_violation = float(np.max(violations))
         max_bound_violation_by_key[key] = key_bound_violation
         if key_bound_violation >= max_bound_violation:
@@ -9773,7 +9829,7 @@ def rollout_transferred_cycle_full_dynamics(
                 "key": key,
                 "component": int(component),
                 "node": int(node),
-                "value": float(values[component, node]),
+                "value": float(column_values[component, node]),
                 "lower": float(lower[component, node]),
                 "upper": float(upper[component, node]),
                 "violation": key_bound_violation,
@@ -9801,6 +9857,7 @@ def rollout_transferred_cycle_full_dynamics(
         "applied": applied,
         "reason": None if applied else "bound_violation_above_guard",
         "start_node": start_node,
+        "state_node_stride": state_node_stride,
         "max_bound_violation": max_bound_violation,
         "max_bound_violation_by_key": max_bound_violation_by_key,
         "worst_bound_violation": worst_bound_violation,
@@ -14115,6 +14172,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     initial_guess_diagnostics_requested = bool(
         getattr(args, "initial_guess_diagnostics", False)
         or (args.solver == "acados" and args.acados_diagnostics)
+        or getattr(args, "acados_transfer_full_dynamics_rollout", False)
+        or getattr(args, "acados_transfer_phase_one", False)
     )
     if args.exact_initial_nlp_audit and args.solver not in NLP_SOLVER_NAMES:
         raise ValueError(
@@ -16666,6 +16725,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 }
             )
         transfer_rollout_applied = None
+        transfer_phase_one_applied = False
         completed_window_diagnostics = None
         if args.solver == "acados" and _sol is not None:
             # Auxiliary refinement and homotopy solves reuse the mutable Acados
@@ -16972,6 +17032,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             and _sol is not None
             and args.acados_transfer_full_dynamics_rollout
         ):
+            rollout_start = perf_counter()
             rollout_summary = rollout_transferred_cycle_full_dynamics(
                 _nmpc,
                 n_substeps=args.acados_transfer_rollout_substeps,
@@ -16979,6 +17040,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     args.acados_transfer_rollout_max_bound_violation
                 ),
             )
+            rollout_summary["window"] = cycle_idx
+            rollout_summary["wall_time_s"] = perf_counter() - rollout_start
+            transfer_rollout_applied = bool(rollout_summary["applied"])
             transfer_rollout_summaries.append(rollout_summary)
             if echo:
                 print(
@@ -16986,7 +17050,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     f"applied={rollout_summary['applied']} "
                     f"start_node={rollout_summary['start_node']} "
                     "max_bound_violation="
-                    f"{rollout_summary.get('max_bound_violation')}"
+                    f"{rollout_summary.get('max_bound_violation')} "
+                    f"wall_time_s={rollout_summary['wall_time_s']:.6g}"
                 )
                 violation_by_key = rollout_summary.get("max_bound_violation_by_key", {})
                 if violation_by_key:
@@ -17213,6 +17278,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 phase_one_summary["screen"] = phase_one_screen
             phase_one_summary["window"] = cycle_idx
             phase_one_summary["wall_time_s"] = perf_counter() - phase_one_start
+            transfer_phase_one_applied = bool(phase_one_summary["accepted"])
             transfer_phase_one_summaries.append(phase_one_summary)
             if echo:
                 print(
@@ -17234,6 +17300,27 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     f"{phase_one_summary['scaled_by_block_before']} "
                     f"scaled_by_block_after="
                     f"{phase_one_summary['scaled_by_block_after']}"
+                )
+        if (
+            continue_solving
+            and _sol is not None
+            and args.solver in NLP_SOLVER_NAMES
+            and (bool(transfer_rollout_applied) or transfer_phase_one_applied)
+        ):
+            dual_reset_summary = apply_nlp_dual_warm_start(
+                _nmpc, None, solver_name=args.solver, mode="off"
+            )
+            dual_reset_summary.update(
+                {
+                    "window": cycle_idx,
+                    "reason": "primal_changed_by_transfer_preparation",
+                }
+            )
+            nlp_dual_warm_start_summaries.append(dual_reset_summary)
+            if echo:
+                print(
+                    f"{args.solver}_dual_warm_start_reset_after_transfer: "
+                    f"window={cycle_idx}"
                 )
         if (
             continue_solving

@@ -83,6 +83,44 @@ ensuite certifier lui-même cette primale avant tout avancement. Les temps de
 restauration sont séparés des temps chauds MadNLP; le critère de fatigue reste
 inchangé.
 
+### Préparation adaptative des RHO IPOPT/MadNLP
+
+Les rollouts et la Phase I initialement développés pour ACADOS sont maintenant
+utilisables avec la collocation Radau d'IPOPT et de MadNLP. La projection ne
+confond plus shooting nodes et étages internes : le rollout réintègre les
+shooting endpoints et évalue les états aux abscisses de Radau; la Phase I
+déplace les endpoints puis relève cette correction sur les étages en préservant
+leur structure locale. Le dernier étage et l'état terminal restent deux
+variables distinctes. Pour un OCP d'un seul cycle, le rollout
+reconstruit tout le cycle transféré; pour plusieurs cycles, il conserve le
+préfixe et ne reconstruit que le dernier cycle.
+
+Le workflow expose `nlp_transfer_preparation` :
+
+| Valeur | Préparation entre deux RHO |
+|---|---|
+| `none` | shift et projection de bornes historiques |
+| `rollout` | rollout RK4 complet sur la grille Radau cible |
+| `phase-one` | Phase I proximale seulement si le défaut scaled dépasse le seuil |
+| `rollout-phase-one` | rollout, puis Phase I conditionnelle |
+
+Le seuil est donné par `nlp_phase_one_screen_threshold` (`10^-3` par défaut).
+Les artefacts enregistrent les défauts `q`, `qdot` et Ding avant chaque solve,
+le temps du rollout, le temps de Phase I et le temps effectif solveur plus
+préparation. Lorsqu'une préparation modifie la primale, les anciennes duales
+IPOPT/MadNLP sont supprimées : elles correspondent à l'ancienne trajectoire et
+peuvent annuler le bénéfice du nouveau seed. Cette ablation doit déterminer un
+gain de temps mur-à-mur, pas seulement une diminution du nombre d'itérations.
+
+La campagne de contrôle
+[30873302850](https://github.com/mickaelbegon/cocofest/actions/runs/30873302850)
+a finalement certifié `145/145` RHO sans déclencher le fallback IPOPT : MadNLP
+a une médiane chaude de `1.458 s`, contre `2.557 s` pour IPOPT. Le RHO 141
+converge cette fois en `57` itérations et `1.299 s`. L'échec antérieur au même
+indice n'est donc pas reproductible sur le code corrigé et ne peut pas servir
+seul de preuve de fatigue ou de robustesse du fallback. Ces valeurs constituent
+la référence `none` de la prochaine ablation rollout/Phase I.
+
 ### Reprise hybride ACADOS → IPOPT (expérimentale)
 
 Le mode `--acados-ipopt-recovery` ne compare pas le full ACADOS historique à

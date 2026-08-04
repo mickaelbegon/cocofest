@@ -27,6 +27,8 @@ solver_options=()
 initialization_options=(--no-optional-nlp-periodic-ipopt-hot-start)
 trajectory_options=()
 solver_tolerance=1e-6
+nlp_transfer_preparation="${NLP_TRANSFER_PREPARATION:-none}"
+nlp_phase_one_screen_threshold="${NLP_PHASE_ONE_SCREEN_THRESHOLD:-0.001}"
 
 if ! [[ "$collocation_degree" =~ ^[2-9]$ ]]; then
   echo "COLLOCATION_DEGREE must be an integer between 2 and 9, got '$collocation_degree'." >&2
@@ -43,6 +45,10 @@ esac
 case "$target_refinement" in
   auto|true|false) ;;
   *) echo "TARGET_REFINEMENT must be auto, true, or false; got '$target_refinement'." >&2; exit 2 ;;
+esac
+case "$nlp_transfer_preparation" in
+  none|rollout|phase-one|rollout-phase-one) ;;
+  *) echo "NLP_TRANSFER_PREPARATION must be none, rollout, phase-one, or rollout-phase-one; got '$nlp_transfer_preparation'." >&2; exit 2 ;;
 esac
 
 if [[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]; then
@@ -162,6 +168,25 @@ else
   # 0.02 % of the 0.1 m crank radius and is tighter than the angular endpoint
   # tolerance used by the benchmark.
   solver_options+=(--full-contact-position-tolerance 2e-5)
+fi
+if [[ "$solver" == "ipopt" || "$solver" == "madnlp" ]]; then
+  case "$nlp_transfer_preparation" in
+    rollout|rollout-phase-one)
+      solver_options+=(--shared-transfer-full-dynamics-rollout)
+      ;;
+  esac
+  case "$nlp_transfer_preparation" in
+    phase-one|rollout-phase-one)
+      solver_options+=(
+        --shared-transfer-phase-one
+        --acados-transfer-phase-one-mode all
+        --acados-transfer-phase-one-screen-threshold "$nlp_phase_one_screen_threshold"
+      )
+      ;;
+  esac
+  if [[ "$nlp_transfer_preparation" != "none" ]]; then
+    solver_options+=(--initial-guess-diagnostics)
+  fi
 fi
 if [[ "$mechanics" != "reduced" && "$ode_solver" != "collocation" ]]; then
   # A one-cycle horizon has no future tail to shift. The exact terminal state

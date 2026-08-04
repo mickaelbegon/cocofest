@@ -94,6 +94,21 @@ on:
         required: true
         default: "2000"
         type: string
+      nlp_transfer_preparation:
+        description: Adaptive inter-RHO preparation for IPOPT/MadNLP (none, rollout, phase-one, or rollout-phase-one)
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - rollout
+          - phase-one
+          - rollout-phase-one
+      nlp_phase_one_screen_threshold:
+        description: Maximum scaled mutable defect below which NLP Phase I is skipped
+        required: true
+        default: "0.001"
+        type: string
 
 permissions:
   actions: read
@@ -1842,6 +1857,8 @@ jobs:
       COCOFEST_BENCHMARK_COMMIT: ${{ github.sha }}
       BIOPTIM_BENCHMARK_COMMIT: ${{ matrix.bioptim_commit }}
       BIOPTIM_INTEGRATION_BRANCH: ${{ matrix.integration_branch }}
+      NLP_TRANSFER_PREPARATION: ${{ inputs.nlp_transfer_preparation }}
+      NLP_PHASE_ONE_SCREEN_THRESHOLD: ${{ inputs.nlp_phase_one_screen_threshold }}
     defaults:
       run:
         shell: bash -el {0}

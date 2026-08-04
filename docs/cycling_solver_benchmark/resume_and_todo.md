@@ -166,6 +166,13 @@ Une restauration IPOPT du même RHO est maintenant disponible via
 `--nlp-ipopt-recovery`; elle doit encore être certifiée sur Linux avant de
 revendiquer un préfixe plus long.
 
+Le contrôle `30873302850` sur le code corrigé certifie finalement `145/145`
+avec MadNLP sans appeler cette restauration. Le RHO 141 converge en `57`
+itérations (`1.299 s`) et la médiane chaude vaut `1.458 s`. L'arrêt précédent
+n'est donc pas reproductible. La priorité devient une ablation appariée de la
+préparation inter-RHO (`none`, rollout Radau, Phase I adaptative), avec le temps
+de préparation inclus dans le temps effectif.
+
 ### 3.3 FATROP
 
 - Reduced/SX/collocation : `100/100` et solution physiologique cohérente avec

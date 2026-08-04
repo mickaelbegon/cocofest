@@ -6314,6 +6314,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "compile_nlp_evaluators:" in workflow
     assert "refined_collocation_validation:" in workflow
     assert "refined_collocation_rhos:" in workflow
+    assert "nlp_transfer_preparation:" in workflow
+    assert "nlp_phase_one_screen_threshold:" in workflow
     assert "collocation_diagnostic_rhos:" in workflow
     assert "Run IPOPT reduced Radau degree 5" in workflow
     assert "Run MadNLP MUMPS reduced Radau degree 5" in workflow
@@ -6630,6 +6632,10 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert 'ipopt_profile="${12:-periodic_collocation}"' in benchmark_runner
     assert 'dual_warm_start="${13:-auto}"' in benchmark_runner
     assert 'target_refinement="${14:-auto}"' in benchmark_runner
+    assert 'nlp_transfer_preparation="${NLP_TRANSFER_PREPARATION:-none}"' in benchmark_runner
+    assert "--shared-transfer-full-dynamics-rollout" in benchmark_runner
+    assert "--shared-transfer-phase-one" in benchmark_runner
+    assert '--acados-transfer-phase-one-screen-threshold "$nlp_phase_one_screen_threshold"' in benchmark_runner
     assert 'trajectory_options=()' in benchmark_runner
     assert '[[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]' in benchmark_runner
     assert '--receding-horizon-solution-output' in benchmark_runner
@@ -8138,18 +8144,48 @@ def test_transfer_phase_one_screen_preserves_the_primal_when_defect_is_small(
     assert screen["mutable_scaled_defect"] == pytest.approx(2e-4)
 
 
-def test_proximal_phase_one_rejects_collocation_layout():
+def test_proximal_phase_one_projects_collocation_shooting_nodes():
+    class Variables(dict):
+        shape = 1
+
+    original = np.array([[0.0, 0.4, 0.8, 1.2, 2.0]])
     nmpc = SimpleNamespace(
+        cycle_duration=1.0,
+        cycle_len=1,
         nlp=[
             SimpleNamespace(
-                x_init={"q": SimpleNamespace(init=np.zeros((3, 5)))},
+                x_init={"q": SimpleNamespace(init=original.copy())},
                 u_init={"u": SimpleNamespace(init=np.zeros((1, 1)))},
+                x_bounds={
+                    "q": SimpleNamespace(
+                        min=np.full((1, 3), -100.0),
+                        max=np.full((1, 3), 100.0),
+                    )
+                },
+                states=Variables(q=SimpleNamespace(index=[0])),
+                controls=Variables(u=SimpleNamespace(index=[0])),
+                numerical_data_timeseries=None,
+                dynamics_func=lambda time, state, control, numerical, algebraic, parameters: np.array(
+                    [1.0]
+                ),
+                model=SimpleNamespace(nb_q=1, name_dofs=("crank",)),
             )
-        ]
+        ],
+        _correct_init_guess_to_fit_bounds=lambda corrected_input: None,
+        _sync_acados_state_bounds=lambda: None,
     )
 
-    with np.testing.assert_raises_regex(ValueError, "one state node"):
-        periodic_example.project_full_dynamics_initial_guess(nmpc)
+    summary = periodic_example.project_full_dynamics_initial_guess(
+        nmpc, proximity_weight=1.0, defect_weight=1.0
+    )
+
+    assert summary["accepted"] is True
+    assert summary["state_node_stride"] == 4
+    assert nmpc.nlp[0].x_init["q"].init[0, -1] == pytest.approx(1.5)
+    first_radau_fraction = periodic_example._collocation_interval_fractions(4)[0]
+    assert nmpc.nlp[0].x_init["q"].init[0, 1] == pytest.approx(
+        original[0, 1] - 0.5 * first_radau_fraction
+    )
 
 
 def test_proximal_phase_one_restores_initial_guess_when_defect_increases(
@@ -9572,6 +9608,53 @@ def test_full_dynamics_transfer_rollout_reintegrates_appended_cycle():
     assert rejected["applied"] is False
     assert rejected["max_bound_violation"] == 1.0
     np.testing.assert_allclose(x_init["q"].init[:, 3:], 9.0)
+
+
+def test_full_dynamics_transfer_rollout_supports_one_cycle_collocation():
+    class Variables(dict):
+        def __init__(self, *args, shape, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.shape = shape
+
+    x_init = {
+        "q": SimpleNamespace(init=np.array([[0.0, 2.0, 4.0, 6.0, 9.0, 9.0, 9.0, 9.0, 9.0]])),
+        "qdot": SimpleNamespace(init=np.ones((1, 9))),
+    }
+    loose_bounds = SimpleNamespace(
+        min=np.full((1, 3), -100.0), max=np.full((1, 3), 100.0)
+    )
+    nlp = SimpleNamespace(
+        x_init=x_init,
+        u_init={"acceleration": SimpleNamespace(init=np.zeros((1, 2)))},
+        x_bounds={"q": loose_bounds, "qdot": loose_bounds},
+        states=Variables(
+            {"q": SimpleNamespace(index=[0]), "qdot": SimpleNamespace(index=[1])},
+            shape=2,
+        ),
+        controls=Variables(
+            {"acceleration": SimpleNamespace(index=[0])}, shape=1
+        ),
+        numerical_data_timeseries=None,
+        dynamics_func=lambda time, state, control, numerical, algebraic, parameters: np.array(
+            [state[1], control[0]]
+        ),
+    )
+    nmpc = SimpleNamespace(
+        nlp=[nlp],
+        control_nodes_per_cycle=2,
+        cycle_duration=1.0,
+        cycle_len=2,
+    )
+
+    summary = periodic_example.rollout_transferred_cycle_full_dynamics(
+        nmpc, n_substeps=2
+    )
+
+    assert summary["applied"] is True
+    assert summary["start_node"] == 0
+    assert summary["state_node_stride"] == 4
+    np.testing.assert_allclose(x_init["q"].init[:, [0, 4, 8]], [[0.0, 0.5, 1.0]])
+    assert np.all(np.diff(x_init["q"].init[0]) >= 0.0)
 
 
 def test_appended_pulse_width_scaling_preserves_retained_cycle_and_clips():
@@ -11004,11 +11087,12 @@ def test_collocation_endpoint_correction_preserves_internal_stage_offsets():
     )
 
     np.testing.assert_allclose(updated[:, [0, 4, 8]], projected_endpoints)
+    radau_fractions = periodic_example._collocation_interval_fractions(4)
     np.testing.assert_allclose(
-        updated[0, 1:4] - original[0, 1:4], [4 / 3, 5 / 3, 2]
+        updated[0, 1:4] - original[0, 1:4], 1.0 + radau_fractions
     )
     np.testing.assert_allclose(
-        updated[0, 5:8] - original[0, 5:8], [7 / 3, 8 / 3, 3]
+        updated[0, 5:8] - original[0, 5:8], 2.0 + radau_fractions
     )
 
 
