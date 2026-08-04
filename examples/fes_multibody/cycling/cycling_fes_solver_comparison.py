@@ -2990,6 +2990,9 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 "acados_ipopt_recovery_summaries": (
                     result.get("acados_ipopt_recovery_summaries") or []
                 ),
+                "solver_attempt_accounting": result.get(
+                    "solver_attempt_accounting"
+                ),
                 "transfer_phase_one_summaries": (
                     phase_one_summaries
                 ),

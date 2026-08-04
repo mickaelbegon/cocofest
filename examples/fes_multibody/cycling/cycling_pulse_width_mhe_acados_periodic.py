@@ -4634,6 +4634,71 @@ def _split_receding_solution(sol) -> tuple:
     return merged_solution, source_window_solutions, exported_cycle_solutions
 
 
+def certified_physical_receding_solution(sol) -> tuple[tuple, dict[str, object]]:
+    """Remove failed same-RHO attempts from physical traces and accounting."""
+
+    merged_solution, source_window_solutions, exported_cycle_solutions = (
+        _split_receding_solution(sol)
+    )
+    annotated = any(
+        hasattr(solution, "_cocofest_advanced_physical_rho")
+        for solution in source_window_solutions
+    )
+    if not annotated:
+        return sol, {
+            "available": False,
+            "attempt_count": len(source_window_solutions),
+            "certified_physical_rho_count": len(source_window_solutions),
+        }
+
+    certified_solutions = [
+        solution
+        for solution in source_window_solutions
+        if getattr(solution, "_cocofest_advanced_physical_rho", False)
+    ]
+    attempts = [
+        {
+            "attempt": int(getattr(solution, "_cocofest_attempt_index", index)),
+            "target_rho": getattr(solution, "_cocofest_target_rho", None),
+            "status": int(solution.status),
+            "advanced": bool(
+                getattr(solution, "_cocofest_advanced_physical_rho", False)
+            ),
+        }
+        for index, solution in enumerate(source_window_solutions, start=1)
+    ]
+    # Bioptim's compact RHO output does not populate split cycle solutions.
+    # Each certified source solve is exactly one physical cycle here and is a
+    # safer trace source than the merged object, which also contains retries.
+    filtered = (merged_solution, certified_solutions, certified_solutions)
+    return filtered, {
+        "available": True,
+        "attempt_count": len(source_window_solutions),
+        "certified_physical_rho_count": len(certified_solutions),
+        "attempts": attempts,
+        "ignored_exported_cycle_count": len(exported_cycle_solutions),
+    }
+
+
+def should_continue_same_rho_retry(
+    *,
+    completed_physical_rhos: int,
+    requested_physical_rhos: int,
+    consecutive_failures: int,
+    maximum_recovery_attempts: int,
+    recovery_seed_pending: bool,
+) -> bool:
+    """Guarantee one ACADOS certification solve after an accepted recovery seed."""
+
+    return bool(
+        completed_physical_rhos < requested_physical_rhos
+        and (
+            consecutive_failures < maximum_recovery_attempts
+            or recovery_seed_pending
+        )
+    )
+
+
 def _wheel_trace_from_exported_cycles(
     merged_solution, exported_cycle_solutions: list
 ) -> np.ndarray:
@@ -16338,6 +16403,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             cache_first_successful_window(_nmpc, solution)
 
     retry_same_rho_summaries = []
+    completed_physical_rhos = 0
+    recovery_attempts_by_target_rho: dict[int, int] = {}
     original_advance_window = nmpc.advance_window
 
     def advance_only_certified_window(self, solution, *advance_args, **advance_kwargs):
@@ -16350,6 +16417,11 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         same physical RHO from the last certified state.
         """
 
+        nonlocal completed_physical_rhos
+        target_rho = completed_physical_rhos + 1
+        solution._cocofest_attempt_index = int(self.total_optimization_run) + 1
+        solution._cocofest_target_rho = target_rho
+        solution._cocofest_advanced_physical_rho = False
         snapshot_completed_window(self, solution)
         feasibility = getattr(solution, "_cocofest_feasibility_summary", {})
         certified = _rho_solution_is_certified(solution.status, feasibility)
@@ -16369,7 +16441,15 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             args.retry_failed_rho_without_advance and not certified
         )
         if self._cocofest_retry_same_rho_pending:
-            if acados_ipopt_recovery_nmpc is not None:
+            recovery_attempt = recovery_attempts_by_target_rho.get(target_rho, 0)
+            can_attempt_recovery = bool(
+                acados_ipopt_recovery_nmpc is not None
+                and recovery_attempt < args.max_consecutive_failing
+            )
+            self._cocofest_recovery_seed_pending = False
+            if can_attempt_recovery:
+                recovery_attempt += 1
+                recovery_attempts_by_target_rho[target_rho] = recovery_attempt
                 # Freeze this exact physical RHO before restoring it.  In
                 # particular, do not use an earlier IPOPT bound/target after
                 # the ACADOS transfer has advanced its absolute wheel angle.
@@ -16388,6 +16468,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 recovery_summary.update(
                     {
                         "attempt_window": int(self.total_optimization_run) + 1,
+                        "target_rho": target_rho,
+                        "recovery_attempt": recovery_attempt,
                         "collocation_degree": (
                             args.acados_ipopt_recovery_collocation_degree
                         ),
@@ -16404,6 +16486,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     recovery_summary["acados_solver_reset"] = bool(
                         reset_acados_solver_memory(self)
                     )
+                    self._cocofest_recovery_seed_pending = True
                 acados_ipopt_recovery_summaries.append(recovery_summary)
                 if echo:
                     print(
@@ -16418,6 +16501,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     "status": int(solution.status),
                     "primal_feasible": bool(feasibility.get("passes_tolerance")),
                     "forced_for_ci": forced_recovery,
+                    "target_rho": target_rho,
+                    "recovery_seed_pending": bool(
+                        self._cocofest_recovery_seed_pending
+                    ),
                     "advanced": False,
                 }
             )
@@ -16442,6 +16529,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             )
         finally:
             self.before_window_advance = original_before_window_advance
+        solution._cocofest_advanced_physical_rho = True
+        completed_physical_rhos += 1
         nonlocal rho_replay_checkpoint_summary
         if rho_replay_checkpoint_output is not None:
             _save_rho_replay_checkpoint(
@@ -16471,6 +16560,11 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     def update_functions(_nmpc, cycle_idx, _sol):
         nonlocal transfer_failure_window, consecutive_physical_failures
         print(f"window {cycle_idx}")
+        completed_window_count = (
+            completed_physical_rhos
+            if args.retry_failed_rho_without_advance
+            else cycle_idx
+        )
         if _sol is not None and getattr(
             _nmpc, "_cocofest_retry_same_rho_pending", False
         ):
@@ -16483,10 +16577,16 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 consecutive_physical_failures += 1
             else:
                 consecutive_physical_failures = 0
-            continue_solving = (
-                cycle_idx < requested_window_solves
-                and consecutive_physical_failures < args.max_consecutive_failing
+            continue_solving = should_continue_same_rho_retry(
+                completed_physical_rhos=completed_window_count,
+                requested_physical_rhos=requested_window_solves,
+                consecutive_failures=consecutive_physical_failures,
+                maximum_recovery_attempts=args.max_consecutive_failing,
+                recovery_seed_pending=bool(
+                    getattr(_nmpc, "_cocofest_recovery_seed_pending", False)
+                ),
             )
+            _nmpc._cocofest_recovery_seed_pending = False
             if echo:
                 print(
                     "rho_retry_without_advance_next: "
@@ -16589,12 +16689,12 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     f"previous_window_certified={previous_window_certified}"
                 )
         continue_solving = (
-            cycle_idx < requested_window_solves
+            completed_window_count < requested_window_solves
             and consecutive_physical_failures < args.max_consecutive_failing
         )
         if (
             not continue_solving
-            and cycle_idx < requested_window_solves
+            and completed_window_count < requested_window_solves
             and consecutive_physical_failures >= args.max_consecutive_failing
             and echo
         ):
@@ -17802,7 +17902,12 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             cycle_solutions=MultiCyclicCycleSolutions.ALL_CYCLES,
             get_all_iterations=True,
             cyclic_options={"states": {}},
-            max_consecutive_failing=args.max_consecutive_failing,
+            max_consecutive_failing=(
+                args.max_consecutive_failing + 1
+                if args.acados_ipopt_recovery
+                and args.retry_failed_rho_without_advance
+                else args.max_consecutive_failing
+            ),
             compact_solution_output=args.compact_rho_output,
         )
     except RuntimeError as exc:
@@ -17848,6 +17953,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             summary["transfer_phase_one_summaries"] = transfer_phase_one_summaries
         attach_exact_initial_nlp_audits(summary, nmpc)
         return summary
+    raw_solver_attempt_summary = None
+    if args.retry_failed_rho_without_advance:
+        sol, raw_solver_attempt_summary = certified_physical_receding_solution(sol)
     if (
         common_initial_solution_output is not None
         and not common_initial_solution_output.exists()
@@ -17880,6 +17988,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         absolute_cycle_reference=absolute_wheel_q_reference,
         absolute_cycle_tolerance=wheel_absolute_cycle_tolerance,
     )
+    if raw_solver_attempt_summary is not None:
+        summary["solver_attempt_accounting"] = raw_solver_attempt_summary
     if args.solver == "acados" and args.acados_diagnostics:
         summary["acados_diagnostics"] = acados_window_diagnostics
     if args.solver == "acados":

@@ -461,7 +461,9 @@ jobs:
             tests/shard1/test_periodic_pulse_width.py::test_acados_ipopt_recovery_cli_is_opt_in \
             tests/shard1/test_periodic_pulse_width.py::test_acados_default_tolerance_falls_back_to_common_nlp_tolerance \
             tests/shard1/test_periodic_pulse_width.py::test_ipopt_inf_pr_is_restored_from_native_solver_stats \
-            tests/shard1/test_periodic_pulse_width.py::test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization
+            tests/shard1/test_periodic_pulse_width.py::test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization \
+            tests/shard1/test_periodic_pulse_width.py::test_same_rho_retries_are_excluded_from_physical_solution_traces \
+            tests/shard1/test_periodic_pulse_width.py::test_recovery_seed_always_receives_one_final_acados_certification_attempt
 
       - name: Download the validated reduced seed
         uses: actions/download-artifact@v8
@@ -526,8 +528,10 @@ jobs:
             .results[0].validated_cycles == 5 and
             (.results[0].initial_acados_irk_rollout.applied == true or
              .results[0].initial_acados_irk_rollout.retained_collocation_seed == true) and
-            .results[0].acados_ipopt_recovery.attempt_count == 1 and
-            .results[0].acados_ipopt_recovery.injected_count == 1
+            .results[0].acados_ipopt_recovery.attempt_count >= 1 and
+            .results[0].acados_ipopt_recovery.injected_count >= 1 and
+            any(.results[0].acados_ipopt_recovery_summaries[];
+                .forced_for_ci == true and .seed_injected == true)
           ' acados-ipopt-hybrid-results/result.json
 
       - name: Upload the hybrid gate logs and result

@@ -5788,12 +5788,69 @@ def test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization():
             "quality": "feasible_nonconverged",
         }
     ]
+    result["solver_attempt_accounting"] = {
+        "attempt_count": 2,
+        "certified_physical_rho_count": 1,
+    }
 
     row = comparison_example.solver_overview_rows({"acados": result})[0]
 
     assert row["initial_acados_irk_rollout"]["retained_collocation_seed"] is True
     assert row["acados_ipopt_recovery"]["injected_count"] == 1
     assert row["acados_ipopt_recovery_summaries"][0]["provisional"] is True
+    assert row["solver_attempt_accounting"]["attempt_count"] == 2
+
+
+def test_same_rho_retries_are_excluded_from_physical_solution_traces():
+    merged = SimpleNamespace(status=None)
+    failed_first = SimpleNamespace(
+        status=2,
+        _cocofest_attempt_index=1,
+        _cocofest_target_rho=1,
+        _cocofest_advanced_physical_rho=False,
+    )
+    certified_first = SimpleNamespace(
+        status=0,
+        _cocofest_attempt_index=2,
+        _cocofest_target_rho=1,
+        _cocofest_advanced_physical_rho=True,
+    )
+    certified_second = SimpleNamespace(
+        status=0,
+        _cocofest_attempt_index=3,
+        _cocofest_target_rho=2,
+        _cocofest_advanced_physical_rho=True,
+    )
+
+    filtered, accounting = periodic_example.certified_physical_receding_solution(
+        (merged, [failed_first, certified_first, certified_second], [])
+    )
+
+    assert filtered[0] is merged
+    assert filtered[1] == [certified_first, certified_second]
+    assert filtered[2] == [certified_first, certified_second]
+    assert accounting["attempt_count"] == 3
+    assert accounting["certified_physical_rho_count"] == 2
+    assert [item["target_rho"] for item in accounting["attempts"]] == [1, 1, 2]
+
+
+def test_recovery_seed_always_receives_one_final_acados_certification_attempt():
+    common = {
+        "completed_physical_rhos": 2,
+        "requested_physical_rhos": 5,
+        "consecutive_failures": 2,
+        "maximum_recovery_attempts": 2,
+    }
+
+    assert periodic_example.should_continue_same_rho_retry(
+        **common, recovery_seed_pending=True
+    )
+    assert not periodic_example.should_continue_same_rho_retry(
+        **common, recovery_seed_pending=False
+    )
+    assert not periodic_example.should_continue_same_rho_retry(
+        **{**common, "completed_physical_rhos": 5}, recovery_seed_pending=True
+    )
 
 
 def test_failed_rho_checkpoints_preserve_neighboring_pw_active_sets():
