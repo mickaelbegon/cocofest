@@ -15,6 +15,7 @@ import re
 import sys
 from sys import platform as sys_platform
 from time import perf_counter
+import traceback
 from types import MethodType, SimpleNamespace
 import warnings
 
@@ -6949,14 +6950,21 @@ def augment_feasibility_with_acados_residuals(
     return augmented
 
 
-def _window_feasibility_tolerance(args: argparse.Namespace) -> float | None:
-    """Map the public absolute threshold to the legacy 10*tolerance audit."""
+def _window_feasibility_tolerance(args: argparse.Namespace) -> float:
+    """Return the numeric tolerance used by the independent window audit."""
 
     threshold = getattr(args, "primal_feasibility_threshold", None)
     if threshold is not None:
         return float(threshold) / 10.0
     if args.solver == "acados":
-        return args.acados_tolerance
+        # ``None`` asks ACADOS to keep its backend defaults.  It must not
+        # disable Cocofest's independent feasibility audit or leak into an
+        # IPOPT restoration solve, whose tolerance is necessarily numeric.
+        # Use the common NLP tolerance as the explicit audit/restoration
+        # fallback while leaving the native ACADOS options untouched.
+        acados_tolerance = getattr(args, "acados_tolerance", None)
+        if acados_tolerance is not None:
+            return float(acados_tolerance)
     return args.nlp_tolerance
 
 
@@ -13135,8 +13143,10 @@ def run_periodic_ipopt_recovery(
         )
     except Exception as exc:
         summary["error"] = f"{type(exc).__name__}: {exc}"
+        summary["traceback"] = traceback.format_exc()
         if echo:
             print(f"acados_ipopt_recovery_error: {summary['error']}")
+            print(summary["traceback"], end="")
         return None, summary
 
     feasibility = _solution_feasibility_summary(solution, tolerance)

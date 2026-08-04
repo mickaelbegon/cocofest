@@ -5459,6 +5459,32 @@ def test_common_primal_threshold_is_independent_of_nlp_solver_tolerance():
     assert tolerance == pytest.approx(1e-6)
 
 
+def test_acados_default_tolerance_falls_back_to_common_nlp_tolerance():
+    args = SimpleNamespace(
+        solver="acados",
+        acados_tolerance=None,
+        nlp_tolerance=2e-7,
+        primal_feasibility_threshold=None,
+    )
+
+    tolerance = periodic_example._window_feasibility_tolerance(args)
+
+    assert tolerance == pytest.approx(2e-7)
+
+
+def test_explicit_acados_tolerance_remains_the_window_tolerance():
+    args = SimpleNamespace(
+        solver="acados",
+        acados_tolerance=3e-5,
+        nlp_tolerance=2e-7,
+        primal_feasibility_threshold=None,
+    )
+
+    tolerance = periodic_example._window_feasibility_tolerance(args)
+
+    assert tolerance == pytest.approx(3e-5)
+
+
 def test_nlp_solver_stats_snapshot_keeps_oracle_timing_without_iterations():
     stats = {
         "t_wall_total": 2.0,
