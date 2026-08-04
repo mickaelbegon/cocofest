@@ -83,9 +83,13 @@ fenêtre physique. Les artefacts enregistrent les temps IPOPT et les écarts
 PW (en µs) / états : ils mesurent la compatibilité, sans être un critère
 d'acceptation caché.
 
-Cette chaîne est une expérience de robustesse, pas encore un résultat de
-performance : elle attend une campagne Linux avec les runtimes ACADOS/IPOPT
-dans le même environnement.
+Le gate Linux prépare maintenant le seed avec un raffinement IPOPT/IRK, puis
+le propage une fois avec la carte IRK générée par ACADOS avant le premier SQP.
+Cette étape élimine les défauts de transcription du seed; elle n'est pas
+comptée dans le temps chaud des RHO. Le gate force ensuite une seule reprise
+sur le premier RHO afin de vérifier de façon déterministe que le chemin
+ACADOS → IPOPT → ACADOS est réellement exécuté. Cette injection est un test de
+robustesse, jamais une mesure de performance.
 
 Exemples de lancement manuel :
 
@@ -139,7 +143,7 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Après un échec, aucun shift ni transfert du primal; deux essais sur le même RHO | L'ancien loop Bioptim avançait parfois une solution non convergée, créant un faux motif « échec puis succès » | Le préfixe d'endurance ne peut plus être artificiellement prolongé après une non-convergence | Correctif `ae42595`; une première CI a révélé un relais CLI manquant, corrigé avant la relance |
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
-| Reprise hybride ACADOS reduced → MadNLP/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, sans mélanger les dynamiques full et reduced | Mesure PW/états, temps MadNLP et réinitialisation SQP enregistrés dans l'artefact; ACADOS doit encore certifier le retry | Nouvelle expérience, sans gain chiffré tant que le gate Linux combinant ACADOS et libMad/MUMPS n'a pas passé |
+| Reprise hybride ACADOS reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, sans mélanger les dynamiques full et reduced | Mesure PW/états, temps IPOPT et réinitialisation SQP enregistrés dans l'artefact; ACADOS doit encore certifier le retry | Nouvelle expérience, sans gain chiffré tant que le gate Linux combinant ACADOS et IPOPT/MUMPS n'a pas passé |
 | Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
 
 Les premiers dispatches

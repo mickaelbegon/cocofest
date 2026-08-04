@@ -489,13 +489,17 @@ jobs:
             --compact-rho-output \
             --common-initial-solution benchmark-seed/common-reduced.npz \
             --adopt-common-initial-solution-warmup-cycles \
+            --disable-acados-assisted-hot-start \
             --acados-disable-standard-ipopt-warmup \
-            --disable-periodic-ipopt-refinement \
+            --periodic-ipopt-refinement-ode-solver irk \
+            --periodic-ipopt-refinement-iterations "${{ inputs.solver_max_iterations }}" \
+            --warmup-ipopt-linear-solver mumps \
             --retry-failed-rho-without-advance \
             --max-consecutive-failing 2 \
             --acados-integrator-type IRK \
             --acados-sim-stages 4 \
             --acados-sim-steps 5 \
+            --acados-initial-irk-rollout \
             --acados-max-iter 100 \
             --acados-store-iterates \
             --acados-maxiter-retries 1 \
@@ -503,11 +507,17 @@ jobs:
             --acados-ipopt-recovery \
             --acados-ipopt-recovery-max-iterations "${{ inputs.solver_max_iterations }}" \
             --acados-ipopt-recovery-collocation-degree 5 \
+            --acados-ipopt-recovery-force-first-rho \
             --ipopt-linear-solver mumps \
             --output-json acados-ipopt-hybrid-results/result.json
           jq -e '
             .configurations.acados.acados_ipopt_recovery == true and
-            .configurations.acados.mechanical_formulation == "reduced"
+            .configurations.acados.mechanical_formulation == "reduced" and
+            .results[0].success == true and
+            .results[0].validated_cycles == 5 and
+            .results[0].initial_acados_irk_rollout.applied == true and
+            .results[0].acados_ipopt_recovery.attempt_count == 1 and
+            .results[0].acados_ipopt_recovery.injected_count == 1
           ' acados-ipopt-hybrid-results/result.json
 
       - name: Upload the hybrid gate logs and result

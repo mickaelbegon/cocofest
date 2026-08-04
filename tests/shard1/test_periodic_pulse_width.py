@@ -867,12 +867,16 @@ def test_acados_ipopt_recovery_cli_is_opt_in():
             "800",
             "--acados-ipopt-recovery-collocation-degree",
             "5",
+            "--acados-ipopt-recovery-force-first-rho",
+            "--acados-initial-irk-rollout",
         ]
     )
 
     assert args.acados_ipopt_recovery is True
     assert args.acados_ipopt_recovery_max_iterations == 800
     assert args.acados_ipopt_recovery_collocation_degree == 5
+    assert args.acados_ipopt_recovery_force_first_rho is True
+    assert args.acados_initial_irk_rollout is True
 
 
 def test_ensure_acados_environment_prefers_a_complete_conda_runtime(monkeypatch, tmp_path):
@@ -1086,6 +1090,8 @@ def test_comparison_cli_forwards_acados_hot_start_homotopy_options():
     args = comparison_example.build_cli().parse_args(
         [
             "--disable-acados-assisted-hot-start",
+            "--acados-initial-irk-rollout",
+            "--acados-ipopt-recovery-force-first-rho",
             "--acados-control-homotopy-radii",
             "1e-6,1e-5",
             "--acados-control-homotopy-tolerance",
@@ -1104,6 +1110,8 @@ def test_comparison_cli_forwards_acados_hot_start_homotopy_options():
     )
 
     assert args.acados_assisted_hot_start is False
+    assert args.acados_initial_irk_rollout is True
+    assert args.acados_ipopt_recovery_force_first_rho is True
     assert args.acados_control_homotopy_radii == (1e-6, 1e-5)
     assert args.acados_control_homotopy_tolerance == 2e-2
     assert args.acados_control_homotopy_stage_iterations == 30

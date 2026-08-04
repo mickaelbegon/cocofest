@@ -140,6 +140,8 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "acados_ipopt_recovery",
     "acados_ipopt_recovery_max_iterations",
     "acados_ipopt_recovery_collocation_degree",
+    "acados_ipopt_recovery_force_first_rho",
+    "acados_initial_irk_rollout",
     "acados_reset_solver_before_solve",
     "acados_check_reuse_possible",
     "acados_code_reuse_tolerance",
@@ -3293,6 +3295,8 @@ def main(
     acados_ipopt_recovery: bool = False,
     acados_ipopt_recovery_max_iterations: int = 2000,
     acados_ipopt_recovery_collocation_degree: int = 5,
+    acados_ipopt_recovery_force_first_rho: bool = False,
+    acados_initial_irk_rollout: bool = False,
     acados_reset_solver_before_solve: bool = False,
     acados_check_reuse_possible: bool = False,
     acados_code_reuse_tolerance: float = 1e-12,
@@ -3789,6 +3793,10 @@ def main(
     acados_args.acados_ipopt_recovery_collocation_degree = (
         acados_ipopt_recovery_collocation_degree
     )
+    acados_args.acados_ipopt_recovery_force_first_rho = (
+        acados_ipopt_recovery_force_first_rho
+    )
+    acados_args.acados_initial_irk_rollout = acados_initial_irk_rollout
     acados_args.acados_reset_solver_before_solve = acados_reset_solver_before_solve
     acados_args.acados_check_reuse_possible = acados_check_reuse_possible
     acados_args.acados_code_reuse_tolerance = acados_code_reuse_tolerance
@@ -5629,6 +5637,10 @@ if __name__ == "__main__":
         acados_ipopt_recovery_collocation_degree=(
             args.acados_ipopt_recovery_collocation_degree
         ),
+        acados_ipopt_recovery_force_first_rho=(
+            args.acados_ipopt_recovery_force_first_rho
+        ),
+        acados_initial_irk_rollout=args.acados_initial_irk_rollout,
         acados_reset_solver_before_solve=args.acados_reset_solver_before_solve,
         acados_check_reuse_possible=args.acados_check_reuse_possible,
         acados_code_reuse_tolerance=args.acados_code_reuse_tolerance,

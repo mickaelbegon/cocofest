@@ -1734,6 +1734,16 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--acados-initial-irk-rollout",
+        action="store_true",
+        help=(
+            "Before the first ACADOS SQP solve, rebuild the complete initial "
+            "state trajectory with the generated ACADOS IRK simulator. This "
+            "is an initialization diagnostic and differs from the inter-window "
+            "IRK rollout."
+        ),
+    )
+    parser.add_argument(
         "--transfer-phase-one",
         "--acados-transfer-phase-one",
         dest="acados_transfer_phase_one",
@@ -2222,6 +2232,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help=(
             "Radau collocation degree used by the IPOPT recovery OCP. "
             "The default degree 5 is the certified calcium transcription."
+        ),
+    )
+    parser.add_argument(
+        "--acados-ipopt-recovery-force-first-rho",
+        action="store_true",
+        help=(
+            "Test-only deterministic recovery gate: after the first ACADOS "
+            "result, force the same-RHO IPOPT recovery path and require a "
+            "subsequent ACADOS retry. It must not be used for performance runs."
         ),
     )
     parser.add_argument(
@@ -9741,8 +9760,14 @@ def _get_or_create_acados_sim_solver(periodic_nmpc):
 def rollout_transferred_cycle_acados_irk(
     periodic_nmpc,
     max_allowed_bound_violation: float | None = None,
+    start_node: int | None = None,
 ) -> dict:
-    """Roll out the appended cycle with the same generated IRK map as the OCP."""
+    """Roll out a trajectory suffix with the same generated IRK map as the OCP.
+
+    ``start_node=None`` retains the historical transfer behavior (the appended
+    cycle). Passing zero reconstructs the complete initial trajectory and is
+    used only to certify an ACADOS-native first SQP seed.
+    """
 
     nlp = periodic_nmpc.nlp[0]
     first_state_key = next(iter(nlp.x_init.keys()))
@@ -9754,11 +9779,12 @@ def rollout_transferred_cycle_acados_irk(
             "The ACADOS IRK transfer requires one more state node than controls."
         )
 
-    start_node = (
-        0
-        if n_control_nodes <= periodic_nmpc.control_nodes_per_cycle
-        else periodic_nmpc.control_nodes_per_cycle
-    )
+    if start_node is None:
+        start_node = (
+            0
+            if n_control_nodes <= periodic_nmpc.control_nodes_per_cycle
+            else periodic_nmpc.control_nodes_per_cycle
+        )
     if start_node < 0 or start_node >= n_control_nodes:
         raise ValueError("The ACADOS IRK transfer start node is outside the horizon.")
 
@@ -13986,6 +14012,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             raise ValueError(
                 "--acados-ipopt-recovery-collocation-degree must be >= 1."
             )
+    if args.acados_ipopt_recovery_force_first_rho and not args.acados_ipopt_recovery:
+        raise ValueError(
+            "--acados-ipopt-recovery-force-first-rho requires "
+            "--acados-ipopt-recovery."
+        )
+    if args.acados_initial_irk_rollout and args.solver != "acados":
+        raise ValueError("--acados-initial-irk-rollout requires --solver acados.")
     if (
         getattr(args, "primal_feasibility_threshold", None) is not None
         and args.primal_feasibility_threshold <= 0
@@ -16230,6 +16263,18 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         snapshot_completed_window(self, solution)
         feasibility = getattr(solution, "_cocofest_feasibility_summary", {})
         certified = _rho_solution_is_certified(solution.status, feasibility)
+        forced_recovery = bool(
+            args.acados_ipopt_recovery_force_first_rho
+            and self.total_optimization_run == 0
+            and not getattr(self, "_cocofest_forced_ipopt_recovery_done", False)
+        )
+        if forced_recovery:
+            # CI coverage for recovery must not depend on a naturally failing
+            # SQP iteration. The already obtained ACADOS primal is discarded
+            # for advancement, IPOPT restores the *same* frozen RHO, and a
+            # second ACADOS solve remains mandatory before advancing it.
+            self._cocofest_forced_ipopt_recovery_done = True
+            certified = False
         self._cocofest_retry_same_rho_pending = bool(
             args.retry_failed_rho_without_advance and not certified
         )
@@ -16258,6 +16303,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                         ),
                         "acados_failed_status": int(solution.status),
                         "acados_failed_feasibility": dict(feasibility),
+                        "forced_for_ci": forced_recovery,
                     }
                 )
                 if recovery_summary["seed_injected"]:
@@ -16281,6 +16327,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     "native_status": _native_solver_status(self),
                     "status": int(solution.status),
                     "primal_feasible": bool(feasibility.get("passes_tolerance")),
+                    "forced_for_ci": forced_recovery,
                     "advanced": False,
                 }
             )
@@ -17337,6 +17384,36 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             if echo:
                 print("exact_initial_nlp_audit: enabled")
 
+    initial_acados_irk_rollout_summary = None
+    if args.solver == "acados" and args.acados_initial_irk_rollout:
+        # A collocation primal may satisfy its own defects while being a poor
+        # seed for ACADOS multiple shooting. Build the generated capsule first
+        # and replace the trajectory by its exact IRK propagation before the
+        # first SQP linearization. We deliberately retain any terminal-bound
+        # diagnostic: the subsequent SQP is responsible for closing the cycle,
+        # whereas silently clipping this trajectory would reintroduce defects.
+        nmpc.set_ocp_solver(solver)
+        initial_acados_irk_rollout_summary = rollout_transferred_cycle_acados_irk(
+            nmpc,
+            max_allowed_bound_violation=None,
+            start_node=0,
+        )
+        if not initial_acados_irk_rollout_summary["applied"]:
+            raise RuntimeError(
+                "ACADOS initial IRK rollout could not build a finite initial trajectory: "
+                f"{initial_acados_irk_rollout_summary.get('reason')}"
+            )
+        if echo:
+            print(
+                "acados_initial_irk_rollout: "
+                f"applied=True simulator_built="
+                f"{initial_acados_irk_rollout_summary['simulator_built']} "
+                f"simulation_time_s="
+                f"{initial_acados_irk_rollout_summary['simulation_time_s']:.6g} "
+                "max_bound_violation="
+                f"{initial_acados_irk_rollout_summary['max_bound_violation']:.6g}"
+            )
+
     control_homotopy_completed_for_seed = False
     if args.solver == "acados" and cycle_boundary_homotopy_schedule is not None:
         seam_initial_control_radius = None
@@ -17588,6 +17665,20 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         ] = absolute_wheel_q_start_cycle_index
         summary["native_solver_status"] = _native_solver_status(nmpc)
         summary["compiled_nlp_reuse"] = compiled_nlp_tracker.summary()
+        if initial_acados_irk_rollout_summary is not None:
+            summary["initial_acados_irk_rollout"] = initial_acados_irk_rollout_summary
+        if args.solver == "acados":
+            summary["acados_ipopt_recovery"] = {
+                "enabled": bool(args.acados_ipopt_recovery),
+                "forced_first_rho_for_ci": bool(
+                    args.acados_ipopt_recovery_force_first_rho
+                ),
+                "attempt_count": len(acados_ipopt_recovery_summaries),
+                "injected_count": sum(
+                    bool(item.get("seed_injected"))
+                    for item in acados_ipopt_recovery_summaries
+                ),
+            }
         if control_homotopy_summaries:
             summary["control_homotopy_summaries"] = control_homotopy_summaries
         if cycle_boundary_homotopy_summary is not None:
@@ -17640,6 +17731,20 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         summary["native_solver_status"] = _native_solver_status(nmpc)
         summary["pulse_width_active_set_summary"] = pulse_width_active_set_summary(nmpc)
         summary["compiled_nlp_reuse"] = compiled_nlp_tracker.summary()
+        if initial_acados_irk_rollout_summary is not None:
+            summary["initial_acados_irk_rollout"] = initial_acados_irk_rollout_summary
+        if args.solver == "acados":
+            summary["acados_ipopt_recovery"] = {
+                "enabled": bool(args.acados_ipopt_recovery),
+                "forced_first_rho_for_ci": bool(
+                    args.acados_ipopt_recovery_force_first_rho
+                ),
+                "attempt_count": len(acados_ipopt_recovery_summaries),
+                "injected_count": sum(
+                    bool(item.get("seed_injected"))
+                    for item in acados_ipopt_recovery_summaries
+                ),
+            }
         if cycle_boundary_homotopy_summary is not None:
             summary["cycle_boundary_homotopy_summary"] = cycle_boundary_homotopy_summary
         if transfer_phase_one_summaries:
@@ -17684,6 +17789,19 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         summary["acados_dual_warm_start_summaries"] = (
             acados_dual_warm_start_summaries
         )
+        if initial_acados_irk_rollout_summary is not None:
+            summary["initial_acados_irk_rollout"] = initial_acados_irk_rollout_summary
+        summary["acados_ipopt_recovery"] = {
+            "enabled": bool(args.acados_ipopt_recovery),
+            "forced_first_rho_for_ci": bool(
+                args.acados_ipopt_recovery_force_first_rho
+            ),
+            "attempt_count": len(acados_ipopt_recovery_summaries),
+            "injected_count": sum(
+                bool(item.get("seed_injected"))
+                for item in acados_ipopt_recovery_summaries
+            ),
+        }
     if nlp_dual_warm_start_summaries:
         summary["nlp_dual_warm_start_summaries"] = nlp_dual_warm_start_summaries
         if args.solver == "ipopt":
