@@ -4472,3 +4472,46 @@ puis laisser le premier SQP linéariser autour de cette trajectoire. Un test
 Bioptim vérifie qu'aucun appel natif à `solve()` n'a lieu pendant
 l'initialisation et que la même instance est réutilisée ensuite; un test
 Cocofest vérifie l'ordre interface → capsule → rollout.
+
+## 26. Certification du retry hybride et garde inter-nœuds (4 août 2026)
+
+Le run
+[30870817698](https://github.com/mickaelbegon/cocofest/actions/runs/30870817698)
+a d'abord validé la séparation entre tentative solveur et RHO physique. Huit
+appels ACADOS ont produit exactement cinq RHO certifiés; les trois tentatives
+échouées n'ont ni déplacé les bornes, ni contaminé les traces physiques. Trois
+raffinements IPOPT ont fourni des primales faisables, et chaque seed injecté a
+été suivi d'un nouvel appel ACADOS avant tout avancement.
+
+Les cinq solutions ACADOS avaient `status=0` et des résidus dynamiques entre
+`3.7e-11` et `3.7e-9`, mais le verdict global restait négatif. Ce n'était pas
+une erreur de comptage : l'audit continu a trouvé une vitesse moyenne
+inter-nœuds de `-9.665 rad/s`, alors que la limite physique rapide vaut
+`-9.283 rad/s`. Les shooting nodes étaient admissibles; l'intervalle ne
+pouvait pas l'être. Relaxer l'audit aurait donc accepté une trajectoire
+physiquement incohérente.
+
+Le commit `cd827cb` conserve la limite physique `-2*pi +/- 3 rad/s`, mais
+resserre la boîte nodale ACADOS du côté rapide à `-2*pi-2.55 rad/s`. Le run
+[30871938223](https://github.com/mickaelbegon/cocofest/actions/runs/30871938223)
+confirme le correctif :
+
+| Mesure | Résultat |
+|---|---:|
+| RHO physiquement certifiés | `5/5` |
+| Appels ACADOS bruts | `8` |
+| Recoveries IPOPT injectées | `3` |
+| Minimum `omega` aux nœuds | `-8.833185 rad/s` |
+| Minimum moyen inter-nœuds | `-9.150359 rad/s` |
+| Violation de la borne physique | `0 rad/s` |
+| Médiane ACADOS chaude | `0.246 s` |
+| P90 ACADOS chaud | `0.683 s` |
+| Temps ACADOS des cinq RHO certifiés | `1.796 s` |
+| Mur-à-mur du gate | `628.289 s` |
+
+Le temps mur-à-mur n'est pas un temps de production ACADOS : les trois
+recoveries IPOPT coûtent respectivement `145.16`, `148.25` et `38.53 s`, et la
+première est forcée par la CI. Au RHO 5, deux échecs ACADOS naturels ont exigé
+deux recoveries avant une certification en cinq itérations ACADOS. La prochaine
+étape est donc une campagne 30 RHO sans recovery artificielle, avec fréquence
+et coût des reprises rapportés séparément du solve chaud.
