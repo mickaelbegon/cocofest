@@ -141,6 +141,9 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "acados_ipopt_recovery_max_iterations",
     "acados_ipopt_recovery_collocation_degree",
     "acados_ipopt_recovery_force_first_rho",
+    "nlp_ipopt_recovery",
+    "nlp_ipopt_recovery_max_iterations",
+    "nlp_ipopt_recovery_collocation_degree",
     "acados_initial_irk_rollout",
     "periodic_ipopt_refinement_ode_solver",
     "periodic_ipopt_refinement_collocation_degree",
@@ -2990,6 +2993,10 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 "acados_ipopt_recovery_summaries": (
                     result.get("acados_ipopt_recovery_summaries") or []
                 ),
+                "nlp_ipopt_recovery": result.get("nlp_ipopt_recovery"),
+                "nlp_ipopt_recovery_summaries": (
+                    result.get("nlp_ipopt_recovery_summaries") or []
+                ),
                 "solver_attempt_accounting": result.get(
                     "solver_attempt_accounting"
                 ),
@@ -3309,6 +3316,9 @@ def main(
     acados_ipopt_recovery_max_iterations: int = 2000,
     acados_ipopt_recovery_collocation_degree: int = 5,
     acados_ipopt_recovery_force_first_rho: bool = False,
+    nlp_ipopt_recovery: bool = False,
+    nlp_ipopt_recovery_max_iterations: int = 2000,
+    nlp_ipopt_recovery_collocation_degree: int = 5,
     acados_initial_irk_rollout: bool = False,
     acados_reset_solver_before_solve: bool = False,
     acados_check_reuse_possible: bool = False,
@@ -4013,6 +4023,14 @@ def main(
         madnlp_linear_solver=madnlp_linear_solver,
         periodic_ipopt_hot_start=optional_nlp_periodic_ipopt_hot_start,
     )
+    for optional_nlp_args in (fatrop_args, madnlp_args):
+        optional_nlp_args.nlp_ipopt_recovery = nlp_ipopt_recovery
+        optional_nlp_args.nlp_ipopt_recovery_max_iterations = (
+            nlp_ipopt_recovery_max_iterations
+        )
+        optional_nlp_args.nlp_ipopt_recovery_collocation_degree = (
+            nlp_ipopt_recovery_collocation_degree
+        )
     ipopt_args.ipopt_c_compile = ipopt_c_compile
     ipopt_args.ipopt_hsl_library = ipopt_hsl_library
     fatrop_args.ipopt_c_compile = False
@@ -5271,6 +5289,21 @@ def build_cli() -> argparse.ArgumentParser:
         "--acados-ipopt-recovery-collocation-degree", type=int, default=5
     )
     parser.add_argument("--acados-ipopt-recovery-force-first-rho", action="store_true")
+    parser.add_argument(
+        "--nlp-ipopt-recovery",
+        action="store_true",
+        help=(
+            "After an uncertified reduced MadNLP/Fatrop RHO, restore the same "
+            "frozen RHO with IPOPT and require a final certification by the "
+            "requested NLP solver before advancing."
+        ),
+    )
+    parser.add_argument(
+        "--nlp-ipopt-recovery-max-iterations", type=int, default=2000
+    )
+    parser.add_argument(
+        "--nlp-ipopt-recovery-collocation-degree", type=int, default=5
+    )
     parser.add_argument("--acados-initial-irk-rollout", action="store_true")
     parser.add_argument("--acados-reset-solver-before-solve", action="store_true")
     parser.add_argument("--acados-check-reuse-possible", action="store_true")
@@ -5679,6 +5712,13 @@ if __name__ == "__main__":
         ),
         acados_ipopt_recovery_force_first_rho=(
             args.acados_ipopt_recovery_force_first_rho
+        ),
+        nlp_ipopt_recovery=args.nlp_ipopt_recovery,
+        nlp_ipopt_recovery_max_iterations=(
+            args.nlp_ipopt_recovery_max_iterations
+        ),
+        nlp_ipopt_recovery_collocation_degree=(
+            args.nlp_ipopt_recovery_collocation_degree
         ),
         acados_initial_irk_rollout=args.acados_initial_irk_rollout,
         acados_reset_solver_before_solve=args.acados_reset_solver_before_solve,

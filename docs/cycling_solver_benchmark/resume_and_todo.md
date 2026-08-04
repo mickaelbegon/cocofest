@@ -158,6 +158,14 @@ Le prochain levier MadNLP n'est pas un budget d'itérations plus élevé. Il fau
 reconstruire une primale admissible au **même RHO** après l'échec, puis repartir
 du dernier checkpoint certifié.
 
+Le run `30856972707` précise ce diagnostic : MadNLP/Radau-5 reduced certifie
+`140` RHO, puis reproduit deux fois exactement le même échec au RHO 141
+(`353` itérations, `inf_pr = 3.503992`). Ce stop n'est pas attribuable à la
+fatigue avec les preuves actuelles (`4.33 %` seulement de saturation PW haute).
+Une restauration IPOPT du même RHO est maintenant disponible via
+`--nlp-ipopt-recovery`; elle doit encore être certifiée sur Linux avant de
+revendiquer un préfixe plus long.
+
 ### 3.3 FATROP
 
 - Reduced/SX/collocation : `100/100` et solution physiologique cohérente avec
@@ -321,10 +329,11 @@ physique.
 
 - [ ] Sauvegarder le dernier checkpoint physique avant l'échec full RHO 81 et
   reduced RHO 99.
-- [ ] Ne jamais avancer la fenêtre depuis une solution non certifiée.
-- [ ] Donner deux chances au même RHO depuis des primales distinctes et
-  documentées : shift projeté, puis raffinement IPOPT ou restauration dédiée.
-- [ ] Réutiliser la solution récupérée uniquement si statut et audits passent.
+- [x] Ne jamais avancer la fenêtre depuis une solution non certifiée.
+- [x] Donner une seconde chance au même RHO depuis une primale IPOPT distincte
+  et documentée; la campagne Linux reste à valider.
+- [x] Réutiliser la solution récupérée uniquement si sa faisabilité mesurée
+  passe, puis exiger une certification finale par MadNLP.
 - [ ] Comparer les ensembles actifs PW, multiplicateurs, stationnarité et
   conditionnement avant/après récupération.
 

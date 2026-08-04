@@ -879,6 +879,30 @@ def test_acados_ipopt_recovery_cli_is_opt_in():
     assert args.acados_initial_irk_rollout is True
 
 
+def test_nlp_ipopt_recovery_cli_is_opt_in():
+    parser = comparison_example.build_cli()
+    args = parser.parse_args(
+        [
+            "--nlp-ipopt-recovery",
+            "--nlp-ipopt-recovery-max-iterations",
+            "1200",
+            "--nlp-ipopt-recovery-collocation-degree",
+            "5",
+        ]
+    )
+
+    assert args.nlp_ipopt_recovery is True
+    assert args.nlp_ipopt_recovery_max_iterations == 1200
+    assert args.nlp_ipopt_recovery_collocation_degree == 5
+
+    runner = (
+        Path(__file__).resolve().parents[2]
+        / ".github/scripts/run_cycling_benchmark_case.sh"
+    ).read_text(encoding="utf-8")
+    assert '[[ "$case_slug" == *"fatigue-endurance"* ]]' in runner
+    assert "--nlp-ipopt-recovery" in runner
+
+
 def test_ensure_acados_environment_prefers_a_complete_conda_runtime(monkeypatch, tmp_path):
     runtime = tmp_path / "acados-runtime"
     include_dir = runtime / "include" / "acados_c"
@@ -6369,10 +6393,10 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "inputs.cycles != 'screen' && inputs.cycles != 'acados'" in workflow
     assert "prepare-acados-stack:" in workflow
     assert (
-        "BIOPTIM_PRODUCTION_COMMIT: " "4179bf076b724fe6c4702739b3462e29ae4adef4"
+        "BIOPTIM_PRODUCTION_COMMIT: " "045961b3efeeffe69272712ec65b53ef14eead64"
     ) in workflow
     assert (
-        workflow.count("bioptim_commit: 4179bf076b724fe6c4702739b3462e29ae4adef4") == 3
+        workflow.count("bioptim_commit: 045961b3efeeffe69272712ec65b53ef14eead64") == 3
     )
     assert "a3499cab16d7605b8efa7255cf89f1af6a7c59c9" not in workflow
     assert "ACADOS_COMMIT: 59d93e17d2985fdd73fc58b8a83ed8f83a024171" in workflow

@@ -136,6 +136,16 @@ elif [[ "$solver" == "madnlp" ]]; then
   if [[ "$compile_mode" == "true" ]]; then
     solver_options+=(--madnlp-c-compile)
   fi
+  if [[ "$case_slug" == *"fatigue-endurance"* ]]; then
+    # A plain same-RHO retry repeats the exact failed MadNLP primal. Restore
+    # only failed endurance windows with IPOPT on the frozen Radau grid, then
+    # require MadNLP itself to certify the restored seed before advancing.
+    solver_options+=(
+      --nlp-ipopt-recovery
+      --nlp-ipopt-recovery-max-iterations "$BENCHMARK_MAX_ITER"
+      --nlp-ipopt-recovery-collocation-degree "$collocation_degree"
+    )
+  fi
 fi
 if [[ "$solver" != "fatrop" && "$ode_solver" == "collocation" ]]; then
   solver_options+=(

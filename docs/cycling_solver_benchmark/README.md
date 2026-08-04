@@ -66,6 +66,23 @@ checkpoint certifié et résout donc le **même RHO**. Cela élimine le faux mot
 « échec puis succès » observé avec MadNLP R3, où Bioptim avançait auparavant
 une solution non convergée avant le second essai.
 
+Le run Linux Radau-5
+[30856972707](https://github.com/mickaelbegon/cocofest/actions/runs/30856972707)
+a toutefois révélé que cette seconde chance MadNLP était encore identique à la
+première : après `140` RHO certifiés, les deux essais du RHO 141 terminent tous
+deux après `353` itérations avec `inf_pr = 3.503992`. La capacité de Ding a
+baissé (`min A/A_scale = 0.8644`), mais seulement `4.33 %` des PW du biceps
+atteignent la borne supérieure, sous le seuil d'évidence de `10 %`. Le gate a
+donc correctement classé l'arrêt `unconfirmed_endurance_stop`, et non fatigue.
+
+Le mode `--nlp-ipopt-recovery`, activé pour les campagnes d'endurance MadNLP,
+remplace cette répétition inutile. Après un échec, il fige les bornes et les
+cibles du RHO courant, résout une restauration IPOPT sur le même degré de
+Radau, et n'injecte la primale que si sa faisabilité est mesurée. MadNLP doit
+ensuite certifier lui-même cette primale avant tout avancement. Les temps de
+restauration sont séparés des temps chauds MadNLP; le critère de fatigue reste
+inchangé.
+
 ### Reprise hybride ACADOS → IPOPT (expérimentale)
 
 Le mode `--acados-ipopt-recovery` ne compare pas le full ACADOS historique à
