@@ -83,8 +83,12 @@ fenêtre physique. Les artefacts enregistrent les temps IPOPT et les écarts
 PW (en µs) / états : ils mesurent la compatibilité, sans être un critère
 d'acceptation caché.
 
-Le gate Linux prépare maintenant le seed avec un raffinement IPOPT/IRK, puis
-le propage une fois avec la carte IRK générée par ACADOS avant le premier SQP.
+Le gate Linux prépare maintenant le seed avec un raffinement IPOPT/Radau-5 en
+SX, puis le propage une fois avec la carte IRK générée par ACADOS avant le
+premier SQP. Ce choix est imposé par la version épinglée de Bioptim :
+`use_sx=True` et `OdeSolver.IRK` ne sont pas encore compatibles. Il ne faut
+donc pas interpréter ce raffinement comme une résolution IPOPT/IRK : seule la
+projection suivante est une intégration IRK native d'ACADOS.
 Cette étape élimine les défauts de transcription du seed; elle n'est pas
 comptée dans le temps chaud des RHO. Le gate force ensuite une seule reprise
 sur le premier RHO afin de vérifier de façon déterministe que le chemin
