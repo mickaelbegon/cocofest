@@ -495,8 +495,8 @@ jobs:
             --disable-acados-assisted-hot-start \
             --acados-disable-standard-ipopt-warmup \
             --periodic-ipopt-refinement-ode-solver collocation \
-            --collocation-degree 5 \
-            --collocation-method radau \
+            --periodic-ipopt-refinement-collocation-degree 5 \
+            --periodic-ipopt-refinement-collocation-method radau \
             --periodic-ipopt-refinement-iterations "${{ inputs.solver_max_iterations }}" \
             --warmup-ipopt-linear-solver mumps \
             --retry-failed-rho-without-advance \

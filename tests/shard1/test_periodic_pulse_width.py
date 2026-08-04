@@ -2853,6 +2853,40 @@ def test_target_integrator_uses_a_distinct_periodic_ipopt_cache(tmp_path, monkey
     assert rk4 != collocation
 
 
+def test_periodic_ipopt_bridge_collocation_degree_uses_a_distinct_cache(
+    tmp_path, monkeypatch
+):
+    parser = periodic_example.build_argument_parser()
+    radau3_args = parser.parse_args(
+        [
+            "--periodic-ipopt-refinement-ode-solver",
+            "collocation",
+            "--periodic-ipopt-refinement-collocation-degree",
+            "3",
+        ]
+    )
+    radau5_args = parser.parse_args(
+        [
+            "--periodic-ipopt-refinement-ode-solver",
+            "collocation",
+            "--periodic-ipopt-refinement-collocation-degree",
+            "5",
+        ]
+    )
+    model_path = tmp_path / "cycling.bioMod"
+    model_path.write_text("version 4\n")
+    monkeypatch.setattr(periodic_example, "_cache_root", lambda: tmp_path)
+
+    radau3 = periodic_example._periodic_ipopt_refinement_cache_path(
+        radau3_args, model_path
+    )
+    radau5 = periodic_example._periodic_ipopt_refinement_cache_path(
+        radau5_args, model_path
+    )
+
+    assert radau3 != radau5
+
+
 def test_reduced_mechanics_uses_a_distinct_periodic_ipopt_cache(tmp_path, monkeypatch):
     parser = periodic_example.build_argument_parser()
     full_args = parser.parse_args([])
@@ -11050,13 +11084,31 @@ def test_periodic_collocation_ipopt_profile_is_available():
     assert defaults["use_sx"] is True
 
     periodic_args = periodic_example.build_argument_parser().parse_args(
-        ["--periodic-ipopt-refinement-ode-solver", "collocation"]
+        [
+            "--periodic-ipopt-refinement-ode-solver",
+            "collocation",
+            "--periodic-ipopt-refinement-collocation-degree",
+            "5",
+            "--periodic-ipopt-refinement-collocation-method",
+            "radau",
+        ]
     )
     comparison_args = comparison_example.build_cli().parse_args(
-        ["--periodic-ipopt-refinement-ode-solver", "collocation"]
+        [
+            "--periodic-ipopt-refinement-ode-solver",
+            "collocation",
+            "--periodic-ipopt-refinement-collocation-degree",
+            "5",
+            "--periodic-ipopt-refinement-collocation-method",
+            "radau",
+        ]
     )
     assert periodic_args.periodic_ipopt_refinement_ode_solver == "collocation"
     assert comparison_args.periodic_ipopt_refinement_ode_solver == "collocation"
+    assert periodic_args.periodic_ipopt_refinement_collocation_degree == 5
+    assert comparison_args.periodic_ipopt_refinement_collocation_degree == 5
+    assert periodic_args.periodic_ipopt_refinement_collocation_method == "radau"
+    assert comparison_args.periodic_ipopt_refinement_collocation_method == "radau"
 
 
 def test_scientific_radau5_profile_is_fixed_and_shared_by_nlp_solvers(monkeypatch):

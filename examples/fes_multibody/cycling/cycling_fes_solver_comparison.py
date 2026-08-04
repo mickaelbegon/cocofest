@@ -142,6 +142,9 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "acados_ipopt_recovery_collocation_degree",
     "acados_ipopt_recovery_force_first_rho",
     "acados_initial_irk_rollout",
+    "periodic_ipopt_refinement_ode_solver",
+    "periodic_ipopt_refinement_collocation_degree",
+    "periodic_ipopt_refinement_collocation_method",
     "acados_reset_solver_before_solve",
     "acados_check_reuse_possible",
     "acados_code_reuse_tolerance",
@@ -3372,6 +3375,8 @@ def main(
     periodic_ipopt_refinement_iterations: int = 300,
     periodic_ipopt_refinement_use_sx: bool = True,
     periodic_ipopt_refinement_ode_solver: str = "target",
+    periodic_ipopt_refinement_collocation_degree: int | None = None,
+    periodic_ipopt_refinement_collocation_method: str | None = None,
     warmup_state_comparison_limit: int = 12,
     state_comparison_limit: int = 12,
     print_traces: bool = False,
@@ -3762,6 +3767,12 @@ def main(
     acados_args.acados_newton_iter = acados_newton_iter
     acados_args.periodic_ipopt_refinement_ode_solver = (
         periodic_ipopt_refinement_ode_solver
+    )
+    acados_args.periodic_ipopt_refinement_collocation_degree = (
+        periodic_ipopt_refinement_collocation_degree
+    )
+    acados_args.periodic_ipopt_refinement_collocation_method = (
+        periodic_ipopt_refinement_collocation_method
     )
     acados_args.acados_stationarity_tolerance = acados_stationarity_tolerance
     acados_args.acados_control_homotopy_keep_final_radius = (
@@ -5372,6 +5383,23 @@ def build_cli() -> argparse.ArgumentParser:
             "collocation is the robust periodic bridge."
         ),
     )
+    parser.add_argument(
+        "--periodic-ipopt-refinement-collocation-degree",
+        type=int,
+        default=None,
+        help=(
+            "Override the collocation degree used only by the periodic IPOPT "
+            "bridge before ACADOS."
+        ),
+    )
+    parser.add_argument(
+        "--periodic-ipopt-refinement-collocation-method",
+        default=None,
+        help=(
+            "Override the collocation method used only by the periodic IPOPT "
+            "bridge before ACADOS."
+        ),
+    )
     parser.add_argument("--state-comparison-limit", type=int, default=12)
     parser.add_argument("--warmup-state-comparison-limit", type=int, default=12)
     parser.add_argument("--print-traces", action="store_true")
@@ -5797,6 +5825,12 @@ if __name__ == "__main__":
         periodic_ipopt_refinement_use_sx=args.periodic_ipopt_refinement_use_sx,
         periodic_ipopt_refinement_ode_solver=(
             args.periodic_ipopt_refinement_ode_solver
+        ),
+        periodic_ipopt_refinement_collocation_degree=(
+            args.periodic_ipopt_refinement_collocation_degree
+        ),
+        periodic_ipopt_refinement_collocation_method=(
+            args.periodic_ipopt_refinement_collocation_method
         ),
         warmup_state_comparison_limit=args.warmup_state_comparison_limit,
         state_comparison_limit=args.state_comparison_limit,

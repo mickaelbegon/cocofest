@@ -2652,6 +2652,23 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--periodic-ipopt-refinement-collocation-degree",
+        type=int,
+        default=None,
+        help=(
+            "Override the collocation degree used only by the periodic IPOPT "
+            "bridge; the target transcription is unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--periodic-ipopt-refinement-collocation-method",
+        default=None,
+        help=(
+            "Override the collocation method used only by the periodic IPOPT "
+            "bridge; the target transcription is unchanged."
+        ),
+    )
+    parser.add_argument(
         "--periodic-fes-warmup-projection-weight",
         type=float,
         default=1.0,
@@ -3309,7 +3326,7 @@ def _warmup_cache_path(
 def _periodic_ipopt_refinement_cache_path(
     args: argparse.Namespace,
     model_path: Path,
-    cache_version: int = 5,
+    cache_version: int = 6,
 ) -> Path:
     repository_root = Path(__file__).resolve().parents[3]
     payload = {
@@ -3336,6 +3353,16 @@ def _periodic_ipopt_refinement_cache_path(
         "fatigue_warmstart_mode": args.acados_fatigue_warmstart_mode,
         "use_sx": args.periodic_ipopt_refinement_use_sx,
         "ode_solver": args.periodic_ipopt_refinement_ode_solver,
+        "bridge_collocation_degree": (
+            args.periodic_ipopt_refinement_collocation_degree
+            if args.periodic_ipopt_refinement_collocation_degree is not None
+            else args.collocation_degree
+        ),
+        "bridge_collocation_method": (
+            args.periodic_ipopt_refinement_collocation_method
+            if args.periodic_ipopt_refinement_collocation_method is not None
+            else args.collocation_method
+        ),
         "target_ode_solver": args.ode_solver,
         "target_rk_steps": args.rk_steps,
         "target_collocation_degree": args.collocation_degree,
@@ -15832,8 +15859,18 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 model_formulation=args.model_formulation,
                 refinement_ode_solver=(
                     OdeSolver.COLLOCATION(
-                        polynomial_degree=args.collocation_degree,
-                        method=args.collocation_method,
+                        polynomial_degree=(
+                            args.periodic_ipopt_refinement_collocation_degree
+                            if args.periodic_ipopt_refinement_collocation_degree
+                            is not None
+                            else args.collocation_degree
+                        ),
+                        method=(
+                            args.periodic_ipopt_refinement_collocation_method
+                            if args.periodic_ipopt_refinement_collocation_method
+                            is not None
+                            else args.collocation_method
+                        ),
                     )
                     if args.periodic_ipopt_refinement_ode_solver == "collocation"
                     else (
