@@ -6255,6 +6255,24 @@ def test_github_benchmark_compares_physical_threshold_not_solver_tolerance():
     assert [item["field"] for item in mismatches] == ["primal_feasibility_threshold"]
 
 
+def test_github_acados_hybrid_gate_guards_inter_node_cadence():
+    workflow = (
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "cycling_solver_benchmark_linux.yml"
+    ).read_text(encoding="utf-8")
+    hybrid_job = workflow.split("  acados-ipopt-hybrid:", maxsplit=1)[1].split(
+        "  prepare-acados-stack:", maxsplit=1
+    )[0]
+
+    assert "--acados-wheel-qdot-fast-bound-margin 2.55" in hybrid_job
+    assert (
+        ".mechanical_equivalence_audit.passes_physical_crank_velocity_bounds == true"
+        in hybrid_job
+    )
+
+
 def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     workflow = (
         Path(__file__).resolve().parents[2]

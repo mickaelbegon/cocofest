@@ -510,6 +510,7 @@ jobs:
             --acados-integrator-type IRK \
             --acados-sim-stages 4 \
             --acados-sim-steps 5 \
+            --acados-wheel-qdot-fast-bound-margin 2.55 \
             --acados-initial-irk-rollout \
             --acados-max-iter 100 \
             --acados-store-iterates \
@@ -526,6 +527,8 @@ jobs:
             .configurations.acados.mechanical_formulation == "reduced" and
             .results[0].success == true and
             .results[0].validated_cycles == 5 and
+            .results[0].mechanical_equivalence_audit.passes_tolerance == true and
+            .results[0].mechanical_equivalence_audit.passes_physical_crank_velocity_bounds == true and
             (.results[0].initial_acados_irk_rollout.applied == true or
              .results[0].initial_acados_irk_rollout.retained_collocation_seed == true) and
             .results[0].acados_ipopt_recovery.attempt_count >= 1 and
