@@ -78,7 +78,7 @@ def test_linux_32core_setup_tracks_workflow_solver_pins():
     assert "CMAKE_BUILD_PARALLEL_LEVEL=32" in setup
 
 
-def test_acados_madnlp_hybrid_reuses_the_shared_seed_physical_parameters():
+def test_acados_ipopt_hybrid_reuses_the_shared_seed_physical_parameters():
     """The hybrid consumer must represent the exact OCP certified by its seed."""
 
     workflow = (
@@ -87,7 +87,7 @@ def test_acados_madnlp_hybrid_reuses_the_shared_seed_physical_parameters():
         / "workflows"
         / "cycling_solver_benchmark_linux.yml"
     ).read_text(encoding="utf-8")
-    hybrid_job = workflow.split("\n  acados-madnlp-hybrid:", maxsplit=1)[1].split(
+    hybrid_job = workflow.split("\n  acados-ipopt-hybrid:", maxsplit=1)[1].split(
         "\n  prepare-acados-stack:", maxsplit=1
     )[0]
 
@@ -98,5 +98,8 @@ def test_acados_madnlp_hybrid_reuses_the_shared_seed_physical_parameters():
     assert '--crank-assistance "${{ inputs.crank_assistance_nm }}"' in hybrid_job
     assert '--first-node-wheel-q-slack 0' in hybrid_job
     assert '--terminal-wheel-q-slack "${{ inputs.terminal_wheel_q_slack }}"' in hybrid_job
+    assert "--acados-ipopt-recovery" in hybrid_job
+    assert "--madnlp-linear-solver" not in hybrid_job
+    assert "prepare-acados-stack" in hybrid_job
     assert "ACADOS_SOURCE_DIR:" not in hybrid_job
     assert "CONDA_PREFIX" in hybrid_job

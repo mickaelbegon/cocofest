@@ -66,26 +66,26 @@ checkpoint certifié et résout donc le **même RHO**. Cela élimine le faux mot
 « échec puis succès » observé avec MadNLP R3, où Bioptim avançait auparavant
 une solution non convergée avant le second essai.
 
-### Reprise hybride ACADOS → MadNLP (expérimentale)
+### Reprise hybride ACADOS → IPOPT (expérimentale)
 
-Le mode `--acados-madnlp-recovery` ne compare pas le full ACADOS historique à
-MadNLP reduced : cette comparaison est invalide car les deux formulations et
+Le mode `--acados-ipopt-recovery` ne compare pas le full ACADOS historique à
+IPOPT reduced : cette comparaison est invalide car les deux formulations et
 leurs trajectoires mécaniques diffèrent. Il est volontairement limité à
 ACADOS **reduced** et requiert `--retry-failed-rho-without-advance`.
 
 À la fin des retries ACADOS locaux, si le RHO reste non certifié, le programme
 copie l'état initial, les bornes mobiles et les cibles du **même** RHO dans un
-OCP SX MadNLP/Radau-5. MadNLP/MUMPS ne peut injecter son primal dans ACADOS
+OCP SX IPOPT/Radau-5. IPOPT/MUMPS ne peut injecter son primal dans ACADOS
 que s'il retourne `status=0` et passe l'audit indépendant de faisabilité. La
 mémoire SQP/HPIPM est alors réinitialisée et ACADOS résout une dernière fois ce
 même RHO. Seul ce dernier résultat ACADOS, s'il est certifié, peut avancer la
-fenêtre physique. Les artefacts enregistrent les temps MadNLP et les écarts
+fenêtre physique. Les artefacts enregistrent les temps IPOPT et les écarts
 PW (en µs) / états : ils mesurent la compatibilité, sans être un critère
 d'acceptation caché.
 
 Cette chaîne est une expérience de robustesse, pas encore un résultat de
-performance : elle attend une campagne Linux avec les deux runtimes dans le
-même environnement.
+performance : elle attend une campagne Linux avec les runtimes ACADOS/IPOPT
+dans le même environnement.
 
 Exemples de lancement manuel :
 
