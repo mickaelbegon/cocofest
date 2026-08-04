@@ -6316,6 +6316,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "refined_collocation_rhos:" in workflow
     assert "nlp_transfer_preparation:" in workflow
     assert "nlp_phase_one_screen_threshold:" in workflow
+    assert "nlp_phase_one_mode:" in workflow
     assert "collocation_diagnostic_rhos:" in workflow
     assert "Run IPOPT reduced Radau degree 5" in workflow
     assert "Run MadNLP MUMPS reduced Radau degree 5" in workflow
@@ -6633,8 +6634,10 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert 'dual_warm_start="${13:-auto}"' in benchmark_runner
     assert 'target_refinement="${14:-auto}"' in benchmark_runner
     assert 'nlp_transfer_preparation="${NLP_TRANSFER_PREPARATION:-none}"' in benchmark_runner
+    assert 'nlp_phase_one_mode="${NLP_PHASE_ONE_MODE:-mechanical}"' in benchmark_runner
     assert "--shared-transfer-full-dynamics-rollout" in benchmark_runner
     assert "--shared-transfer-phase-one" in benchmark_runner
+    assert '--acados-transfer-phase-one-mode "$nlp_phase_one_mode"' in benchmark_runner
     assert '--acados-transfer-phase-one-screen-threshold "$nlp_phase_one_screen_threshold"' in benchmark_runner
     assert 'trajectory_options=()' in benchmark_runner
     assert '[[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]' in benchmark_runner

@@ -29,6 +29,7 @@ trajectory_options=()
 solver_tolerance=1e-6
 nlp_transfer_preparation="${NLP_TRANSFER_PREPARATION:-none}"
 nlp_phase_one_screen_threshold="${NLP_PHASE_ONE_SCREEN_THRESHOLD:-0.001}"
+nlp_phase_one_mode="${NLP_PHASE_ONE_MODE:-mechanical}"
 
 if ! [[ "$collocation_degree" =~ ^[2-9]$ ]]; then
   echo "COLLOCATION_DEGREE must be an integer between 2 and 9, got '$collocation_degree'." >&2
@@ -49,6 +50,10 @@ esac
 case "$nlp_transfer_preparation" in
   none|rollout|phase-one|rollout-phase-one) ;;
   *) echo "NLP_TRANSFER_PREPARATION must be none, rollout, phase-one, or rollout-phase-one; got '$nlp_transfer_preparation'." >&2; exit 2 ;;
+esac
+case "$nlp_phase_one_mode" in
+  mechanical|all) ;;
+  *) echo "NLP_PHASE_ONE_MODE must be mechanical or all; got '$nlp_phase_one_mode'." >&2; exit 2 ;;
 esac
 
 if [[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]; then
@@ -179,7 +184,7 @@ if [[ "$solver" == "ipopt" || "$solver" == "madnlp" ]]; then
     phase-one|rollout-phase-one)
       solver_options+=(
         --shared-transfer-phase-one
-        --acados-transfer-phase-one-mode all
+        --acados-transfer-phase-one-mode "$nlp_phase_one_mode"
         --acados-transfer-phase-one-screen-threshold "$nlp_phase_one_screen_threshold"
       )
       ;;

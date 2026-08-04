@@ -109,6 +109,14 @@ on:
         required: true
         default: "0.001"
         type: string
+      nlp_phase_one_mode:
+        description: State blocks modified by NLP Phase I (mechanical preserves Ding states)
+        required: true
+        default: mechanical
+        type: choice
+        options:
+          - mechanical
+          - all
 
 permissions:
   actions: read
@@ -1859,6 +1867,7 @@ jobs:
       BIOPTIM_INTEGRATION_BRANCH: ${{ matrix.integration_branch }}
       NLP_TRANSFER_PREPARATION: ${{ inputs.nlp_transfer_preparation }}
       NLP_PHASE_ONE_SCREEN_THRESHOLD: ${{ inputs.nlp_phase_one_screen_threshold }}
+      NLP_PHASE_ONE_MODE: ${{ inputs.nlp_phase_one_mode }}
     defaults:
       run:
         shell: bash -el {0}

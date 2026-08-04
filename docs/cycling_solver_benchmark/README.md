@@ -105,6 +105,10 @@ Le workflow expose `nlp_transfer_preparation` :
 | `rollout-phase-one` | rollout, puis Phase I conditionnelle |
 
 Le seuil est donné par `nlp_phase_one_screen_threshold` (`10^-3` par défaut).
+Le mode `nlp_phase_one_mode=mechanical`, désormais utilisé par défaut dans le
+workflow, évalue et corrige seulement `q/qdot`; il préserve donc exactement le
+warm start des 20 états de Ding. Le mode expérimental `all` inclut aussi Ding
+dans le screen et dans la projection.
 Les artefacts enregistrent les défauts `q`, `qdot` et Ding avant chaque solve,
 le temps du rollout, le temps de Phase I et le temps effectif solveur plus
 préparation. Lorsqu'une préparation modifie la primale, les anciennes duales
@@ -120,6 +124,33 @@ converge cette fois en `57` itérations et `1.299 s`. L'échec antérieur au mê
 indice n'est donc pas reproductible sur le code corrigé et ne peut pas servir
 seul de preuve de fatigue ou de robustesse du fallback. Ces valeurs constituent
 la référence `none` de la prochaine ablation rollout/Phase I.
+
+Le [run 30903350035](https://github.com/mickaelbegon/cocofest/actions/runs/30903350035)
+teste ensuite la Phase I `all` sur les mêmes `145` RHO. Les deux solveurs
+convergent, mais la projection systématique des états de Ding est rejetée comme
+option de performance :
+
+| Solveur | Préparation | Itérations chaudes cumulées | Médiane solveur | Médiane solveur + préparation | Mur-à-mur |
+|---|---:|---:|---:|---:|---:|
+| IPOPT | `none` | 8 743 | 2,557 s | 2,557 s | 921,7 s |
+| IPOPT | Phase I `all` | 9 063 | 2,647 s | 2,997 s | 1 008,4 s |
+| MadNLP | `none` | 8 617 | 1,458 s | 1,458 s | 672,6 s |
+| MadNLP | Phase I `all` | 8 990 | 1,335 s | 1,580 s | 615,9 s |
+
+La baisse du temps solveur MadNLP n'est pas attribuée à la Phase I : le nombre
+d'itérations augmente de `4,3 %` et un pic de `344` itérations apparaît au RHO
+132, contre `70` dans le témoin. La variabilité des runners explique mieux le
+temps mur-à-mur inférieur. Pour IPOPT, tous les indicateurs se dégradent et le
+coût propre de préparation atteint `50,5 s` (`35,2 s` pour MadNLP).
+
+La Phase I `all` déplace aussi le bassin numérique : par rapport au témoin,
+l'objectif cumulé IPOPT augmente de `0,201 %` et celui de MadNLP diminue de
+`0,0013 %`. Elle ne peut donc pas être considérée comme une accélération à
+solution strictement équivalente. L'ablation suivante utilise `mechanical`
+avec le screen à `10^-3` : seuls les RHO dont le défaut mécanique le justifie
+sont projetés, sans modifier directement calcium, force ou fatigue. Le rollout
+complet n'est pas promu avant ce contrôle, car il réintègre lui aussi les états
+de Ding et risque le même changement de bassin.
 
 ### Reprise hybride ACADOS → IPOPT (expérimentale)
 
