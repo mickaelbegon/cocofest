@@ -4813,3 +4813,24 @@ localement. Le post-gate emploie désormais un chemin absolu, exige un fichier
 non vide et imprime le répertoire si cette invariance est à nouveau violée. La
 prochaine campagne passe directement à 300 RHO, puisque le solve numérique 150
 est déjà certifié.
+
+Le run 300 RHO
+[31420496210](https://github.com/mickaelbegon/cocofest/actions/runs/31420496210)
+certifie `300/300`, sans violation mécanique, et exporte le préfixe complet.
+Cette fois, cinq recoveries IPOPT sont injectés puis recertifiés par ACADOS :
+deux au RHO 5, puis un aux RHO 120, 183 et 286. Ils coûtent respectivement
+`140.75`, `86.71`, `139.88`, `11.34` et `13.51 s`, soit `392.2 s`. La médiane
+murale ACADOS chaude reste `0.174 s` et son P90 `0.402 s`, mais le coût après
+préparation atteint `1.90 s/RHO`. Le sous-seuil de la seconde n'est donc pas
+encore atteint recovery inclus.
+
+Ce résultat expose aussi une variabilité à expliquer : le run 150 ne récupère
+aucun RHO, alors que le run 300, sur le même problème nominal, récupère déjà le
+RHO 5. Deux recoveries longs atteignent 2 000 itérations tout en livrant
+une primale sous le seuil de faisabilité; une terminaison acceptable contrôlée
+ou une Phase I dédiée pourrait enlever environ `280.6 s`, à condition de garder
+la recertification ACADOS stricte. Enfin, le contrôle absolu du préfixe n'était
+pas la cause du rouge : `jq` et `ls` réussissent dans le log, puis le step
+produit le code `1` immédiatement après l'`exit 0` anticipé. Le job est restructuré en
+`if/else` afin d'atteindre normalement la fin du script; un smoke naturel de
+cinq RHO suffit à valider ce correctif d'infrastructure.

@@ -589,8 +589,7 @@ jobs:
               exit 1
             fi
             ls -lh "$reduced_prefix"
-            exit 0
-          fi
+          else
           jq -e '
             .configurations.acados.acados_ipopt_recovery == true and
             .configurations.acados.mechanical_formulation == "reduced" and
@@ -739,6 +738,7 @@ jobs:
                 .seed_injected == true and
                 .target_solver_reset == true)
           ' acados-ipopt-hybrid-results/full-result.json
+          fi
 
       - name: Upload the hybrid gate logs and result
         if: always()

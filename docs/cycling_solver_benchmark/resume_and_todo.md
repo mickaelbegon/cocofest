@@ -548,18 +548,31 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     médiane solveur et `0.140 s` en médiane murale; le préfixe certifié est
     exporté. Le rouge final est un faux négatif du post-gate sur le chemin du
     fichier, corrigé par un contrôle absolu et diagnostiqué.
-12. [CI à lancer] Étendre exactement ce cas naturel à 300 RHO. Conserver comme
-    outcomes recevables `300/300` ou un arrêt documenté après les deux
-    tentatives de recovery sur le même RHO.
-13. En alternative contrôlée, tester une Phase I de faisabilité qui peut
+12. [fait numériquement, run `31420496210`] La campagne atteint `300/300`,
+    avec cinq recoveries IPOPT aux RHO 5 (deux appels), 120, 183 et 286. Le
+    solve ACADOS reste sous la seconde, mais les recoveries portent le coût
+    après préparation à `1.90 s/RHO`. Le gate final est encore rouge à cause
+    de l'`exit 0` anticipé du shell Conda, après `jq` et `ls` réussis.
+13. [implémenté, smoke à lancer] Remplacer l'`exit 0` par une branche `if/else`
+    et laisser le shell terminer normalement. Vérifier sur cinq RHO sans
+    répéter le calcul 300 déjà certifié.
+14. Comparer le préfixe 1--150 des runs `31419405169` et `31420496210` : le
+    premier n'a aucun recovery, le second échoue déjà au RHO 5. Tester la
+    reproductibilité runner/CPU et les résidus/itérés initiaux avant de relier
+    cet écart à la fatigue.
+15. Réduire le coût du recovery : les sorties IPOPT faisables mais arrêtées à
+    2 000 itérations coûtent à elles seules environ `280.6 s`. Tester une
+    terminaison acceptable ou une Phase I de faisabilité bornée, sans relâcher
+    la certification ACADOS finale.
+16. En alternative contrôlée, tester une Phase I de faisabilité qui peut
     déplacer les états Ding dans une trust region stricte; auditer calcium,
     force, capacités et PW avant toute acceptation.
-14. Construire ensuite un prédicteur déterministe et bon marché des projections
+17. Construire ensuite un prédicteur déterministe et bon marché des projections
     utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
     de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-15. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+18. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
     des mêmes PW en mécanique reduced.
-16. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+19. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
     ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19

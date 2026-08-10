@@ -6446,6 +6446,7 @@ def test_github_acados_hybrid_gate_guards_inter_node_cadence():
         ".mechanical_equivalence_audit.passes_physical_crank_velocity_bounds == true"
         in hybrid_job
     )
+    assert "exit 0" not in hybrid_job
 
 
 def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():

@@ -362,7 +362,7 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
 | Reprise hybride ACADOS full/reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, avec un OCP IPOPT strictement isomorphe à la formulation cible | Reduced : gate `5/5`; full : gate `5/5`, IPOPT `status=0`, `inf_pr=2.09e-9`, recovery `87.98 s`, ACADOS chaud médian `0.466 s` et P90 `0.681 s` | Câblage full certifié au run `31414366905`; le recovery reste exceptionnel et doit maintenant être testé naturellement au RHO 141 |
-| Campagne naturelle ACADOS reduced + recovery IPOPT/Radau-5 | Mesurer le chemin de production sans provoquer artificiellement un échec au premier RHO | Run `31419405169` : `150/150`, aucun recovery, solveur chaud médian/P90 `0.127/0.128 s`, mur chaud `0.140/0.141 s`; préfixe de 150 cycles exporté | Le calcul est certifié; seul le post-gate CI a donné un faux rouge sur un test de chemin relatif, corrigé avant la campagne 300 RHO |
+| Campagne naturelle ACADOS reduced + recovery IPOPT/Radau-5 | Mesurer le chemin de production sans provoquer artificiellement un échec au premier RHO | `150/150` sans recovery au run `31419405169`; `300/300` avec 5 recoveries aux RHO 5, 120, 183 et 286 au run `31420496210`; médiane murale ACADOS `0.174 s` à 300 RHO | Le solve est robuste mais pas encore sous `1 s/RHO` recovery inclus : les 5 IPOPT coûtent `392.2 s`; variabilité du préfixe 1–150 à expliquer |
 | Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
 
 Les premiers dispatches
@@ -1142,6 +1142,30 @@ uniquement parce que le contrôle de présence relatif exécuté après le `jq`
 réussi a retourné `1`, bien que l'artefact de `927 KiB` soit présent. Cette
 incohérence de shell n'est pas reproduite localement; le contrôle utilise
 maintenant un chemin absolu et journalise le répertoire en cas d'échec.
+
+La campagne étendue,
+[31420496210](https://github.com/mickaelbegon/cocofest/actions/runs/31420496210),
+certifie ensuite `300/300` RHO et exporte un préfixe de `1.8 MiB`. Cinq appels
+IPOPT sont nécessaires : deux au RHO 5, puis un aux RHO 120, 183 et 286. Les
+premiers appels des RHO 5 et 120 atteignent la limite de 2 000 itérations tout
+en produisant une primale faisable; le second appel du RHO 5 converge en
+`86.7 s`, puis ceux des RHO 183 et 286 en `11.3 s` et `13.5 s`. Les recoveries
+cumulent `392.2 s`. La médiane/P90
+murale ACADOS chaude vaut `0.174/0.402 s`, mais le coût après préparation est
+`568.5 s`, soit `1.90 s/RHO`, et le mur-à-mur `782.2 s`, soit `2.61 s/RHO`.
+L'audit mécanique ne détecte toujours aucune violation de cadence. La capacité
+finale du biceps atteint `0.9003`; les autres muscles restent à `0.9800`,
+`0.9997` et `0.9820` pour deltoïde antérieur, deltoïde postérieur et triceps.
+
+Le préfixe 1–150 n'est pas parfaitement reproductible entre les deux runners :
+le run 150 n'appelle jamais IPOPT, tandis que le run 300 récupère déjà le RHO 5.
+Cela interdit d'attribuer les recoveries uniquement à la fatigue. Il faut
+maintenant comparer versions, CPU, résidus initiaux et chemin SQP avant de
+modifier la physiologie ou les tolérances. Le second faux rouge est indépendant
+du fichier : le `jq` et le `ls` absolu réussissent, puis le step termine à `1`
+immédiatement après l'`exit 0` anticipé. Le workflow utilise désormais un
+`if/else` et
+atteint normalement la fin du script.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
