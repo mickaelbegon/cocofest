@@ -1031,6 +1031,11 @@ arrêt à `80/100`. En revanche, la Phase I mécanique limitée aux RHO `19--36`
 atteint `100/100`. Les 18 projections sont acceptées et coûtent `8.479 s` au
 total, contre `48.230 s` pour les 99 appels proactifs. La médiane solveur reste
 `0.1121 s`; la médiane complète reste `0.1121 s` et son P90 vaut `0.7168 s`.
+Cette accélération ne change pas matériellement l'optimum : par rapport à la
+chaîne proactive, l'écart d'objectif sur 100 RHO vaut `2.16e-7`, l'écart d'AUC
+de fatigue `7.21e-10`, l'écart mécanique maximal `2.59e-7` et l'écart maximal
+de PW `1.57e-4 µs`. Les fatigues cumulées et capacités finales des quatre
+muscles sont identiques à la précision utile.
 
 La solution de production plausible est donc une **homotopie mécanique
 transitoire**, appliquée pendant le changement de bassin, tout en conservant la

@@ -4670,3 +4670,10 @@ et P90 complet `0.7168 s`. À titre apparié, la stratégie proactive `1--99`
 coûtait `48.230 s` de Phase I. La prochaine expérience doit donc bisecter la
 borne supérieure 36 tout en gardant le début fixé à 19 et la capsule native
 persistante.
+
+Le contrôle des trajectoires exclut un gain artificiel par changement
+d'optimum. Entre la séquence sélective et la chaîne proactive, les écarts à 100
+RHO sont : objectif `2.16e-7`, AUC `7.21e-10`, mécanique maximale `2.59e-7` et
+PW maximale `1.57e-4 µs`. Les quatre fatigues musculaires cumulées concordent
+également. La séquence sélective reproduit donc, à la précision numérique, le
+même chemin physique avec moins de projections.
