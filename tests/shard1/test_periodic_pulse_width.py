@@ -910,6 +910,11 @@ def test_prepared_rho_checkpoint_cli_parses_ordered_milestones():
             ["--rho-prepared-checkpoint-windows", "35,17"]
         )
 
+    selective_args = periodic_example.build_argument_parser().parse_args(
+        ["--acados-transfer-phase-one-target-rhos", "19,20,36"]
+    )
+    assert selective_args.acados_transfer_phase_one_target_rhos == (19, 20, 36)
+
 
 def test_assisted_hot_start_can_preserve_an_exact_prepared_primal():
     args = periodic_example.build_argument_parser().parse_args(
@@ -6460,6 +6465,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "--rho-prepared-checkpoint-windows 17,35,80" in workflow
     assert "--common-initial-solution-recenter-first-node-bounds" in workflow
     assert "--disable-full-dynamics-phase-one" in workflow
+    assert "--acados-transfer-phase-one-target-rhos 19" in workflow
+    assert "phase-one-mechanical-target-19-36" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2" in workflow
@@ -11734,6 +11741,26 @@ def test_transfer_phase_one_only_runs_from_a_completed_rho_callback():
             enabled=True,
         )
         is False
+    )
+    assert (
+        periodic_example._should_apply_transfer_phase_one(
+            18,
+            continue_solving=True,
+            previous_solution=seed_solution,
+            enabled=True,
+            target_rhos=(20,),
+        )
+        is False
+    )
+    assert (
+        periodic_example._should_apply_transfer_phase_one(
+            18,
+            continue_solving=True,
+            previous_solution=seed_solution,
+            enabled=True,
+            target_rhos=(19,),
+        )
+        is True
     )
 
 

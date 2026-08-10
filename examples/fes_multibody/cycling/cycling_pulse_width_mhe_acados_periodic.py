@@ -1827,6 +1827,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--acados-transfer-phase-one-target-rhos",
+        type=parse_positive_window_indices,
+        default=(),
+        help=(
+            "Optional increasing list of one-based target RHO indices on which "
+            "to run transfer Phase I. Empty means every transferred RHO."
+        ),
+    )
+    parser.add_argument(
         "--acados-transfer-phase-one-screen-threshold",
         type=float,
         default=None,
@@ -14479,11 +14488,17 @@ def _should_apply_transfer_phase_one(
     continue_solving: bool,
     previous_solution,
     enabled: bool,
+    target_rhos: tuple[int, ...] = (),
 ) -> bool:
     """Return whether the post-window callback should repair the next RHO guess."""
 
+    target_rho = cycle_idx + 1
     return bool(
-        cycle_idx > 0 and continue_solving and previous_solution is not None and enabled
+        cycle_idx > 0
+        and continue_solving
+        and previous_solution is not None
+        and enabled
+        and (not target_rhos or target_rho in target_rhos)
     )
 
 
@@ -17727,6 +17742,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             continue_solving=continue_solving,
             previous_solution=_sol,
             enabled=args.acados_transfer_phase_one,
+            target_rhos=tuple(args.acados_transfer_phase_one_target_rhos),
         ):
             transfer_phase_one_blocks = (
                 ("q", "qdot")

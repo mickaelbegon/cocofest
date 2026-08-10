@@ -172,6 +172,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "acados_transfer_phase_one",
     "acados_transfer_phase_one_mode",
     "acados_transfer_phase_one_lookback_nodes",
+    "acados_transfer_phase_one_target_rhos",
     "acados_transfer_phase_one_screen_threshold",
     "acados_transfer_phase_one_proximity_weight",
     "acados_transfer_phase_one_defect_weight",
@@ -3422,6 +3423,7 @@ def main(
     acados_transfer_phase_one: bool = False,
     acados_transfer_phase_one_mode: str = "all",
     acados_transfer_phase_one_lookback_nodes: int | None = None,
+    acados_transfer_phase_one_target_rhos: tuple[int, ...] = (),
     acados_transfer_phase_one_screen_threshold: float | None = None,
     acados_cyclical_transfer_mode: str = "extrapolate",
     acados_transfer_phase_one_proximity_weight: float = 1.0,
@@ -4022,6 +4024,9 @@ def main(
         )
         solver_args.acados_transfer_phase_one_lookback_nodes = (
             acados_transfer_phase_one_lookback_nodes
+        )
+        solver_args.acados_transfer_phase_one_target_rhos = tuple(
+            acados_transfer_phase_one_target_rhos
         )
         solver_args.acados_transfer_phase_one_screen_threshold = (
             acados_transfer_phase_one_screen_threshold
@@ -4791,6 +4796,15 @@ def build_cli() -> argparse.ArgumentParser:
         "--acados-transfer-phase-one-lookback-nodes",
         type=int,
         default=None,
+    )
+    parser.add_argument(
+        "--acados-transfer-phase-one-target-rhos",
+        type=parse_positive_window_indices,
+        default=(),
+        help=(
+            "Optional one-based target RHO indices on which transfer Phase I "
+            "is allowed to run."
+        ),
     )
     parser.add_argument(
         "--acados-transfer-phase-one-screen-threshold",
@@ -5957,6 +5971,9 @@ if __name__ == "__main__":
         acados_transfer_phase_one_mode=args.acados_transfer_phase_one_mode,
         acados_transfer_phase_one_lookback_nodes=(
             args.acados_transfer_phase_one_lookback_nodes
+        ),
+        acados_transfer_phase_one_target_rhos=(
+            args.acados_transfer_phase_one_target_rhos
         ),
         acados_transfer_phase_one_screen_threshold=(
             args.acados_transfer_phase_one_screen_threshold
