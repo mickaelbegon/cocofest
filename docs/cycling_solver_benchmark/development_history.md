@@ -4721,8 +4721,8 @@ deux trajectoires à 140 RHO diffèrent au maximum de `0.00239 µs` sur les PW e
 de `1.52e-6` sur la mécanique; l'objectif diffère de `1.27e-5` et l'AUC de
 `3.77e-8`. La perte de convergence est donc commune au bassin atteint et ne se
 corrige plus en projetant uniquement `q/qdot`. La prochaine intégration doit
-étendre le recovery IPOPT/Radau-5, actuellement limité à la mécanique reduced,
-au problème full, en gelant exactement angle terminal, fatigue et bornes du RHO
+utiliser le recovery IPOPT/Radau-5 désormais étendu au problème full, en gelant
+exactement angle terminal, fatigue et bornes du RHO
 141 puis en exigeant une nouvelle certification ACADOS avant d'avancer.
 
 L'extension full conserve ce contrat. Le constructeur Radau réutilise le même
@@ -4733,3 +4733,15 @@ IPOPT diffèrent de celles de l'OCP ACADOS. Les diagnostics de recovery exporten
 maintenant `mechanical_formulation` et cet audit. Le gate `acados_hybrid`
 exécute reduced puis full sur la même machine et force un recovery au premier
 RHO; le test naturel au RHO 141 ne sera lancé qu'après ce smoke.
+
+Le premier smoke full
+[31405588817](https://github.com/mickaelbegon/cocofest/actions/runs/31405588817)
+a validé l'audit structurel mais pas la résolution : le seed `common-full`
+avait déjà `0.63 rad` d'erreur de contact et `5.28 rad/s` de résidu tangent.
+ACADOS l'a rejeté, puis IPOPT/Radau-5 a atteint 2 000 itérations avec
+`inf_pr ≈ 382` lors des deux essais. Ce n'est pas un défaut du mapping de
+recovery. Le gate corrigé fabrique d'abord, hors mesure online, une trajectoire
+full native certifiée avec le bridge reduced-to-full éprouvé. Lors de
+l'interruption artificielle, IPOPT reçoit explicitement la solution cible
+certifiée (`seed_source=certified_target_solution`), tandis qu'un échec naturel
+continue d'utiliser le primal préparé du RHO gelé.

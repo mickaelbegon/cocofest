@@ -6490,7 +6490,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "inputs.cycles == 'acados_lazy_recovery'" in workflow
     assert "ACADOS_LAZY_RECOVERY_ONLY" in workflow
     assert "ACADOS full/reduced — IPOPT/Radau-5 recovery wiring" in workflow
-    assert "--common-initial-solution benchmark-seed/common-full.npz" in workflow
+    assert "full-reference/native-full-seed.npz" in workflow
+    assert '.seed_source == "certified_target_solution"' in workflow
     assert '.mechanical_formulation == "full"' in workflow
     assert ".structure.compatible == true" in workflow
     assert "--acados-failed-rho-phase-one-recovery" in workflow

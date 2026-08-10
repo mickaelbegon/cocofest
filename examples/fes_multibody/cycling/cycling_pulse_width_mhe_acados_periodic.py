@@ -13670,6 +13670,7 @@ def run_periodic_ipopt_recovery(
     failed_target_solution,
     target_solver: str,
     mechanical_formulation: str,
+    seed_source: str = "prepared_target_rho_primal",
     echo: bool = False,
 ) -> tuple[object | None, dict[str, object]]:
     """Solve one frozen RHO with IPOPT and inject a certified target-solver seed.
@@ -13689,6 +13690,7 @@ def run_periodic_ipopt_recovery(
         "mechanical_formulation": mechanical_formulation,
         "transcription": "collocation_radau",
         "max_iterations": int(max_iterations),
+        "seed_source": seed_source,
         "accepted": False,
         "seed_injected": False,
         "structure": deepcopy(
@@ -17053,6 +17055,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         snapshot_completed_window(self, solution)
         feasibility = getattr(solution, "_cocofest_feasibility_summary", {})
         certified = _rho_solution_is_certified(solution.status, feasibility)
+        target_solution_was_certified = certified
         forced_recovery = bool(
             args.acados_ipopt_recovery_force_first_rho
             and self.total_optimization_run == 0
@@ -17181,6 +17184,25 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 _copy_periodic_runtime_settings(self, ipopt_recovery_nmpc)
                 _copy_initial_guesses_and_bounds(self, ipopt_recovery_nmpc)
                 _copy_objective_targets(self, ipopt_recovery_nmpc)
+                recovery_seed_source = "prepared_target_rho_primal"
+                if forced_recovery and target_solution_was_certified:
+                    # The deterministic CI gate deliberately interrupts a
+                    # certified target solve. Seed IPOPT from that certified
+                    # physical trajectory, rather than from the older primal
+                    # that happened to initialize the target solver. This
+                    # keeps the artificial gate representative of recovery
+                    # wiring without asking IPOPT to repair an unrelated,
+                    # known-bad reduced-to-full bridge.
+                    apply_solution_directly_to_periodic_nmpc_initial_guess(
+                        ipopt_recovery_nmpc, solution
+                    )
+                    ipopt_recovery_nmpc._correct_init_guess_to_fit_bounds(
+                        corrected_input="states"
+                    )
+                    ipopt_recovery_nmpc._correct_init_guess_to_fit_bounds(
+                        corrected_input="controls"
+                    )
+                    recovery_seed_source = "certified_target_solution"
                 _, recovery_summary = run_periodic_ipopt_recovery(
                     ipopt_recovery_nmpc,
                     self,
@@ -17190,6 +17212,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     failed_target_solution=solution,
                     target_solver=args.solver,
                     mechanical_formulation=args.mechanical_formulation,
+                    seed_source=recovery_seed_source,
                     echo=echo,
                 )
                 recovery_summary.update(

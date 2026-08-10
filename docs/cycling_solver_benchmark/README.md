@@ -222,10 +222,12 @@ sur l'efficacité face à un échec naturel.
 
 ### Reprise hybride ACADOS → IPOPT (expérimentale)
 
-Le mode `--acados-ipopt-recovery` ne compare pas le full ACADOS historique à
-IPOPT reduced : cette comparaison est invalide car les deux formulations et
-leurs trajectoires mécaniques diffèrent. Il est volontairement limité à
-ACADOS **reduced** et requiert `--retry-failed-rho-without-advance`.
+Le mode `--acados-ipopt-recovery` accepte maintenant ACADOS **full** et
+**reduced**, mais ne mélange jamais les formulations : un échec full construit
+un OCP IPOPT full et un échec reduced construit un OCP IPOPT reduced. L'audit
+vérifie avant toute injection les clés et dimensions physiques des états,
+contrôles et bornes. Le mode requiert
+`--retry-failed-rho-without-advance`.
 
 À la fin des retries ACADOS locaux, si le RHO reste non certifié, le programme
 copie l'état initial, les bornes mobiles et les cibles du **même** RHO dans un
@@ -240,9 +242,17 @@ fenêtre physique. Les artefacts enregistrent les temps IPOPT et les écarts PW
 (en µs) / états : ils mesurent la compatibilité, sans être un critère
 d'acceptation caché.
 
-Le gate Linux prépare maintenant le seed avec un raffinement IPOPT/Radau-5 en
-SX, puis le propage une fois avec la carte IRK générée par ACADOS avant le
-premier SQP. Ce choix est imposé par la version épinglée de Bioptim :
+Le gate Linux reduced prépare le seed avec un raffinement IPOPT/Radau-5 en SX,
+puis le propage une fois avec la carte IRK générée par ACADOS avant le premier
+SQP. Le gate full construit d'abord une solution ACADOS full certifiée avec le
+bridge reduced-to-full déjà validé, puis force le chemin de recovery depuis
+cette trajectoire native. Ce choix évite de confondre la validation du câblage
+avec la réparation du seed générique `common-full`, dont le run
+[31405588817](https://github.com/mickaelbegon/cocofest/actions/runs/31405588817)
+a mesuré une erreur de contact de `0.63 rad` et un résidu tangent de
+`5.28 rad/s`. IPOPT a logiquement rejeté ce seed après 2 000 itérations
+(`inf_pr ≈ 382`); la structure full était néanmoins compatible. Ce choix de
+transcription est aussi imposé par la version épinglée de Bioptim :
 `use_sx=True` et `OdeSolver.IRK` ne sont pas encore compatibles. Il ne faut
 donc pas interpréter ce raffinement comme une résolution IPOPT/IRK : seule la
 projection suivante est une intégration IRK native d'ACADOS.
@@ -329,7 +339,7 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Après un échec, aucun shift ni transfert du primal; deux essais sur le même RHO | L'ancien loop Bioptim avançait parfois une solution non convergée, créant un faux motif « échec puis succès » | Le préfixe d'endurance ne peut plus être artificiellement prolongé après une non-convergence | Correctif `ae42595`; une première CI a révélé un relais CLI manquant, corrigé avant la relance |
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
-| Reprise hybride ACADOS reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, sans mélanger les dynamiques full et reduced | Gate Linux `5/5`; ACADOS chaud médian `0.246 s`, P90 `0.683 s`; garde rapide `2.55` supprime la violation inter-nœuds de `0.382 rad/s` | Trois recoveries IPOPT portent le mur-à-mur à `628.3 s`; validation courte, campagne 30 RHO encore requise |
+| Reprise hybride ACADOS full/reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, avec un OCP IPOPT strictement isomorphe à la formulation cible | Reduced : gate Linux `5/5`, ACADOS chaud médian `0.246 s`, P90 `0.683 s`; full : identité structurelle validée, seed générique rejeté car physiquement incohérent | Le gate full utilise désormais un seed ACADOS natif certifié; sa certification CI puis le test naturel au RHO 141 restent requis |
 | Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
 
 Les premiers dispatches
