@@ -1040,10 +1040,12 @@ muscles sont identiques à la précision utile.
 La solution de production plausible est donc une **homotopie mécanique
 transitoire**, appliquée pendant le changement de bassin, tout en conservant la
 même capsule ACADOS compilée. La fenêtre `19--36` est une borne supérieure
-certifiée, pas encore un optimum : une bissection de sa borne supérieure doit
-identifier la plus courte séquence robuste. L'export/replay natif complet des
-variables HPIPM reste utile pour expliquer le replay isolé, mais n'est pas
-requis pour ce chemin de production.
+certifiée, pas encore un optimum. Le
+[run 31396677025](https://github.com/mickaelbegon/cocofest/actions/runs/31396677025)
+resserre sa borne minimale : `19--27` échoue au RHO 86 et `19--31` au RHO 87.
+La prochaine bissection teste donc `19--33` et `19--35`. L'export/replay natif
+complet des variables HPIPM reste utile pour expliquer le replay isolé, mais
+n'est pas requis pour ce chemin de production.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,

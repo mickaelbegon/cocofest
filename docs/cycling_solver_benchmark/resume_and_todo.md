@@ -514,14 +514,17 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
    identiques : l'état interne ACADOS/HPIPM contribue au succès en chaîne.
 4. [fait, run `31394895014`] Phase I au seul RHO 19 échoue encore au RHO 81;
    la séquence 19--36 atteint `100/100` avec 18 projections (`8.479 s`).
-5. [CI préparée] Bisecter la borne supérieure de la fenêtre certifiée, en
-   testant d'abord `19--27` et `19--31`, sans recréer la capsule ACADOS.
-6. Construire ensuite un prédicteur déterministe et bon marché des projections
+5. [fait, run `31396677025`] `19--27` valide 85 RHO puis échoue au 86;
+   `19--31` valide 86 RHO puis échoue au 87. La borne minimale est dans
+   `32--36`.
+6. [CI préparée] Tester `19--33` et `19--35` contre le témoin certifié
+   `19--36`. Le mode CI ne relance plus les ablations déjà conclues.
+7. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-7. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+8. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
-8. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+9. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19

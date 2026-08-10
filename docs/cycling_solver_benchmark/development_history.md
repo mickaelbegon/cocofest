@@ -4677,3 +4677,11 @@ RHO sont : objectif `2.16e-7`, AUC `7.21e-10`, mécanique maximale `2.59e-7` et
 PW maximale `1.57e-4 µs`. Les quatre fatigues musculaires cumulées concordent
 également. La séquence sélective reproduit donc, à la précision numérique, le
 même chemin physique avec moins de projections.
+
+Le run de bissection
+[31396677025](https://github.com/mickaelbegon/cocofest/actions/runs/31396677025)
+montre que `19--27` valide 85 RHO puis échoue au RHO 86, tandis que `19--31`
+valide 86 RHO puis échoue au RHO 87. Leurs 9 et 13 projections coûtent
+respectivement `5.452 s` et `7.927 s`. Le témoin `19--36` reste `100/100`.
+La borne supérieure minimale se trouve donc dans `32--36`; la campagne
+suivante compare `19--33`, `19--35` et le témoin `19--36` seulement.

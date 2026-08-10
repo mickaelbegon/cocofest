@@ -6468,6 +6468,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "--acados-transfer-phase-one-target-rhos 19" in workflow
     assert "phase-one-mechanical-target-19-27" in workflow
     assert "phase-one-mechanical-target-19-31" in workflow
+    assert "phase-one-mechanical-target-19-33" in workflow
+    assert "phase-one-mechanical-target-19-35" in workflow
     assert "phase-one-mechanical-target-19-36" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
