@@ -4943,3 +4943,17 @@ antérieur. Le setup pré-solve vaut `42.15 s`; la boucle RHO `72.46 s`, soit
 d'orchestration Bioptim. Le test CI initial avait un dénominateur erroné dans
 son attendu (`1.25` au lieu de `1.25/3` pour trois cycles validés); le calcul de
 production n'était pas en cause.
+
+Une analyse croisée des artefacts `31380186719` et `31428024125` compare
+ensuite les contrôles reduced sur leur préfixe commun de 145 RHO. MadNLP et
+IPOPT sélectionnent des patrons proches (corrélations PW `0.953` au biceps et
+`0.922` au triceps); MadNLP réduit la somme online de `530.46` à `225.69 s`,
+avec une AUC de fatigue supérieure de `1.02 %`. La chaîne ACADOS hybride ne
+déclenche aucun fallback avant 145 et cumule seulement `21.02 s`, mais choisit
+un autre patron biceps (`MAE 40.14 µs`, corrélation `-0.052`) et donne une AUC
+de `9.3835`, contre `17.1323` pour IPOPT. Ce gain apparent de fatigue n'est pas
+encore attribué au solveur : l'artefact ACADOS part de capacités unitaires,
+alors que le seed commun IPOPT/MadNLP contient déjà un transitoire de fatigue,
+notamment `A/A_scale=0.98463` au deltoïde antérieur. Les figures et le résumé
+machine-readable sont générés par `generate_reduced_solver_comparison.py`;
+la prochaine campagne doit imposer le même état initial aux trois backends.

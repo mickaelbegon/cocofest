@@ -1305,6 +1305,86 @@ ACADOS de référence de production, il faut rejouer les mêmes PW avec un DOP85
 full réinitialisé à chaque RHO et dans la mécanique reduced, puis comparer coût,
 AUC et fatigue des quatre muscles.
 
+### 6.3 Comparaison des contrôles reduced sur 145 RHO
+
+Une première comparaison post-traitée met en regard le plus long préfixe
+commun actuellement disponible : `145` RHO, `30` stimulations par cycle,
+aucune assistance externe, mécanique reduced, force passive active, calcium
+`exact_exponential_periodic_node` et PW dans
+`[pd0 = 131.405 µs, 600 µs]`. IPOPT/MUMPS et MadNLP/MUMPS utilisent
+SX/Radau-5; ACADOS utilise le profil SQP-IRK `4 stages × 5 steps`. Le nom
+« ACADOS + IPOPT » désigne la chaîne de production hybride, mais aucun fallback
+n'est déclenché dans les 145 premiers RHO de ce run. Le premier fallback
+accepté se trouve au RHO 234.
+
+Les artefacts sources sont ceux des runs
+[31380186719](https://github.com/mickaelbegon/cocofest/actions/runs/31380186719)
+pour IPOPT/MadNLP et
+[31428024125](https://github.com/mickaelbegon/cocofest/actions/runs/31428024125)
+pour ACADOS + IPOPT. Les temps ci-dessous sont les sommes des champs
+`wall_time_s` des 145 fenêtres : ils excluent la construction initiale, la
+préparation du seed et le post-traitement, conformément à la question du temps
+de résolution une fois l'OCP construit.
+
+| Méthode | RHO certifiés | Médiane / P90 solveur chaud | Temps online cumulé | AUC fatigue | Coût fatigue exécuté | Min. capacité finale |
+|---|---:|---:|---:|---:|---:|---:|
+| IPOPT R5 | 145/145 | `2.647 / 3.873 s` | `530.46 s` | `17.1323` | `11 522.5` | `0.86207` |
+| MadNLP R5 | 145/145 | `1.498 / 1.738 s` | `225.69 s` | `17.3065` | `11 830.5` | `0.86072` |
+| ACADOS + IPOPT | 145/145 | `0.133 / 0.134 s` | `21.02 s` | `9.3835` | `4 317.8` | `0.91888` |
+
+La fatigue finale et son accumulation ne se répartissent pas uniformément. Le
+tableau donne `capacité finale A/A_scale / AUC de fatigue` :
+
+| Muscle | IPOPT R5 | MadNLP R5 | ACADOS + IPOPT |
+|---|---:|---:|---:|
+| Biceps | `0.86207 / 10.9373` | `0.86072 / 11.0916` | `0.91888 / 6.8584` |
+| Triceps | `0.97256 / 2.5135` | `0.97245 / 2.5251` | `0.98288 / 1.6916` |
+| Deltoïde antérieur | `0.97570 / 2.4099` | `0.97548 / 2.4271` | `0.99034 / 0.8113` |
+| Deltoïde postérieur | `0.99287 / 1.2716` | `0.99300 / 1.2627` | `0.99978 / 0.0222` |
+
+Sur ce préfixe, MadNLP est `1.77×` plus rapide qu'IPOPT en médiane chaude et
+`2.35×` sur la somme online. Leurs solutions sont proches : par rapport à
+IPOPT, MadNLP augmente l'AUC de `1.02 %` et le coût exécuté de `2.67 %`.
+Les PW ont une corrélation de `0.953` pour le biceps et `0.922` pour le
+triceps; les MAE correspondantes valent `4.35 µs` et `1.45 µs`. Elles ne sont
+cependant pas identiques : un changement isolé d'ensemble actif atteint
+`468.6 µs` au biceps.
+
+ACADOS est `25.2×` plus rapide qu'IPOPT et `10.7×` plus rapide que MadNLP sur
+la somme online de ces 145 fenêtres. Il produit aussi une AUC `45.2 %` plus
+faible qu'IPOPT et conserve une capacité biceps finale de `0.91888`, contre
+`0.86207`. Ce résultat ne permet **pas encore** d'affirmer qu'ACADOS trouve un
+meilleur optimum du même problème. Ses PW biceps sont très différentes de
+celles d'IPOPT (`MAE = 40.14 µs`, corrélation `-0.052`) et, surtout, les
+trajectoires historiques n'ont pas exactement le même état musculaire initial :
+ACADOS part de `A/A_scale = 1` pour les quatre muscles, tandis que le seed
+IPOPT/MadNLP vaut initialement `0.99663` au biceps, `0.98463` au deltoïde
+antérieur, `0.99169` au deltoïde postérieur et `0.99992` au triceps. Une partie
+de l'écart de fatigue est donc antérieure aux décisions comparées. Les
+transcriptions Radau-5 et IRK sont également différentes.
+
+![Profils de PW aux RHO 1, 30, 100 et 145](figures/reduced_solver_comparison_145/reduced_solver_pw_profiles_145.png)
+
+![Écarts de PW par rapport à IPOPT](figures/reduced_solver_comparison_145/reduced_solver_pw_differences_145.png)
+
+![Capacités musculaires et fatigue finale](figures/reduced_solver_comparison_145/reduced_solver_fatigue_145.png)
+
+![Temps de calcul online](figures/reduced_solver_comparison_145/reduced_solver_timing_145.png)
+
+Le post-traitement est reproductible avec
+[`generate_reduced_solver_comparison.py`](generate_reduced_solver_comparison.py).
+Il lit directement les JSON/NPZ des artefacts, réévalue l'intégrale de fatigue
+sur tous les points exportés de chaque transcription et écrit les figures ainsi
+que le résumé numérique
+[`reduced_solver_comparison_145.json`](figures/reduced_solver_comparison_145/reduced_solver_comparison_145.json).
+
+La prochaine campagne décisive doit imposer le **même état initial numérique**
+aux trois solveurs, vérifier que la cible terminale et toutes les bornes
+mobiles sérialisées sont identiques, puis rejouer les PW par le même
+intégrateur indépendant reduced avec remise sur la variété à chaque RHO. Tant
+que ce gate apparié n'est pas fait, le gain de temps ACADOS est démontré, mais
+son gain apparent de fatigue reste une hypothèse de branche optimale.
+
 ## 7. Reproductibilité
 
 Le workflow de benchmark est

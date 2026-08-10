@@ -1,0 +1,462 @@
+{
+  "cycles_compared": 145,
+  "pairwise_control_differences": {
+    "ACADOS + IPOPT vs IPOPT R5": {
+      "Biceps": {
+        "correlation": -0.052437381436467013,
+        "mae_us": 40.14150050173819,
+        "maximum_absolute_error_us": 468.59477013343906,
+        "rmse_us": 126.80736537803148
+      },
+      "Delt_ant": {
+        "correlation": -0.01642336554818132,
+        "mae_us": 0.6259825913656057,
+        "maximum_absolute_error_us": 95.68456291565565,
+        "rmse_us": 4.261605731673702
+      },
+      "Delt_post": {
+        "correlation": 0.24490951562868707,
+        "mae_us": 0.00960603651287285,
+        "maximum_absolute_error_us": 0.8008229870164598,
+        "rmse_us": 0.04401657616943218
+      },
+      "Triceps": {
+        "correlation": 0.18953870112164753,
+        "mae_us": 9.62055352110423,
+        "maximum_absolute_error_us": 101.06745335612138,
+        "rmse_us": 23.49847009896774
+      }
+    },
+    "ACADOS + IPOPT vs MadNLP R5": {
+      "Biceps": {
+        "correlation": -0.0527457764862347,
+        "mae_us": 40.686028353193485,
+        "maximum_absolute_error_us": 468.5950064558609,
+        "rmse_us": 128.05911446310316
+      },
+      "Delt_ant": {
+        "correlation": -0.016720545068162274,
+        "mae_us": 0.6319571573768026,
+        "maximum_absolute_error_us": 93.04928694455867,
+        "rmse_us": 4.257574020578834
+      },
+      "Delt_post": {
+        "correlation": 0.2443135459239676,
+        "mae_us": 0.008091443941867385,
+        "maximum_absolute_error_us": 0.8241886318212437,
+        "rmse_us": 0.045917543113906015
+      },
+      "Triceps": {
+        "correlation": 0.17375138207236804,
+        "mae_us": 9.86648925023516,
+        "maximum_absolute_error_us": 101.06758287387004,
+        "rmse_us": 23.831844698236882
+      }
+    },
+    "MadNLP R5 vs IPOPT R5": {
+      "Biceps": {
+        "correlation": 0.9526703966677443,
+        "mae_us": 4.347547434201945,
+        "maximum_absolute_error_us": 468.5935198907513,
+        "rmse_us": 32.91468420844529
+      },
+      "Delt_ant": {
+        "correlation": 0.4340886895909947,
+        "mae_us": 0.28531274605023454,
+        "maximum_absolute_error_us": 84.41893212381262,
+        "rmse_us": 4.225448374400173
+      },
+      "Delt_post": {
+        "correlation": 0.8434910109038986,
+        "mae_us": 0.004403547219222528,
+        "maximum_absolute_error_us": 0.09399766370151497,
+        "rmse_us": 0.012267489585886008
+      },
+      "Triceps": {
+        "correlation": 0.9220888279456048,
+        "mae_us": 1.4525756221071904,
+        "maximum_absolute_error_us": 76.15191310675326,
+        "rmse_us": 8.023055561255566
+      }
+    }
+  },
+  "pulse_width_bounds_us": [
+    131.405,
+    600.0
+  ],
+  "solvers": {
+    "ACADOS + IPOPT": {
+      "control_summary": {
+        "Biceps": {
+          "fraction_at_lower_bound": 0.9335632183908046,
+          "fraction_at_upper_bound": 0.013793103448275862,
+          "maximum_us": 599.9998619809453,
+          "mean_us": 144.08301113084386,
+          "minimum_us": 131.4050003901399,
+          "standard_deviation_us": 62.3348848399301
+        },
+        "Delt_ant": {
+          "fraction_at_lower_bound": 0.9662068965517241,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 141.41790046758405,
+          "mean_us": 131.67482194541762,
+          "minimum_us": 131.4050001942438,
+          "standard_deviation_us": 1.4722199330458343
+        },
+        "Delt_post": {
+          "fraction_at_lower_bound": 0.9363218390804597,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 132.22951725599748,
+          "mean_us": 131.4131386779746,
+          "minimum_us": 131.40500003169515,
+          "standard_deviation_us": 0.04523680171255447
+        },
+        "Triceps": {
+          "fraction_at_lower_bound": 0.8648275862068966,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 232.4725591857891,
+          "mean_us": 136.91097936309123,
+          "minimum_us": 131.40500014254738,
+          "standard_deviation_us": 16.054725019742808
+        }
+      },
+      "fatigue": {
+        "executed_fatigue_objective": 4317.7847603,
+        "fatigue_auc_cycles": 9.383523841043035,
+        "min_final_capacity_ratio": 0.9188849899290068,
+        "per_muscle": {
+          "Biceps": {
+            "executed_fatigue_objective": 4030.976836118251,
+            "fatigue_auc_cycles": 6.858359924829058,
+            "final_capacity_ratio": 0.9188849899290068,
+            "initial_capacity_ratio": 0.99999999999999
+          },
+          "Delt_ant": {
+            "executed_fatigue_objective": 56.53073034289715,
+            "fatigue_auc_cycles": 0.8112863086021489,
+            "final_capacity_ratio": 0.9903437294109043,
+            "initial_capacity_ratio": 1.0000000000000042
+          },
+          "Delt_post": {
+            "executed_fatigue_objective": 0.04028929120778977,
+            "fatigue_auc_cycles": 0.02224931396774401,
+            "final_capacity_ratio": 0.9997760832532241,
+            "initial_capacity_ratio": 0.999999999999998
+          },
+          "Triceps": {
+            "executed_fatigue_objective": 230.2369045476441,
+            "fatigue_auc_cycles": 1.6916282936440843,
+            "final_capacity_ratio": 0.9828844753366883,
+            "initial_capacity_ratio": 0.9999999999999984
+          }
+        }
+      },
+      "metadata": {
+        "activate_force_length_relationship": true,
+        "activate_force_velocity_relationship": true,
+        "activate_passive_force_relationship": true,
+        "calcium_forcing_formulation": "exact_exponential_periodic_node",
+        "constant_crank_torque": -0.0,
+        "cycles_per_window": 300,
+        "ding_sum_stim_truncation": 6,
+        "enforce_start_constraints": false,
+        "first_node_wheel_q_slack": 0.0,
+        "full_contact_constraints_terminal": false,
+        "full_contact_position_terminal": false,
+        "full_contact_position_tolerance": 0.0,
+        "mechanical_formulation": "reduced",
+        "model_formulation": "periodic_node",
+        "nlp_ordering_strategy": "variable_major",
+        "objective": [
+          "fatigue"
+        ],
+        "objective_shape": "quadratic",
+        "ode_solver": "rk4",
+        "producer_collocation_degree": 3,
+        "producer_collocation_method": "radau",
+        "producer_cycles_per_window": 1,
+        "producer_mode": "receding_horizon_concatenation",
+        "producer_requested_cycles": 300,
+        "producer_solver": "acados",
+        "producer_transcription_profile": "acados-irk-4stage-5step",
+        "pulse_width_active_set": "none",
+        "pulse_width_maximum_s": 0.0006,
+        "pulse_width_minimum_policy": "model_pd0",
+        "pulse_width_scaling": 0.0025,
+        "schema": "cocofest-common-periodic-initial-solution-v2",
+        "state_boundary_maximum_absolute_jump": 2.5412191462237388e-08,
+        "stimulations_per_cycle": 30,
+        "terminal_wheel_q_homotopy_slacks": null,
+        "terminal_wheel_q_initial_slack": 0.002,
+        "terminal_wheel_q_reference_mode": "absolute_initial",
+        "terminal_wheel_q_slack": 0.002,
+        "torque_application": "constant",
+        "warmup_cycles_consumed": 1
+      },
+      "source_github_actions_run": 31428024125,
+      "source_result": "result.json",
+      "source_trajectory": "reduced-validated-prefix.npz",
+      "timing": {
+        "hot_solver_median_s": 0.132621,
+        "hot_solver_p90_s": 0.1343595,
+        "hot_wall_median_s": 0.14509621199999856,
+        "hot_wall_p90_s": 0.14692378900002154,
+        "online_solver_mean_s_per_rho": 0.13135270344827585,
+        "online_solver_total_s": 19.046142,
+        "online_wall_mean_s_per_rho": 0.1449313035655172,
+        "online_wall_total_s": 21.015039016999992,
+        "reported_full_run_cycles": 300,
+        "reported_full_run_end_to_end_s": 304.39311630299994
+      }
+    },
+    "IPOPT R5": {
+      "control_summary": {
+        "Biceps": {
+          "fraction_at_lower_bound": 0.9094252873563219,
+          "fraction_at_upper_bound": 0.02666666666666667,
+          "maximum_us": 599.9982588275633,
+          "mean_us": 158.96672922448593,
+          "minimum_us": 131.40498631830818,
+          "standard_deviation_us": 106.20108590495063
+        },
+        "Delt_ant": {
+          "fraction_at_lower_bound": 0.9324137931034483,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 227.08958462627928,
+          "mean_us": 131.761243548287,
+          "minimum_us": 131.4050023336614,
+          "standard_deviation_us": 3.974191837296903
+        },
+        "Delt_post": {
+          "fraction_at_lower_bound": 0.9071264367816092,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 131.4994859754873,
+          "mean_us": 131.4094532013763,
+          "minimum_us": 131.40499037807473,
+          "standard_deviation_us": 0.011579472818882833
+        },
+        "Triceps": {
+          "fraction_at_lower_bound": 0.784367816091954,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 218.13613574331956,
+          "mean_us": 139.6942459430299,
+          "minimum_us": 131.40497968753786,
+          "standard_deviation_us": 20.24581496426125
+        }
+      },
+      "fatigue": {
+        "executed_fatigue_objective": 11522.467771659452,
+        "fatigue_auc_cycles": 17.132304381786586,
+        "min_final_capacity_ratio": 0.8620703299745746,
+        "per_muscle": {
+          "Biceps": {
+            "executed_fatigue_objective": 10472.270386673228,
+            "fatigue_auc_cycles": 10.93734654802029,
+            "final_capacity_ratio": 0.8620703299745746,
+            "initial_capacity_ratio": 0.9966302918319722
+          },
+          "Delt_ant": {
+            "executed_fatigue_objective": 417.01998184480493,
+            "fatigue_auc_cycles": 2.409865800255767,
+            "final_capacity_ratio": 0.975701644018606,
+            "initial_capacity_ratio": 0.9846270159427429
+          },
+          "Delt_post": {
+            "executed_fatigue_objective": 113.02871931022233,
+            "fatigue_auc_cycles": 1.2715910806472086,
+            "final_capacity_ratio": 0.9928737424664208,
+            "initial_capacity_ratio": 0.9916936527760019
+          },
+          "Triceps": {
+            "executed_fatigue_objective": 520.1486838311965,
+            "fatigue_auc_cycles": 2.513500952863321,
+            "final_capacity_ratio": 0.9725577989120165,
+            "initial_capacity_ratio": 0.9999228951715031
+          }
+        }
+      },
+      "metadata": {
+        "activate_force_length_relationship": true,
+        "activate_force_velocity_relationship": true,
+        "activate_passive_force_relationship": true,
+        "calcium_forcing_formulation": "exact_exponential_periodic_node",
+        "constant_crank_torque": -0.0,
+        "cycles_per_window": 145,
+        "ding_sum_stim_truncation": 6,
+        "enforce_start_constraints": true,
+        "first_node_wheel_q_slack": 0.0,
+        "full_contact_constraints_terminal": false,
+        "full_contact_position_terminal": false,
+        "full_contact_position_tolerance": 0.0,
+        "mechanical_formulation": "reduced",
+        "model_formulation": "periodic_node",
+        "nlp_ordering_strategy": "time_major",
+        "objective": [
+          "fatigue"
+        ],
+        "objective_shape": "quadratic",
+        "ode_solver": "collocation",
+        "producer_collocation_degree": 5,
+        "producer_collocation_method": "radau",
+        "producer_cycles_per_window": 1,
+        "producer_mode": "receding_horizon_concatenation",
+        "producer_requested_cycles": 145,
+        "producer_solver": "ipopt",
+        "producer_transcription_profile": "scientific-radau5",
+        "pulse_width_active_set": "none",
+        "pulse_width_maximum_s": 0.0006,
+        "pulse_width_minimum_policy": "model_pd0",
+        "pulse_width_scaling": 0.0025,
+        "schema": "cocofest-common-periodic-initial-solution-v2",
+        "state_boundary_maximum_absolute_jump": 0.0,
+        "stimulations_per_cycle": 30,
+        "terminal_wheel_q_homotopy_slacks": null,
+        "terminal_wheel_q_initial_slack": 0.002,
+        "terminal_wheel_q_reference_mode": "absolute_initial",
+        "terminal_wheel_q_slack": 0.002,
+        "torque_application": "constant",
+        "warmup_cycles_consumed": 1
+      },
+      "source_github_actions_run": 31380186719,
+      "source_result": "result.json",
+      "source_trajectory": "validated-rho-trajectory.npz",
+      "timing": {
+        "hot_solver_median_s": 2.6472737449999997,
+        "hot_solver_p90_s": 3.8727441272000003,
+        "hot_wall_median_s": 2.6531139979999807,
+        "hot_wall_p90_s": 3.878995698000023,
+        "online_solver_mean_s_per_rho": 3.652161027613793,
+        "online_solver_total_s": 529.563349004,
+        "online_wall_mean_s_per_rho": 3.6583685113793103,
+        "online_wall_total_s": 530.46343415,
+        "reported_full_run_cycles": 145,
+        "reported_full_run_end_to_end_s": 1012.2026322999999
+      }
+    },
+    "MadNLP R5": {
+      "control_summary": {
+        "Biceps": {
+          "fraction_at_lower_bound": 0.9289655172413793,
+          "fraction_at_upper_bound": 0.044137931034482755,
+          "maximum_us": 600.0000078308964,
+          "mean_us": 159.51331178100716,
+          "minimum_us": 131.40497511035875,
+          "standard_deviation_us": 107.55529838381402
+        },
+        "Delt_ant": {
+          "fraction_at_lower_bound": 0.9836781609195402,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 224.4543095682728,
+          "mean_us": 131.76712487793185,
+          "minimum_us": 131.40497526757372,
+          "standard_deviation_us": 3.9693279889968243
+        },
+        "Delt_post": {
+          "fraction_at_lower_bound": 1.0,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 131.40634448075176,
+          "mean_us": 131.40504965415704,
+          "minimum_us": 131.40497514944218,
+          "standard_deviation_us": 0.00015397619497307862
+        },
+        "Triceps": {
+          "fraction_at_lower_bound": 0.8216091954022988,
+          "fraction_at_upper_bound": 0.0,
+          "maximum_us": 224.2618990085899,
+          "mean_us": 139.73748554515186,
+          "minimum_us": 131.40497504589462,
+          "standard_deviation_us": 20.396204690231677
+        }
+      },
+      "fatigue": {
+        "executed_fatigue_objective": 11830.478970259152,
+        "fatigue_auc_cycles": 17.30653965665931,
+        "min_final_capacity_ratio": 0.8607210877166427,
+        "per_muscle": {
+          "Biceps": {
+            "executed_fatigue_objective": 10769.523921714359,
+            "fatigue_auc_cycles": 11.091597689946774,
+            "final_capacity_ratio": 0.8607210877166427,
+            "initial_capacity_ratio": 0.9966302918319722
+          },
+          "Delt_ant": {
+            "executed_fatigue_objective": 423.67458309696,
+            "fatigue_auc_cycles": 2.427129423785381,
+            "final_capacity_ratio": 0.9754770262070678,
+            "initial_capacity_ratio": 0.9846270159427429
+          },
+          "Delt_post": {
+            "executed_fatigue_objective": 111.58672873102043,
+            "fatigue_auc_cycles": 1.2626837949001746,
+            "final_capacity_ratio": 0.9930028430755431,
+            "initial_capacity_ratio": 0.9916936527760019
+          },
+          "Triceps": {
+            "executed_fatigue_objective": 525.6937367168127,
+            "fatigue_auc_cycles": 2.5251287480269804,
+            "final_capacity_ratio": 0.9724475072237058,
+            "initial_capacity_ratio": 0.9999228951715031
+          }
+        }
+      },
+      "metadata": {
+        "activate_force_length_relationship": true,
+        "activate_force_velocity_relationship": true,
+        "activate_passive_force_relationship": true,
+        "calcium_forcing_formulation": "exact_exponential_periodic_node",
+        "constant_crank_torque": -0.0,
+        "cycles_per_window": 145,
+        "ding_sum_stim_truncation": 6,
+        "enforce_start_constraints": true,
+        "first_node_wheel_q_slack": 0.0,
+        "full_contact_constraints_terminal": false,
+        "full_contact_position_terminal": false,
+        "full_contact_position_tolerance": 0.0,
+        "mechanical_formulation": "reduced",
+        "model_formulation": "periodic_node",
+        "nlp_ordering_strategy": "time_major",
+        "objective": [
+          "fatigue"
+        ],
+        "objective_shape": "quadratic",
+        "ode_solver": "collocation",
+        "producer_collocation_degree": 5,
+        "producer_collocation_method": "radau",
+        "producer_cycles_per_window": 1,
+        "producer_mode": "receding_horizon_concatenation",
+        "producer_requested_cycles": 145,
+        "producer_solver": "madnlp",
+        "producer_transcription_profile": "scientific-radau5",
+        "pulse_width_active_set": "none",
+        "pulse_width_maximum_s": 0.0006,
+        "pulse_width_minimum_policy": "model_pd0",
+        "pulse_width_scaling": 0.0025,
+        "schema": "cocofest-common-periodic-initial-solution-v2",
+        "state_boundary_maximum_absolute_jump": 0.0,
+        "stimulations_per_cycle": 30,
+        "terminal_wheel_q_homotopy_slacks": null,
+        "terminal_wheel_q_initial_slack": 0.002,
+        "terminal_wheel_q_reference_mode": "absolute_initial",
+        "terminal_wheel_q_slack": 0.002,
+        "torque_application": "constant",
+        "warmup_cycles_consumed": 1
+      },
+      "source_github_actions_run": 31380186719,
+      "source_result": "result.json",
+      "source_trajectory": "validated-rho-trajectory.npz",
+      "timing": {
+        "hot_solver_median_s": 1.497882155,
+        "hot_solver_p90_s": 1.7384196222000003,
+        "hot_wall_median_s": 1.5049191009999845,
+        "hot_wall_p90_s": 1.7455363910000306,
+        "online_solver_mean_s_per_rho": 1.5496294731655174,
+        "online_solver_total_s": 224.696273609,
+        "online_wall_mean_s_per_rho": 1.5565144837034468,
+        "online_wall_total_s": 225.69460013699978,
+        "reported_full_run_cycles": 145,
+        "reported_full_run_end_to_end_s": 745.9926783779999
+      }
+    }
+  },
+  "stimulations_per_cycle": 30
+}

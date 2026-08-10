@@ -433,6 +433,13 @@ invalide.
   de chaque RHO, puis rejouer les mêmes PW en mécanique reduced. Le rollout
   full global actuel accumule le drift de la contrainte de pédalier sur 100
   cycles et ne permet pas encore d'attribuer l'écart à ACADOS seul.
+- [ ] Relancer IPOPT R5, MadNLP R5 et ACADOS hybride depuis un fichier d'état
+  initial strictement commun, avec comparaison bit à bit des 20 états Ding,
+  de `theta/omega`, de la cible terminale et des bornes mobiles avant le RHO 1.
+  Rejouer ensuite les trois séries de PW avec le même intégrateur reduced
+  indépendant. La comparaison historique à 145 RHO démontre le gain de temps
+  ACADOS, mais son gain apparent de fatigue est confondu avec un seed initial
+  moins fatigué.
 
 Le critère intermédiaire est atteint : le RHO 81 est franchi sans relâcher les
 contraintes et le solveur passe `100/100` sous `1 s` projection incluse. Le
