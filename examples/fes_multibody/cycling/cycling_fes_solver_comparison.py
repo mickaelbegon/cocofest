@@ -2632,15 +2632,23 @@ def acados_transfer_restoration_timing(result: dict) -> dict:
 
 
 def _first_failed_rho(
-    window_rows: list[dict], physical_success: bool | None
+    window_rows: list[dict],
+    physical_success: bool | None,
+    requested_rhos: int | None = None,
 ) -> int | None:
-    """Keep a later strict-prefix failure when the aggregate physical audit also fails."""
+    """Locate a solver-prefix stop before falling back to a global audit failure."""
 
     first_failed_rho = next(
         (window["rho"] for window in window_rows if not window["validated"]),
         None,
     )
     if first_failed_rho is None and physical_success is False and window_rows:
+        if requested_rhos is not None and len(window_rows) < requested_rhos:
+            # Partial-output traces intentionally omit the failed solve.  The
+            # first missing physical RHO follows the strict exported prefix;
+            # it is not RHO 1 merely because the aggregate requested-horizon
+            # audit is false.
+            return max(int(window["rho"]) for window in window_rows) + 1
         return 1
     return first_failed_rho
 
@@ -2720,7 +2728,9 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                     maximum_consecutive_failures, consecutive_failures
                 )
         first_failed_rho = _first_failed_rho(
-            window_rows, result.get("physical_success")
+            window_rows,
+            result.get("physical_success"),
+            result.get("requested_windows"),
         )
         fatigue = _fatigue_metrics(result, performance["validated_cycles"])
         muscle_fatigue = _executed_fatigue_objective_by_muscle(

@@ -4305,6 +4305,14 @@ def test_first_failed_rho_preserves_a_later_solver_failure():
         )
         == 1
     )
+    assert (
+        comparison_example._first_failed_rho(
+            [{"rho": rho, "validated": True} for rho in range(1, 81)],
+            False,
+            requested_rhos=100,
+        )
+        == 81
+    )
 
 
 def test_rho_boundary_jump_summary_keeps_both_sides_of_every_seam():
