@@ -4900,6 +4900,23 @@ Biceps, Delt_ant, Delt_post et Triceps.
 Ce succès révèle aussi une limite de régularité : le changement maximal de PW
 vaut `69.3 µs` à l'entrée du fallback et `468.6 µs` au retour vers ACADOS.
 Il n'y a ni discontinuité d'état ni violation de borne, mais les deux solveurs
-sélectionnent des branches de contrôle distinctes. La prochaine campagne doit
-donc conserver cette métrique et ne pas assimiler faisabilité hybride et
-lissage de la stimulation.
+sélectionnent des branches de contrôle distinctes.
+
+La campagne longue
+[31428024125](https://github.com/mickaelbegon/cocofest/actions/runs/31428024125)
+valide ensuite 300/300 RHO. Elle reproduit les trois appels IPOPT des RHO 218
+et 234, avance une seule fois par le certifieur `ipopt_radau` au RHO 234, puis
+ACADOS converge seul jusqu'au RHO 300. Elle compte 302 appels ACADOS pour 300
+RHO physiques certifiés. Les temps chauds médian/P90 sont `0.131/0.170 s`
+solveur et `0.144/0.183 s` muraux. Les appels des RHO validés cumulent
+`46.15 s`; le mur-à-mur vaut `304.39 s`, dont `168.75 s` de préparation et
+`89.49 s` d'overhead non attribué aux solveurs.
+
+Le coût total vaut `22016.54` et l'objectif de fatigue exécuté `21308.91`.
+Les AUC de fatigue normalisée sont `22.5570`, `3.2036`, `0.0920` et `4.5829`
+cycles pour Biceps, Delt_ant, Delt_post et Triceps; les capacités finales sont
+`0.88298`, `0.98235`, `0.99934` et `0.98046`. L'audit mécanique passe sur les
+300 cycles. Les PW changent toutefois jusqu'à `468.6 µs`, y compris avant le
+fallback autour des RHO 217--225 : ce phénomène appartient au paysage
+d'optimisation et aux changements d'ensemble actif, pas au seul adaptateur
+hybride.

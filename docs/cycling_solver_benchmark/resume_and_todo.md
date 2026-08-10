@@ -475,8 +475,9 @@ gain `30x` ou `48x` sans mesure.
   `certifié scientifique`.
 - [ ] Faire échouer la CI si la force passive ou la transcription diffèrent
   entre deux cas annoncés comme appariés.
-- [ ] Mettre à jour le message pour Kevin après la première campagne
-  scientifique 30 RHO.
+- [x] Mettre à jour le tableau de synthèse pour Kevin avec la campagne
+  reduced hybride 300 RHO (`31428024125`), ses temps chauds, ses fatigues et
+  ses réserves sur le seed, l'overhead et la régularité des PW.
 
 ### P3 — Atteindre un échec réellement causé par la fatigue
 
@@ -573,7 +574,7 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     mais ACADOS ne recertifie pas le RHO 234 après deux injections. L'audit
     mécanique passe et la capacité biceps vaut encore `0.8969`; l'arrêt reste
     `unconfirmed_endurance_stop`.
-16. [smoke 235 RHO validé, CI 300 RHO à lancer] Tester le fallback hybride explicitement
+16. [fait, runs `31426862847` et `31428024125`] Tester le fallback hybride explicitement
     étiqueté : si
     IPOPT/Radau-5 converge et passe tous les audits du RHO gelé après un échec
     ACADOS, avancer exceptionnellement depuis sa solution adaptée puis rendre
@@ -584,7 +585,10 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     235/235 RHO : IPOPT certifie le RHO 234 et ACADOS reprend au RHO 235.
     Les états sont continus, mais les PW changent jusqu'à `69.3 µs` à l'entrée
     du fallback et `468.6 µs` au retour; auditer ce changement de branche sur
-    300 RHO avant d'introduire une borne de slew.
+    300 RHO avant d'introduire une borne de slew. La campagne 300 valide tous
+    les RHO avec un seul fallback au RHO 234, puis ACADOS reprend jusqu'au RHO
+    300. Les grands sauts existent aussi avant le fallback; ils ne sont donc
+    pas causés uniquement par l'adaptateur IPOPT.
 17. Versionner le seed commun retenu avec son SHA et sa provenance; l'input
     inter-run actuel expire avec l'artefact et ne suffit pas à la
     reproductibilité du benchmark.
@@ -602,6 +606,15 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     des mêmes PW en mécanique reduced.
 22. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
     ne pas confondre cette validation de transcription avec l'ablation ACADOS.
+23. Sortir du chemin online les audits et sérialisations lourds : après
+    construction/préparation, les RHO certifiés coûtent `0.154 s` en moyenne,
+    mais `89.49 s` restent non attribués aux solveurs sur 300 RHO. Profiler ces
+    postes séparément sans désactiver les audits dans les artefacts CI.
+24. Tester une régularisation de variation de PW et/ou une trust region mobile
+    par rapport au cycle précédent. Comparer au mode non régularisé le coût de
+    fatigue, les quatre AUC, le nombre d'itérations, les recoveries et les
+    quantiles/maxima de `|PW_k-PW_{k-1}|`; ne pas imposer arbitrairement un
+    slew avant cette ablation.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

@@ -366,9 +366,10 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Checkpoint exact du dernier RHO certifié | Séparer un échec numérique du RHO courant d'un déplacement accidentel vers le suivant | `last-certified-rho-replay.npz` contient la primale après le shift réellement appliqué, y compris lorsque la campagne conserve un préfixe partiel | C'est un seed de reprise primale; les multiplicateurs ne sont pas sérialisés et les modes dual `bounds`/`all` exigent encore une ablation dans le même processus |
 | Après un échec, aucun shift ni transfert du primal; deux essais sur le même RHO | L'ancien loop Bioptim avançait parfois une solution non convergée, créant un faux motif « échec puis succès » | Le préfixe d'endurance ne peut plus être artificiellement prolongé après une non-convergence | Correctif `ae42595`; une première CI a révélé un relais CLI manquant, corrigé avant la relance |
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
-| ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
+| ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Sur le reduced hybride 300 RHO : médiane/P90 solveur `0.131/0.170 s`, murale `0.144/0.183 s`; aucun défaut mécanique | La préparation initiale reste coûteuse et les audits lourds doivent sortir du chemin online |
 | Reprise hybride ACADOS full/reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, avec un OCP IPOPT strictement isomorphe à la formulation cible | Reduced : gate `5/5`; full : gate `5/5`, IPOPT `status=0`, `inf_pr=2.09e-9`, recovery `87.98 s`, ACADOS chaud médian `0.466 s` et P90 `0.681 s` | Câblage full certifié au run `31414366905`; le recovery reste exceptionnel et doit maintenant être testé naturellement au RHO 141 |
 | Campagne naturelle ACADOS reduced + recovery IPOPT/Radau-5 | Mesurer le chemin de production sans provoquer artificiellement un échec au premier RHO | `150/150` sans recovery au run `31419405169`; `300/300` avec 5 recoveries aux RHO 5, 120, 183 et 286 au run `31420496210`; médiane murale ACADOS `0.174 s` à 300 RHO | Le solve est robuste mais pas encore sous `1 s/RHO` recovery inclus : les 5 IPOPT coûtent `392.2 s`; variabilité du préfixe 1–150 à expliquer |
+| Seed Intel épinglé + fallback IPOPT certifié pour ACADOS reduced | Éviter qu'un échec de recertification ACADOS rejette un RHO déjà convergé et faisable sous IPOPT | Run `31428024125` : `300/300`, un seul RHO certifié IPOPT (234), puis ACADOS jusqu'au bout; `46.15 s` cumulées pour les RHO validés (`0.154 s/RHO`) | Meilleur candidat online actuel; résultat hybride, pas ACADOS pur. Sauts de PW jusqu'à `468.6 µs` à régulariser et seed à pérenniser |
 | Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
 
 Les premiers dispatches
@@ -392,9 +393,9 @@ Pour obtenir aujourd'hui la meilleure combinaison de robustesse et de vitesse :
    projection sur les bornes et projection mécanique;
 5. compiler une seule fois les fonctions du NLP, puis rendre paramétriques
    l'état initial, la cible angulaire absolue et les bornes mobiles;
-6. employer IPOPT/MUMPS comme chemin robuste certifié, et MadNLP/MUMPS comme
-   candidat plus rapide lorsque sa politique de reprise au RHO courant est
-   activée et validée;
+6. employer ACADOS reduced comme chemin online principal et IPOPT/Radau-5
+   comme fallback rare certifiant exactement le même RHO; conserver IPOPT et
+   MadNLP comme baselines scientifiques hors ligne;
 7. inclure la relation de force passive et raffiner l'intégration du calcium;
 8. auditer chaque RHO indépendamment du statut retourné par le solveur.
 
@@ -1248,10 +1249,33 @@ Le raccord de contrôle est toutefois beaucoup moins régulier. La transition
 ACADOS vers IPOPT change une PW jusqu'à `69.3 µs`; le retour IPOPT vers ACADOS
 change la PW biceps jusqu'à `468.6 µs`. Les PW restent dans
 `[pd0, 600 µs]`, mais cette bifurcation entre minima locaux interdit encore de
-qualifier le mode de politique de stimulation lisse. La campagne 300 RHO doit
-donc mesurer à la fois la robustesse du fallback et les sauts de PW; une
-borne de slew ou une pénalisation paramétrique de variation ne pourra être
-ajoutée qu'après cette mesure, car elle modifie l'optimum de fatigue.
+qualifier le mode de politique de stimulation lisse.
+
+La campagne 300 RHO appariée
+[31428024125](https://github.com/mickaelbegon/cocofest/actions/runs/31428024125)
+valide 300/300 RHO avec exactement le même fallback au RHO 234, puis 66 RHO
+ACADOS consécutifs. Aucun autre fallback n'est nécessaire. La médiane/P90
+chaude vaut `0.131/0.170 s` côté solveur et `0.144/0.183 s` côté mur; la somme
+murale des 300 RHO certifiés est `46.15 s`, soit `0.154 s/RHO`. La préparation
+initiale coûte `168.75 s`. Le mur-à-mur total vaut `304.39 s`; après retrait de
+la préparation, il reste `135.64 s`, soit `0.452 s/RHO`, dont `89.49 s` de
+post-traitement ou d'overhead non attribué aux appels solveur. Le temps de
+résolution une fois l'OCP construit est donc nettement sous une seconde, mais
+le pipeline complet doit encore sortir les audits lourds du chemin online.
+
+Le coût total vaut `22016.54`, dont `21308.91` pour la fatigue exécutée. Les
+AUC de fatigue normalisée des Biceps, Delt_ant, Delt_post et Triceps valent
+respectivement `22.5570`, `3.2036`, `0.0920` et `4.5829` cycles; leurs capacités
+finales valent `0.88298`, `0.98235`, `0.99934` et `0.98046`. L'audit mécanique
+passe sur les 300 RHO sans violation de vitesse et avec une erreur maximale de
+projection de `2.27e-13 rad`.
+
+Les sauts de PW jusqu'à `468.6 µs` se produisent aussi avant le fallback,
+notamment entre les RHO 217 et 225. Ils reflètent donc plus largement des
+changements d'ensemble actif ou de minimum local du problème peu régularisé,
+et non une erreur propre à l'adaptateur IPOPT. Une borne de slew ou une faible
+pénalisation paramétrique de variation doit être testée par ablation, car elle
+peut stabiliser le warm start mais modifie aussi l'optimum de fatigue.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
