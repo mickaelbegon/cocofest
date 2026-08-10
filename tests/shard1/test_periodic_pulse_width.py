@@ -5953,7 +5953,9 @@ def test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization():
     assert row["solver_attempt_accounting"]["attempt_count"] == 2
     assert row["execution_timing"]["rho_solve_loop_wall_time_s"] == 1.25
     assert row["execution_timing"]["post_solve_wall_time_s"] == 0.5
-    assert row["execution_timing"]["rho_pipeline_wall_time_per_cycle_s"] == 1.25
+    assert row["execution_timing"][
+        "rho_pipeline_wall_time_per_cycle_s"
+    ] == pytest.approx(1.25 / row["validated_cycles"])
 
 
 def test_same_rho_retries_are_excluded_from_physical_solution_traces():
