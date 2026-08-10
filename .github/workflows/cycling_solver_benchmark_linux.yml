@@ -59,6 +59,11 @@ on:
         required: true
         default: "100"
         type: string
+      acados_seed_source_run_id:
+        description: Optional workflow run id providing a pinned common seed artifact for ACADOS reproducibility tests
+        required: false
+        default: ""
+        type: string
       acados_option_rhos:
         description: Short RHO count for each ACADOS solver-option candidate
         required: true
@@ -495,10 +500,21 @@ jobs:
             tests/shard1/test_periodic_pulse_width.py::test_recovery_seed_always_receives_one_final_acados_certification_attempt
 
       - name: Download the validated full/reduced seeds
+        if: ${{ inputs.acados_seed_source_run_id == '' }}
         uses: actions/download-artifact@v8
         with:
           name: cycling-assisted-common-seed-${{ github.run_id }}
           path: benchmark-seed
+
+      - name: Download the pinned full/reduced seeds
+        if: ${{ inputs.acados_seed_source_run_id != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: cycling-assisted-common-seed-${{ inputs.acados_seed_source_run_id }}
+          path: benchmark-seed
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.acados_seed_source_run_id }}
 
       - name: Run the full/reduced hybrid recovery gates
         env:
@@ -512,6 +528,9 @@ jobs:
           # replaces it only when the rollout remains inside the explicit
           # bound-violation guard; otherwise the feasible Radau seed is kept.
           mkdir -p acados-ipopt-hybrid-results
+          sha256sum benchmark-seed/*.npz > acados-ipopt-hybrid-results/seed-sha256.txt
+          printf '%s\n' "${{ inputs.acados_seed_source_run_id || github.run_id }}" \
+            > acados-ipopt-hybrid-results/seed-source-run-id.txt
           reduced_rhos="${{ inputs.acados_option_rhos }}"
           reduced_recovery_options=(--acados-ipopt-recovery-force-first-rho)
           if [[ "${{ inputs.cycles }}" == "acados_reduced_recovery" ]]; then

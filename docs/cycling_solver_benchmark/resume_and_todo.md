@@ -561,6 +561,10 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     `31422321005` échouent tous deux au RHO 5. Comparer runner/CPU,
     configuration résolue, résidus et itérés initiaux avant de relier cet écart
     à la fatigue.
+    [diagnostic] Le seed Intel du premier run diffère du seed AMD; les deux
+    runs AMD ont des seeds bit-à-bit identiques. La PW biceps diffère jusqu'à
+    `180.6 µs`. L'input temporaire `acados_seed_source_run_id` permet maintenant
+    de rejouer le seed Intel sur un nouveau CPU, avec SHA journalisés.
 15. Réduire le coût du recovery : les sorties IPOPT faisables mais arrêtées à
     2 000 itérations coûtent à elles seules environ `280.6 s`. Tester une
     terminaison acceptable ou une Phase I de faisabilité bornée, sans relâcher

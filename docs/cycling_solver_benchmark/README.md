@@ -328,6 +328,12 @@ gh workflow run cycling_solver_benchmark_linux.yml \
   --ref codex/full-horizon-homotopy \
   -f cycles=acados_reduced_recovery -f acados_smoke_rhos=150
 
+# Rejouer exactement le seed Intel du run 150 sur un nouveau runner
+gh workflow run cycling_solver_benchmark_linux.yml \
+  --ref codex/full-horizon-homotopy \
+  -f cycles=acados_reduced_recovery -f acados_smoke_rhos=5 \
+  -f acados_seed_source_run_id=31419405169
+
 gh workflow run cycling_solver_benchmark_linux.yml \
   --ref codex/acados-pr-refresh \
   -f cycles=fatigue_endurance -f fatigue_endurance_max_rhos=2000
@@ -1174,6 +1180,16 @@ le RHO 5 nécessite deux recoveries IPOPT, le premier faisable mais arrêté à 
 limite (`105.1 s`), le second convergé (`20.7 s`), avant recertification ACADOS.
 Le recovery précoce est donc reproduit sur deux runners consécutifs; c'est le
 run 150 sans recovery qui constitue maintenant l'observation atypique.
+
+L'explication est le seed commun. Le run 150 l'a construit sur Intel Xeon
+8370C; les runs 300 et 5 sur AMD EPYC 7763. Les deux seeds AMD ont exactement
+le même SHA-256 et reproduisent les mêmes résidus ACADOS jusqu'au RHO 5. Le seed
+Intel est différent sur les 26 tableaux physiques : la PW biceps diffère
+jusqu'à `180.6 µs`, la PW triceps jusqu'à `133.7 µs`, et les états mécaniques
+jusqu'à `3.16e-5 rad` et `3.99e-4 rad/s`. Le mode
+`acados_seed_source_run_id` permet une ablation croisée seed/CPU et enregistre
+les SHA dans l'artefact. Il ne constitue pas encore une conservation durable,
+car l'artefact source expirera.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,

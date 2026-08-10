@@ -6458,6 +6458,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     ).read_text(encoding="utf-8")
 
     assert "acados_smoke_rhos:" in workflow
+    assert "acados_seed_source_run_id:" in workflow
     assert re.search(
         r"acados_smoke_rhos:\s+" r"description:.*\s+required: true\s+default: \"100\"",
         workflow,
@@ -6492,6 +6493,9 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "ACADOS_LAZY_RECOVERY_ONLY" in workflow
     assert "ACADOS full/reduced — IPOPT/Radau-5 recovery wiring" in workflow
     assert "inputs.cycles == 'acados_reduced_recovery'" in workflow
+    assert "Download the pinned full/reduced seeds" in workflow
+    assert "seed-sha256.txt" in workflow
+    assert "seed-source-run-id.txt" in workflow
     assert "reduced-validated-prefix.npz" in workflow
     assert (
         "reduced_recovery_options=(--acados-ipopt-recovery-force-first-rho)"

@@ -4842,3 +4842,13 @@ primale faisable après la limite d'itérations en `105.1 s`, puis une convergen
 en `20.7 s`. Le run 300 et ce smoke indépendant présentent donc le même point
 sensible précoce, tandis que le run 150 reste le seul sans recovery. L'analyse
 de reproductibilité doit prendre cette asymétrie comme point de départ.
+
+La comparaison des artefacts localise ensuite la cause en amont d'ACADOS. Le
+seed du run 150 a été résolu sur Intel Xeon 8370C; ceux des runs 300 et 5 sur
+AMD EPYC 7763. Les deux fichiers AMD ont le même SHA-256 et génèrent les mêmes
+résidus des RHO 1 à 5. Le seed Intel appartient à une autre branche : jusqu'à
+`180.6 µs` d'écart sur la PW biceps et `133.7 µs` sur la PW triceps. Le workflow
+accepte donc temporairement `acados_seed_source_run_id` pour télécharger le
+seed certifié d'un run précis, journaliser ses SHA et effectuer une ablation
+seed/CPU. Ce mécanisme dépend de la rétention des artefacts; après sélection,
+le seed devra être versionné dans `.github/benchmark-seeds/`.

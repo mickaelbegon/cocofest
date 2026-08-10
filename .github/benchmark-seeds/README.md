@@ -21,6 +21,17 @@ refinement on the exact MadNLP transcription before its timed RHO loop. This
 preparation is reported separately and does not rebuild the graph during the
 RHO sequence.
 
+This platform dependence is now measured. Run `31419405169`, whose seed was
+prepared on an Intel Xeon 8370C, produced a different `common-reduced.npz` from
+runs `31420496210` and `31422321005`, both prepared on AMD EPYC 7763. The two
+AMD files are bitwise identical. Intel versus AMD changes the biceps PW by up
+to `180.6 us` in the seed and selects a different ACADOS branch: no recovery
+through 150 RHO for the Intel seed, but two recoveries at RHO 5 in both AMD
+runs. The workflow input `acados_seed_source_run_id` can temporarily pin an
+artifact from a specified run and records all seed SHA-256 values. Because CI
+artifacts expire, this is an ablation mechanism, not the durable solution; the
+selected seed must ultimately be stored as a versioned benchmark asset.
+
 The certified common seeds produced from this continuation may enforce start
 constraints. Such a seed is accepted by a consumer that releases these
 constraints because it belongs to a stricter feasible subset. Reuse in the
