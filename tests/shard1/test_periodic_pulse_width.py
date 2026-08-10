@@ -6494,6 +6494,13 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert '.seed_source == "certified_target_solution"' in workflow
     assert ".results[0].nlp_validated_cycles == 1" in workflow
     assert ".results[0].mechanical_equivalence_audit.passes_physical_crank_velocity_bounds == true" in workflow
+    native_seed_consumer = workflow.split(
+        "--common-initial-solution acados-ipopt-hybrid-results/full-reference/native-full-seed.npz",
+        maxsplit=1,
+    )[1].split("--output-json acados-ipopt-hybrid-results/full-result.json", maxsplit=1)[0]
+    assert "--adopt-common-initial-solution-warmup-cycles" not in native_seed_consumer
+    assert "--standard-warmup-seed .github/benchmark-seeds/legacy-resistive-0p22-warmup.npz" in native_seed_consumer
+    assert "--disable-periodic-ipopt-refinement" in native_seed_consumer
     recovery_source = Path(
         periodic_example.__file__
     ).read_text(encoding="utf-8")

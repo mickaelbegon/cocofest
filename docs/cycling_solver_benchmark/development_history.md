@@ -4765,3 +4765,15 @@ mais son audit continu retrouve l'excursion rapide inter-nœuds déjà connue
 désormais explicitement la certification NLP du bridge et la certification
 physique obligatoire du vrai OCP hybride muni de la garde `2.60`; seul ce
 dernier peut contribuer au préfixe RHO validé.
+
+Le premier passage effectif jusqu'au solve full,
+[31411961935](https://github.com/mickaelbegon/cocofest/actions/runs/31411961935),
+a montré que le fichier natif était ensuite recadré dans un contexte de cycle
+incohérent. Le producteur avait consommé un cycle de warm-up, mais le
+consommateur avait seulement adopté ce compteur après avoir désactivé la
+préparation standard; la finalisation de la cible absolue reconstruisait alors
+une primale avec `0.63 rad` d'erreur de contact. Le consommateur reproduit
+maintenant le pipeline full éprouvé : chargement du même seed standard pour
+établir l'index absolu, remplacement par le seed ACADOS natif, et aucun
+raffinement IPOPT initial. L'IPOPT/Radau-5 du recovery reste indépendant et
+n'est appelé qu'après l'échec ou l'interruption forcée du solve cible.

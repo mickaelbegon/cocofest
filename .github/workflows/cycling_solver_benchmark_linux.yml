@@ -636,7 +636,10 @@ jobs:
           python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
             --solvers acados \
             --objective fatigue \
+            --ipopt-profile periodic_collocation \
             --ipopt-use-sx \
+            --ipopt-enforce-start-constraints \
+            --disable-periodic-ipopt-refinement \
             --cycles-per-window "${{ inputs.cycles_per_window }}" \
             --stimulations-per-cycle 30 \
             --n-windows "${{ inputs.acados_option_rhos }}" \
@@ -646,10 +649,14 @@ jobs:
             --terminal-wheel-q-slack "${{ inputs.terminal_wheel_q_slack }}" \
             --mechanical-formulation full \
             --compact-rho-output \
+            --standard-warmup-seed .github/benchmark-seeds/legacy-resistive-0p22-warmup.npz \
+            --legacy-standard-warmup-seed-signed-torque 0.22 \
+            --standard-warmup-seed-continuation \
             --common-initial-solution acados-ipopt-hybrid-results/full-reference/native-full-seed.npz \
-            --adopt-common-initial-solution-warmup-cycles \
+            --ipopt-disable-historical-initial-guess \
+            --reduced-cycling-profile benchmark-seed/reduced-cycling-fourier12.npz \
+            --state-scaling full \
             --disable-acados-assisted-hot-start \
-            --acados-disable-standard-ipopt-warmup \
             --periodic-ipopt-refinement-ode-solver collocation \
             --periodic-ipopt-refinement-collocation-degree 5 \
             --periodic-ipopt-refinement-collocation-method radau \
