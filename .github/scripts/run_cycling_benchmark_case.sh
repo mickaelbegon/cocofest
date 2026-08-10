@@ -30,6 +30,7 @@ solver_tolerance=1e-6
 nlp_transfer_preparation="${NLP_TRANSFER_PREPARATION:-none}"
 nlp_phase_one_screen_threshold="${NLP_PHASE_ONE_SCREEN_THRESHOLD:-0.001}"
 nlp_phase_one_mode="${NLP_PHASE_ONE_MODE:-mechanical}"
+nlp_failed_rho_phase_one_recovery="${NLP_FAILED_RHO_PHASE_ONE_RECOVERY:-false}"
 
 if ! [[ "$collocation_degree" =~ ^[2-9]$ ]]; then
   echo "COLLOCATION_DEGREE must be an integer between 2 and 9, got '$collocation_degree'." >&2
@@ -54,6 +55,10 @@ esac
 case "$nlp_phase_one_mode" in
   mechanical|all) ;;
   *) echo "NLP_PHASE_ONE_MODE must be mechanical or all; got '$nlp_phase_one_mode'." >&2; exit 2 ;;
+esac
+case "$nlp_failed_rho_phase_one_recovery" in
+  true|false) ;;
+  *) echo "NLP_FAILED_RHO_PHASE_ONE_RECOVERY must be true or false; got '$nlp_failed_rho_phase_one_recovery'." >&2; exit 2 ;;
 esac
 
 if [[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]; then
@@ -147,7 +152,7 @@ elif [[ "$solver" == "madnlp" ]]; then
   if [[ "$compile_mode" == "true" ]]; then
     solver_options+=(--madnlp-c-compile)
   fi
-  if [[ "$case_slug" == *"fatigue-endurance"* ]]; then
+  if [[ "$case_slug" == *"fatigue-endurance"* && "$nlp_failed_rho_phase_one_recovery" != "true" ]]; then
     # A plain same-RHO retry repeats the exact failed MadNLP primal. Restore
     # only failed endurance windows with IPOPT on the frozen Radau grid, then
     # require MadNLP itself to certify the restored seed before advancing.
@@ -156,6 +161,11 @@ elif [[ "$solver" == "madnlp" ]]; then
       --nlp-ipopt-recovery-max-iterations "$BENCHMARK_MAX_ITER"
       --nlp-ipopt-recovery-collocation-degree "$collocation_degree"
     )
+  fi
+fi
+if [[ "$solver" == "ipopt" || "$solver" == "madnlp" || "$solver" == "fatrop" ]]; then
+  if [[ "$nlp_failed_rho_phase_one_recovery" == "true" ]]; then
+    solver_options+=(--nlp-failed-rho-phase-one-recovery)
   fi
 fi
 if [[ "$solver" != "fatrop" && "$ode_solver" == "collocation" ]]; then
@@ -269,6 +279,17 @@ if [[ -f "$result" ]] && ! jq -e --arg solver "$solver" \
 then
   echo "The generated result is not SX even though the benchmark is SX-only." >&2
   exit 1
+fi
+
+if [[ -f "$result" && "$nlp_failed_rho_phase_one_recovery" == "true" ]]
+then
+  if ! jq -e --arg solver "$solver" \
+    '.configurations[$solver].nlp_failed_rho_phase_one_recovery == true' \
+    "$result" >/dev/null
+  then
+    echo "The failed-RHO mechanical Phase-I recovery was requested but not serialized." >&2
+    exit 1
+  fi
 fi
 
 if [[ -f "$result" && ("$nlp_transfer_preparation" == "phase-one" || "$nlp_transfer_preparation" == "rollout-phase-one") ]]

@@ -144,6 +144,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "nlp_ipopt_recovery",
     "nlp_ipopt_recovery_max_iterations",
     "nlp_ipopt_recovery_collocation_degree",
+    "nlp_failed_rho_phase_one_recovery",
     "acados_initial_irk_rollout",
     "periodic_ipopt_refinement_ode_solver",
     "periodic_ipopt_refinement_collocation_degree",
@@ -3054,6 +3055,9 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 "nlp_ipopt_recovery_summaries": (
                     result.get("nlp_ipopt_recovery_summaries") or []
                 ),
+                "nlp_failed_rho_phase_one_summaries": (
+                    result.get("nlp_failed_rho_phase_one_summaries") or []
+                ),
                 "solver_attempt_accounting": result.get(
                     "solver_attempt_accounting"
                 ),
@@ -3245,6 +3249,7 @@ def main(
     standard_warmup_seed_continuation: bool = False,
     legacy_standard_warmup_seed_signed_torque: float | None = None,
     common_initial_solution: str | Path | None = None,
+    common_initial_solution_recenter_first_node_bounds: bool = False,
     full_horizon_prefix_solution: str | Path | None = None,
     adopt_common_initial_solution_warmup_cycles: bool = False,
     common_initial_solution_output: str | Path | None = None,
@@ -3377,6 +3382,7 @@ def main(
     nlp_ipopt_recovery: bool = False,
     nlp_ipopt_recovery_max_iterations: int = 2000,
     nlp_ipopt_recovery_collocation_degree: int = 5,
+    nlp_failed_rho_phase_one_recovery: bool = False,
     acados_initial_irk_rollout: bool = False,
     acados_reset_solver_before_solve: bool = False,
     acados_check_reuse_possible: bool = False,
@@ -3786,6 +3792,12 @@ def main(
     )
     ipopt_args.common_initial_solution = common_initial_solution
     acados_args.common_initial_solution = common_initial_solution
+    ipopt_args.common_initial_solution_recenter_first_node_bounds = (
+        common_initial_solution_recenter_first_node_bounds
+    )
+    acados_args.common_initial_solution_recenter_first_node_bounds = (
+        common_initial_solution_recenter_first_node_bounds
+    )
     ipopt_args.full_horizon_prefix_solution = full_horizon_prefix_solution
     acados_args.full_horizon_prefix_solution = full_horizon_prefix_solution
     ipopt_args.adopt_common_initial_solution_warmup_cycles = (
@@ -4122,6 +4134,10 @@ def main(
         )
         optional_nlp_args.nlp_ipopt_recovery_collocation_degree = (
             nlp_ipopt_recovery_collocation_degree
+        )
+    for nlp_args in (ipopt_args, fatrop_args, madnlp_args):
+        nlp_args.nlp_failed_rho_phase_one_recovery = (
+            nlp_failed_rho_phase_one_recovery
         )
     ipopt_args.ipopt_c_compile = ipopt_c_compile
     ipopt_args.ipopt_hsl_library = ipopt_hsl_library
@@ -4480,6 +4496,14 @@ def build_cli() -> argparse.ArgumentParser:
         help=(
             "Preserve the common seed's warmup-cycle chronology when the consumer "
             "intentionally disables its own redundant standard warmup."
+        ),
+    )
+    parser.add_argument(
+        "--common-initial-solution-recenter-first-node-bounds",
+        action="store_true",
+        help=(
+            "Bind the first-node state bounds to the common seed's first state "
+            "for continuation from a preceding OCP terminal state."
         ),
     )
     parser.add_argument(
@@ -5396,6 +5420,15 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument(
         "--nlp-ipopt-recovery-collocation-degree", type=int, default=5
     )
+    parser.add_argument(
+        "--nlp-failed-rho-phase-one-recovery",
+        action="store_true",
+        help=(
+            "Retry the first failed IPOPT/MadNLP/Fatrop solve of a physical RHO "
+            "from its exact prepared primal after a mechanical-only Phase I and "
+            "an NLP-dual reset."
+        ),
+    )
     parser.add_argument("--acados-initial-irk-rollout", action="store_true")
     parser.add_argument("--acados-reset-solver-before-solve", action="store_true")
     parser.add_argument("--acados-check-reuse-possible", action="store_true")
@@ -5612,6 +5645,9 @@ if __name__ == "__main__":
             args.legacy_standard_warmup_seed_signed_torque
         ),
         common_initial_solution=args.common_initial_solution,
+        common_initial_solution_recenter_first_node_bounds=(
+            args.common_initial_solution_recenter_first_node_bounds
+        ),
         full_horizon_prefix_solution=args.full_horizon_prefix_solution,
         adopt_common_initial_solution_warmup_cycles=(
             args.adopt_common_initial_solution_warmup_cycles
@@ -5811,6 +5847,9 @@ if __name__ == "__main__":
         ),
         nlp_ipopt_recovery_collocation_degree=(
             args.nlp_ipopt_recovery_collocation_degree
+        ),
+        nlp_failed_rho_phase_one_recovery=(
+            args.nlp_failed_rho_phase_one_recovery
         ),
         acados_initial_irk_rollout=args.acados_initial_irk_rollout,
         acados_reset_solver_before_solve=args.acados_reset_solver_before_solve,

@@ -899,8 +899,30 @@ def test_nlp_ipopt_recovery_cli_is_opt_in():
         Path(__file__).resolve().parents[2]
         / ".github/scripts/run_cycling_benchmark_case.sh"
     ).read_text(encoding="utf-8")
-    assert '[[ "$case_slug" == *"fatigue-endurance"* ]]' in runner
+    assert '[[ "$case_slug" == *"fatigue-endurance"*' in runner
+    assert '"$nlp_failed_rho_phase_one_recovery" != "true"' in runner
     assert "--nlp-ipopt-recovery" in runner
+
+
+def test_failed_rho_phase_one_recovery_cli_is_opt_in():
+    periodic_args = periodic_example.build_argument_parser().parse_args(
+        ["--nlp-failed-rho-phase-one-recovery"]
+    )
+    comparison_args = comparison_example.build_cli().parse_args(
+        ["--nlp-failed-rho-phase-one-recovery"]
+    )
+
+    assert periodic_args.nlp_failed_rho_phase_one_recovery is True
+    assert comparison_args.nlp_failed_rho_phase_one_recovery is True
+    repository_root = Path(__file__).resolve().parents[2]
+    runner = (
+        repository_root / ".github/scripts/run_cycling_benchmark_case.sh"
+    ).read_text(encoding="utf-8")
+    workflow = (
+        repository_root / ".github/workflows/cycling_solver_benchmark_linux.yml"
+    ).read_text(encoding="utf-8")
+    assert "--nlp-failed-rho-phase-one-recovery" in runner
+    assert "nlp_failed_rho_phase_one_recovery:" in workflow
 
 
 def test_ensure_acados_environment_prefers_a_complete_conda_runtime(monkeypatch, tmp_path):
@@ -5829,6 +5851,10 @@ def test_same_rho_retries_are_excluded_from_physical_solution_traces():
     merged = SimpleNamespace(status=None)
     failed_first = SimpleNamespace(
         status=2,
+        iterations=100,
+        solver_time_to_optimize=3.8,
+        real_time_to_optimize=3.9,
+        _cocofest_feasibility_summary={"passes_tolerance": False},
         _cocofest_attempt_index=1,
         _cocofest_target_rho=1,
         _cocofest_advanced_physical_rho=False,
@@ -5856,6 +5882,12 @@ def test_same_rho_retries_are_excluded_from_physical_solution_traces():
     assert accounting["attempt_count"] == 3
     assert accounting["certified_physical_rho_count"] == 2
     assert [item["target_rho"] for item in accounting["attempts"]] == [1, 1, 2]
+    assert accounting["attempts"][0]["iterations"] == 100
+    assert accounting["attempts"][0]["solver_time_s"] == pytest.approx(3.8)
+    assert accounting["attempts"][0]["wall_time_s"] == pytest.approx(3.9)
+    assert accounting["attempts"][0]["feasibility"] == {
+        "passes_tolerance": False
+    }
 
 
 def test_recovery_seed_always_receives_one_final_acados_certification_attempt():
@@ -5875,6 +5907,31 @@ def test_recovery_seed_always_receives_one_final_acados_certification_attempt():
     assert not periodic_example.should_continue_same_rho_retry(
         **{**common, "completed_physical_rhos": 5}, recovery_seed_pending=True
     )
+
+
+def test_backend_failure_budget_reserves_one_recovery_certification_solve():
+    budget = periodic_example.receding_horizon_solver_failure_budget
+
+    assert budget(
+        1,
+        retry_without_advance=True,
+        recovery_requires_target_certification=True,
+    ) == 2
+    assert budget(
+        2,
+        retry_without_advance=True,
+        recovery_requires_target_certification=True,
+    ) == 3
+    assert budget(
+        2,
+        retry_without_advance=False,
+        recovery_requires_target_certification=True,
+    ) == 2
+    assert budget(
+        2,
+        retry_without_advance=True,
+        recovery_requires_target_certification=False,
+    ) == 2
 
 
 def test_failed_rho_checkpoints_preserve_neighboring_pw_active_sets():
@@ -8415,6 +8472,114 @@ def test_proximal_phase_one_preserves_retained_nodes_and_immutable_blocks(
     np.testing.assert_allclose(nmpc.nlp[0].x_init["F_Test"].init, force)
 
 
+def test_failed_rho_phase_one_restores_checkpoint_and_preserves_ding_and_controls():
+    class Variables(dict):
+        pass
+
+    nlp = SimpleNamespace(
+        states=Variables(
+            theta=SimpleNamespace(index=[0]),
+            omega=SimpleNamespace(index=[1]),
+            F_Test=SimpleNamespace(index=[2]),
+            A_Test=SimpleNamespace(index=[3]),
+        ),
+        x_init={
+            "theta": SimpleNamespace(init=np.array([[0.0, -1.0]])),
+            "omega": SimpleNamespace(init=np.array([[-6.0, -6.1]])),
+            "F_Test": SimpleNamespace(init=np.array([[10.0, 11.0]])),
+            "A_Test": SimpleNamespace(init=np.array([[100.0, 99.0]])),
+        },
+        u_init={"u": SimpleNamespace(init=np.array([[0.2]]))},
+    )
+    nmpc = SimpleNamespace(nlp=[nlp])
+    checkpoint = periodic_example.snapshot_initial_guess(nmpc)
+    nlp.x_init["theta"].init[:, :] = 123.0
+    nlp.x_init["F_Test"].init[:, :] = -5.0
+    nlp.u_init["u"].init[:, :] = 0.6
+    calls = {}
+
+    def fake_project(_nmpc, **kwargs):
+        calls["project"] = kwargs
+        _nmpc.nlp[0].x_init["theta"].init[:, 1] = -1.25
+        return {
+            "accepted": True,
+            "scaled_defect_before": 2.0,
+            "scaled_defect_after": 0.5,
+        }
+
+    def fake_reset(_nmpc, solution, *, solver_name, mode):
+        calls["reset"] = (solution, solver_name, mode)
+        return {"solver": solver_name, "mode": mode, "applied": False}
+
+    summary = periodic_example.apply_failed_rho_mechanical_phase_one_recovery(
+        nmpc,
+        checkpoint,
+        solver_name="madnlp",
+        proximity_weight=1.0,
+        defect_weight=10.0,
+        n_substeps=5,
+        max_state_change=None,
+        max_state_change_by_block={},
+        project_function=fake_project,
+        reset_dual_function=fake_reset,
+    )
+
+    assert summary["checkpoint_difference_before_restore"]["maximum"] > 0.0
+    assert summary["checkpoint_difference_after_restore"]["maximum"] == 0.0
+    assert summary["protected_max_change"] == 0.0
+    assert calls["project"]["mutable_blocks"] == ("q", "qdot")
+    assert calls["project"]["monotone_blocks"] == ("q", "qdot")
+    assert calls["project"]["start_node"] == 0
+    assert calls["reset"] == (None, "madnlp", "off")
+    np.testing.assert_array_equal(nlp.x_init["F_Test"].init, [[10.0, 11.0]])
+    np.testing.assert_array_equal(nlp.x_init["A_Test"].init, [[100.0, 99.0]])
+    np.testing.assert_array_equal(nlp.u_init["u"].init, [[0.2]])
+    np.testing.assert_array_equal(nlp.x_init["theta"].init, [[0.0, -1.25]])
+
+
+def test_failed_rho_phase_one_rejects_a_change_to_protected_states():
+    class Variables(dict):
+        pass
+
+    nlp = SimpleNamespace(
+        states=Variables(
+            q=SimpleNamespace(index=[0]),
+            qdot=SimpleNamespace(index=[1]),
+            F_Test=SimpleNamespace(index=[2]),
+        ),
+        x_init={
+            "q": SimpleNamespace(init=np.zeros((1, 2))),
+            "qdot": SimpleNamespace(init=np.zeros((1, 2))),
+            "F_Test": SimpleNamespace(init=np.ones((1, 2))),
+        },
+        u_init={"u": SimpleNamespace(init=np.array([[0.2]]))},
+    )
+    nmpc = SimpleNamespace(nlp=[nlp])
+    checkpoint = periodic_example.snapshot_initial_guess(nmpc)
+
+    def invalid_project(_nmpc, **_kwargs):
+        _nmpc.nlp[0].x_init["q"].init[:, 1] = 0.5
+        _nmpc.nlp[0].x_init["F_Test"].init[:, 1] = 2.0
+        return {"accepted": True}
+
+    with pytest.raises(RuntimeError, match="protected Ding states or controls"):
+        periodic_example.apply_failed_rho_mechanical_phase_one_recovery(
+            nmpc,
+            checkpoint,
+            solver_name="ipopt",
+            proximity_weight=1.0,
+            defect_weight=10.0,
+            n_substeps=5,
+            max_state_change=None,
+            max_state_change_by_block={},
+            project_function=invalid_project,
+            reset_dual_function=lambda *_args, **_kwargs: {},
+        )
+
+    np.testing.assert_array_equal(nlp.x_init["q"].init, [[0.0, 0.0]])
+    np.testing.assert_array_equal(nlp.x_init["F_Test"].init, [[1.0, 1.0]])
+
+
 def test_pulse_width_summary_preserves_ipopt_control_variation():
     pulse_widths = np.array([[0.00015, 0.0003, 0.0006]])
     nmpc = SimpleNamespace(
@@ -9487,7 +9652,7 @@ def test_horizon_seed_recenters_kinematic_boundary_bounds():
 def test_full_horizon_prefix_overlays_only_certified_cycles(tmp_path):
     args = SimpleNamespace(
         model_formulation="periodic_node",
-        mechanical_formulation="full",
+        mechanical_formulation="reduced",
         cycles_per_window=2,
         stimulations_per_cycle=2,
         objective="fatigue",
@@ -9510,8 +9675,8 @@ def test_full_horizon_prefix_overlays_only_certified_cycles(tmp_path):
     metadata = periodic_example._common_initial_solution_metadata(prefix_args)
     prefix = periodic_example._WarmupSolutionAdapter(
         states={
-            "q": np.arange(5, dtype=float).reshape(1, 5),
-            "qdot": np.arange(10, 15, dtype=float).reshape(1, 5),
+            "theta": np.arange(5, dtype=float).reshape(1, 5),
+            "omega": np.arange(10, 15, dtype=float).reshape(1, 5),
         },
         controls={
             "last_pulse_width_Biceps": np.array([[0.0002, 0.0003]])
@@ -9524,8 +9689,8 @@ def test_full_horizon_prefix_overlays_only_certified_cycles(tmp_path):
 
     nlp = SimpleNamespace(
         x_init={
-            "q": guess(np.full((1, 9), 90.0)),
-            "qdot": guess(np.full((1, 9), 80.0)),
+            "theta": guess(np.full((1, 9), 90.0)),
+            "omega": guess(np.full((1, 9), 80.0)),
         },
         u_init={
             "last_pulse_width_Biceps": guess(np.full((1, 4), 0.0004))
@@ -9538,17 +9703,83 @@ def test_full_horizon_prefix_overlays_only_certified_cycles(tmp_path):
     )
 
     summary = periodic_example.apply_full_horizon_prefix_to_initial_guess(
-        nmpc, prefix, args, tmp_path / "one-cycle-full.npz"
+        nmpc, prefix, args, tmp_path / "one-cycle-fho.npz"
     )
 
-    np.testing.assert_allclose(nlp.x_init["q"].init[:, :5], [[0, 1, 2, 3, 4]])
-    np.testing.assert_allclose(nlp.x_init["q"].init[:, 5:], 90.0)
+    np.testing.assert_allclose(nlp.x_init["theta"].init[:, :5], [[0, 1, 2, 3, 4]])
+    np.testing.assert_allclose(nlp.x_init["theta"].init[:, 5:], 90.0)
     np.testing.assert_allclose(
         nlp.u_init["last_pulse_width_Biceps"].init,
         [[0.0002, 0.0003, 0.0004, 0.0004]],
     )
     assert summary["prefix_cycles"] == 1
     assert summary["appended_rho_cycles"] == 1
+
+
+def test_common_seed_can_recenter_every_reduced_first_node_bound():
+    source = periodic_example._WarmupSolutionAdapter(
+        states={
+            "theta": np.asarray([[-12.0, -15.0, -18.0]]),
+            "F_Biceps": np.asarray([[42.0, 41.0, 40.0]]),
+        },
+        controls={"last_pulse_width_Biceps": np.asarray([[0.0002, 0.0003]])},
+    )
+
+    def guess(values):
+        return SimpleNamespace(init=np.asarray(values, dtype=float))
+
+    def bounds(rows):
+        return SimpleNamespace(
+            min=np.full((rows, 3), -100.0),
+            max=np.full((rows, 3), 100.0),
+        )
+
+    nlp = SimpleNamespace(
+        x_init={
+            "theta": guess(np.zeros((1, 3))),
+            "F_Biceps": guess(np.zeros((1, 3))),
+        },
+        u_init={"last_pulse_width_Biceps": guess(np.full((1, 2), 0.0004))},
+        x_bounds={"theta": bounds(1), "F_Biceps": bounds(1)},
+    )
+    nmpc = SimpleNamespace(
+        nlp=[nlp],
+        _correct_init_guess_to_fit_bounds=lambda corrected_input: None,
+        _sync_acados_state_bounds=lambda: None,
+    )
+
+    periodic_example.apply_solution_directly_to_periodic_nmpc_initial_guess(
+        nmpc, source, recenter_first_node_bounds=True
+    )
+
+    assert nlp.x_bounds["theta"].min[0, 0] == pytest.approx(-12.0)
+    assert nlp.x_bounds["theta"].max[0, 0] == pytest.approx(-12.0)
+    assert nlp.x_bounds["F_Biceps"].min[0, 0] == pytest.approx(42.0)
+    assert nlp.x_bounds["F_Biceps"].max[0, 0] == pytest.approx(42.0)
+
+
+def test_cycle_boundary_diagnostic_uses_reduced_theta_state():
+    nmpc = SimpleNamespace(
+        cycle_len=2,
+        n_cycles_simultaneous=3,
+        pedal_turn_in_one_cycle=-2.0 * np.pi,
+        nlp=[
+            SimpleNamespace(
+                x_init={
+                    "theta": SimpleNamespace(
+                        init=np.asarray(
+                            [[0.0, -3.0, -2.0 * np.pi, -9.0, -4.0 * np.pi, -15.0, -6.0 * np.pi]]
+                        )
+                    )
+                }
+            )
+        ],
+    )
+
+    diagnostics = periodic_example.wheel_cycle_boundary_initial_guess_errors(nmpc)
+
+    assert [item["state_key"] for item in diagnostics] == ["theta", "theta"]
+    assert [item["error"] for item in diagnostics] == pytest.approx([0.0, 0.0])
 
 
 def test_full_dynamics_transfer_rollout_reintegrates_appended_cycle():
@@ -11127,6 +11358,7 @@ def test_comparison_forwards_solver_neutral_seed_diagnostics(monkeypatch):
         acados_transfer_phase_one_max_q_change=0.1,
         acados_transfer_phase_one_max_qdot_change=0.2,
         acados_transfer_phase_one_max_fes_change=0.3,
+        nlp_failed_rho_phase_one_recovery=True,
     )
 
     assert captured["ipopt"].initial_guess_diagnostics is True
@@ -11147,6 +11379,7 @@ def test_comparison_forwards_solver_neutral_seed_diagnostics(monkeypatch):
         assert args.full_dynamics_phase_one_max_q_change == pytest.approx(0.1)
         assert args.full_dynamics_phase_one_max_qdot_change == pytest.approx(0.2)
         assert args.full_dynamics_phase_one_max_fes_change == pytest.approx(0.3)
+        assert args.nlp_failed_rho_phase_one_recovery is True
 
 
 def test_generic_initial_guess_copy_reports_incompatible_grids():

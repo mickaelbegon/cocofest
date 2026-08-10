@@ -1,8 +1,9 @@
 # Point de reprise du benchmark RHO
 
-État consolidé au 2 août 2026 sur la branche
-`codex/acados-pr-refresh`. Le dernier SHA Cocofest exécuté par la campagne
-ACADOS 100 RHO est `3857ddf6c55bf2583f14fa84e333f719439c574a`.
+État consolidé au 10 août 2026 sur la branche
+`codex/full-horizon-homotopy`. Le dernier SHA Cocofest cité ci-dessous comme
+résultat CI reste celui de la campagne correspondante; les changements locaux
+explicitement signalés ne sont pas encore des résultats Linux.
 
 Ce document répond à deux questions :
 
@@ -341,6 +342,37 @@ physique.
   et documentée; la campagne Linux reste à valider.
 - [x] Réutiliser la solution récupérée uniquement si sa faisabilité mesurée
   passe, puis exiger une certification finale par MadNLP.
+- [x] Implémenter localement une récupération **conditionnelle** commune à
+  IPOPT, MadNLP et Fatrop : après le premier échec seulement, restaurer la
+  primale préparée du même RHO, projeter uniquement la mécanique par Phase I,
+  préserver exactement les états de Ding et les PW, remettre les duals à zéro,
+  puis exiger une nouvelle résolution du problème physique strict.
+- [x] Ajouter les tests unitaires du restore exact, de l'invariance Ding/PW,
+  du reset des duals et de la seconde tentative obligatoire. Validation locale
+  ciblée : `5 passed` le 10 août 2026.
+- [x] Exécuter un vrai RHO local IPOPT reduced/SX/Radau 3 avec le recovery
+  armé : `1/1` certifié, statut `0`, `85` itérations, `2.309 s` solveur et
+  aucune Phase I déclenchée. Cela valide le chemin nominal dormant, mais ne
+  remplace pas le gate Linux ni un échec forcé/réel.
+- [x] Forcer localement un échec avec `max_iter=1`. Ce smoke a découvert puis
+  corrigé un budget interne Bioptim trop court : après correction, deux appels
+  solveur ciblent bien le même RHO, sans avancement; un seul recovery est
+  enregistré, le checkpoint est restauré exactement et Ding/PW restent
+  inchangés. Les deux solves échouent volontairement au plafond d'une
+  itération; ce résultat ne mesure ni convergence ni fatigue.
+- [x] Comparer localement IPOPT reduced/SX/Radau 3 sur `5/5` RHO avec et sans
+  recovery armé. Aucun recovery ne se déclenche; l'écart relatif est seulement
+  `8.05e-12` sur l'objectif, `7.99e-12` sur la fatigue exécutée et `6.53e-12`
+  sur l'AUC. Les itérations et temps fluctuent entre les deux processus et ne
+  constituent pas une mesure de gain sur un seul passage.
+- [x] Exposer ce mode comme input CI opt-in et vérifier dans le runner que le
+  contrat est bien sérialisé dans le JSON; les campagnes nominales restent
+  inchangées.
+- [ ] Lancer le smoke CI de 5 RHO et le comparer à la baseline sans recovery.
+  Tant qu'aucun échec naturel ne survient, le nombre de Phase I doit être nul
+  et les résultats physiques identiques.
+- [ ] Rejouer ensuite le premier checkpoint d'échec naturel IPOPT et MadNLP;
+  mesurer séparément temps de restauration, Phase I et retry solveur.
 - [ ] Comparer les ensembles actifs PW, multiplicateurs, stationnarité et
   conditionnement avant/après récupération.
 

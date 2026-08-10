@@ -117,6 +117,11 @@ on:
         options:
           - mechanical
           - all
+      nlp_failed_rho_phase_one_recovery:
+        description: On the first failed NLP solve only, retry the same frozen RHO after mechanical Phase I
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -153,6 +158,7 @@ env:
   MKL_NUM_THREADS: "1"
   NUMEXPR_NUM_THREADS: "1"
   JULIA_NUM_THREADS: "1"
+  NLP_FAILED_RHO_PHASE_ONE_RECOVERY: ${{ inputs.nlp_failed_rho_phase_one_recovery }}
   PYTHONUNBUFFERED: "1"
   MPLBACKEND: Agg
   MPLCONFIGDIR: /tmp/cocofest-matplotlib

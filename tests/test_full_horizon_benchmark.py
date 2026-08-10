@@ -9,7 +9,6 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
     / ".github"
@@ -23,24 +22,32 @@ sys.modules[SPEC.name] = full_horizon
 SPEC.loader.exec_module(full_horizon)
 
 
+def test_rho_initial_state_homotopy_minimum_step_is_finer_than_one_over_32():
+    assert full_horizon.RHO_INITIAL_STATE_HOMOTOPY_MIN_STEP == pytest.approx(1 / 256)
+    assert full_horizon.RHO_INITIAL_STATE_HOMOTOPY_MIN_STEP < 1 / 32
+
+
 @pytest.mark.parametrize(
     ("maximum", "expected_tail"),
     (
-        (3, [1, 2, 3]),
-        (32, [29, 30, 32]),
-        (60, [50, 55, 60]),
-        (67, [55, 60, 67]),
-        (100, [80, 90, 100]),
+        (2, [2]),
+        (3, [2, 3]),
+        (32, [30, 31, 32]),
+        (60, [58, 59, 60]),
+        (100, [98, 99, 100]),
     ),
 )
-def test_horizon_sweep_targets_follow_adaptive_steps_and_arbitrary_maximum(
-    maximum, expected_tail
-):
+def test_horizon_sweep_targets_grow_one_cycle_at_a_time(maximum, expected_tail):
     targets = full_horizon.horizon_sweep_targets(maximum)
 
     assert targets == sorted(set(targets))
     assert targets[-1] == maximum
     assert targets[-len(expected_tail) :] == expected_tail
+
+
+def test_horizon_sweep_requires_the_two_rho_bootstrap_cycles():
+    with pytest.raises(ValueError, match="at least two"):
+        full_horizon.horizon_sweep_targets(1)
 
 
 def test_refinement_fills_only_the_last_coarse_interval():
@@ -96,6 +103,188 @@ def test_rho_seed_prefix_rejects_non_integral_cycle_layout(tmp_path):
 
     with pytest.raises(ValueError, match="State seed"):
         full_horizon.write_rho_seed_prefix(source, tmp_path / "prefix.npz", 2)
+
+
+def test_rho_seed_cycle_extracts_one_based_cycle(tmp_path):
+    source = tmp_path / "rho.npz"
+    output = tmp_path / "cycle-2.npz"
+    np.savez(
+        source,
+        states__theta=np.arange(13, dtype=float).reshape(1, 13),
+        controls__pulse=np.arange(12, dtype=float).reshape(1, 12),
+        metadata__json=np.asarray(
+            json.dumps({"cycles_per_window": 3, "mechanical_formulation": "reduced"})
+        ),
+    )
+
+    metadata = full_horizon.write_rho_seed_cycle(source, output, 2)
+
+    with np.load(output, allow_pickle=False) as data:
+        np.testing.assert_array_equal(data["states__theta"], [[4, 5, 6, 7, 8]])
+        np.testing.assert_array_equal(data["controls__pulse"], [[4, 5, 6, 7]])
+    assert metadata["cycles_per_window"] == 1
+    assert metadata["producer_cycle_number"] == 2
+
+
+def test_rho_initial_state_homotopy_hits_requested_fraction(tmp_path):
+    source = tmp_path / "source.npz"
+    reference = tmp_path / "reference.npz"
+    target = tmp_path / "fho-2.npz"
+    output = tmp_path / "stage.npz"
+    one_cycle_metadata = {
+        "cycles_per_window": 1,
+        "mechanical_formulation": "reduced",
+    }
+    np.savez(
+        source,
+        states__theta=np.asarray([[0.0, -1.0, -2.0]]),
+        states__F_Biceps=np.asarray([[10.0, 9.0, 8.0]]),
+        controls__pulse=np.asarray([[0.2, 0.3]]),
+        metadata__json=np.asarray(json.dumps(one_cycle_metadata)),
+    )
+    np.savez(
+        reference,
+        states__theta=np.asarray([[0.0, -1.0, -2.0]]),
+        states__F_Biceps=np.asarray([[10.0, 9.0, 8.0]]),
+        controls__pulse=np.asarray([[0.2, 0.3]]),
+        metadata__json=np.asarray(
+            json.dumps({**one_cycle_metadata, "producer_cycle_number": 3})
+        ),
+    )
+    np.savez(
+        target,
+        states__theta=np.asarray([[0.0, -2.0, -4.0, -6.0, -8.0]]),
+        states__F_Biceps=np.asarray([[10.0, 20.0, 30.0, 40.0, 50.0]]),
+        controls__pulse=np.asarray([[0.2, 0.3, 0.4, 0.5]]),
+        metadata__json=np.asarray(
+            json.dumps({"cycles_per_window": 2, "mechanical_formulation": "reduced"})
+        ),
+    )
+
+    metadata = full_horizon.write_rho_initial_state_homotopy_seed(
+        source, reference, target, output, 0.5
+    )
+
+    with np.load(output, allow_pickle=False) as data:
+        np.testing.assert_allclose(data["states__theta"], [[-4.0, -5.0, -6.0]])
+        assert data["states__F_Biceps"][0, 0] == pytest.approx(30.0)
+        assert data["states__F_Biceps"][0, -1] == pytest.approx(8.0)
+        np.testing.assert_array_equal(data["controls__pulse"], [[0.2, 0.3]])
+    assert metadata["homotopy_fraction"] == 0.5
+    assert metadata["homotopy_reference_cycle_number"] == 3
+
+
+def test_rho_initial_state_homotopy_aligns_equivalent_theta_winding(tmp_path):
+    source = tmp_path / "source.npz"
+    reference = tmp_path / "reference.npz"
+    target = tmp_path / "fho-3.npz"
+    output = tmp_path / "stage.npz"
+    metadata = {"cycles_per_window": 1, "mechanical_formulation": "reduced"}
+    reference_theta = np.asarray([[-8.0 * np.pi, -9.0 * np.pi, -10.0 * np.pi]])
+    np.savez(
+        source,
+        states__theta=reference_theta,
+        metadata__json=np.asarray(json.dumps(metadata)),
+    )
+    np.savez(
+        reference,
+        states__theta=reference_theta,
+        metadata__json=np.asarray(json.dumps(metadata)),
+    )
+    np.savez(
+        target,
+        states__theta=np.asarray([[0.0, -2.0 * np.pi, -6.0 * np.pi]]),
+        metadata__json=np.asarray(
+            json.dumps({"cycles_per_window": 3, "mechanical_formulation": "reduced"})
+        ),
+    )
+
+    written = full_horizon.write_rho_initial_state_homotopy_seed(
+        source, reference, target, output, 0.25
+    )
+
+    with np.load(output, allow_pickle=False) as data:
+        theta = data["states__theta"]
+    np.testing.assert_allclose(theta[:, 0], [-6.0 * np.pi])
+    np.testing.assert_allclose(np.diff(theta), np.diff(reference_theta))
+    assert written["homotopy_theta_winding_shift"] == pytest.approx(2.0 * np.pi)
+
+
+def test_fho_terminal_continuation_starts_exactly_at_fho_terminal_state(tmp_path):
+    source = tmp_path / "fho-2.npz"
+    output = tmp_path / "next-cycle.npz"
+    metadata = {
+        "cycles_per_window": 2,
+        "mechanical_formulation": "reduced",
+    }
+    theta = np.asarray([[0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0]])
+    fatigue = np.asarray([[1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4]])
+    controls = np.arange(6, dtype=float).reshape(1, 6)
+    np.savez(
+        source,
+        states__theta=theta,
+        states__A_Biceps=fatigue,
+        controls__last_pulse_width_Biceps=controls,
+        metadata__json=np.asarray(json.dumps(metadata)),
+    )
+
+    written = full_horizon.write_fho_terminal_continuation_seed(source, output)
+
+    with np.load(output, allow_pickle=False) as data:
+        next_theta = data["states__theta"]
+        next_fatigue = data["states__A_Biceps"]
+        next_controls = data["controls__last_pulse_width_Biceps"]
+        persisted = json.loads(str(data["metadata__json"].item()))
+
+    np.testing.assert_allclose(next_theta[:, 0], theta[:, -1])
+    np.testing.assert_allclose(next_fatigue[:, 0], fatigue[:, -1])
+    assert next_theta[-1, -1] == pytest.approx(-9.0)
+    assert next_fatigue[0, -1] == pytest.approx(0.1)
+    np.testing.assert_array_equal(next_controls, controls[:, -3:])
+    assert written == persisted
+    assert persisted["cycles_per_window"] == 1
+    assert persisted["producer_source_cycles"] == 2
+
+
+def test_rho_extension_replaces_the_carrier_boundary_before_appending(tmp_path):
+    prefix = tmp_path / "rho-prefix.npz"
+    extension = tmp_path / "rho-extension.npz"
+    output = tmp_path / "fho-plus-rho.npz"
+    prefix_metadata = {
+        "cycles_per_window": 2,
+        "mechanical_formulation": "reduced",
+    }
+    extension_metadata = {
+        "cycles_per_window": 1,
+        "mechanical_formulation": "reduced",
+    }
+    np.savez(
+        prefix,
+        states__theta=np.arange(7, dtype=float).reshape(1, 7),
+        controls__pulse=np.arange(6, dtype=float).reshape(1, 6),
+        metadata__json=np.asarray(json.dumps(prefix_metadata)),
+    )
+    np.savez(
+        extension,
+        states__theta=np.asarray([[20.0, 21.0, 22.0, 23.0]]),
+        controls__pulse=np.asarray([[30.0, 31.0, 32.0]]),
+        metadata__json=np.asarray(json.dumps(extension_metadata)),
+    )
+
+    written = full_horizon.append_rho_extension_cycle(prefix, extension, output)
+
+    with np.load(output, allow_pickle=False) as data:
+        theta = data["states__theta"]
+        pulse = data["controls__pulse"]
+        persisted = json.loads(str(data["metadata__json"].item()))
+
+    assert theta.shape == (1, 10)
+    assert pulse.shape == (1, 9)
+    np.testing.assert_array_equal(theta[0, 6:], [20.0, 21.0, 22.0, 23.0])
+    np.testing.assert_array_equal(pulse[0, -3:], [30.0, 31.0, 32.0])
+    assert written == persisted
+    assert persisted["cycles_per_window"] == 3
+    assert persisted["replaced_reduced_boundary_maximum_absolute_change"] == 14.0
 
 
 def test_benchmark_success_requires_the_complete_physical_horizon(tmp_path):
@@ -187,6 +376,47 @@ def test_validated_cycles_retains_a_shorter_rho_prefix(tmp_path):
         )
         == 42
     )
+
+
+def test_rho_extension_accepts_a_valid_cycle_rejected_by_endurance_semantics(
+    tmp_path,
+):
+    result_path = tmp_path / "extension.json"
+    result_path.write_text(
+        json.dumps(
+            {
+                "results": [
+                    {
+                        "success": False,
+                        "solver_success": True,
+                        "physical_success": False,
+                        "solver": "ipopt",
+                        "mode": "rho",
+                        "covered_cycles": 1,
+                        "physically_validated_cycles": 1,
+                        "windows": [{"validated": True}],
+                        "fatigue_endurance_outcome": {
+                            "accepted": False,
+                            "evidence": ["ding_force_capacity_decreased"],
+                        },
+                    }
+                ],
+                "configurations": {
+                    "ipopt": {
+                        "single_shot": False,
+                        "mechanical_formulation": "reduced",
+                        "cycles_per_window": 1,
+                        "n_windows": 1,
+                        "use_sx": True,
+                        "ipopt_linear_solver": "mumps",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert full_horizon._rho_extension_success(result_path)
 
 
 def test_unknown_mumps_warning_accepts_monitored_string_path(tmp_path):
@@ -296,7 +526,7 @@ def test_horizon_attempt_passes_the_certified_full_prefix(tmp_path, monkeypatch)
     )
 
     assert observed["prefix"] == prefix
-    assert attempt["seed_origin"] == "rho_plus_certified_full_prefix"
+    assert attempt["seed_origin"] == "rho_plus_certified_fho_prefix"
     assert attempt["prefix_solution_path"] == str(prefix)
 
 
@@ -366,9 +596,13 @@ def test_rho_and_full_horizon_use_the_intended_solver_contract(tmp_path):
     assert "--single-shot" not in rho
     assert "--allow-partial-receding-horizon-solution-output" in rho
     assert "--ipopt-use-sx" in rho
+    assert "--ipopt-enable-periodic-fes-warmup-projection" in rho
+    assert rho[rho.index("--periodic-fes-warmup-projection-strategy") + 1] == "rollout"
+    assert "--common-initial-solution-recenter-first-node-bounds" in rho
     assert "--ipopt-no-use-sx" not in rho
     assert rho[rho.index("--ipopt-max-iter") + 1] == "2000"
     assert "--single-shot" in full
+    assert full[full.index("--mechanical-formulation") + 1] == "reduced"
     assert full[full.index("--full-horizon-prefix-solution") + 1] == str(
         tmp_path / "previous-full.npz"
     )
@@ -382,12 +616,38 @@ def test_rho_and_full_horizon_use_the_intended_solver_contract(tmp_path):
     assert "--ipopt-disable-standard-warmup" in full
     assert "--adopt-common-initial-solution-warmup-cycles" in full
     assert "--ipopt-disable-standard-warmup" not in one_cycle_full
-    assert (
-        "--adopt-common-initial-solution-warmup-cycles" not in one_cycle_full
-    )
+    assert "--adopt-common-initial-solution-warmup-cycles" not in one_cycle_full
     assert "--optional-nlp-periodic-ipopt-hot-start" in full
     assert "--initial-guess-diagnostics" in full
     assert "--exact-initial-nlp-audit" in full
     assert "--acados-diagnostics" not in full
     assert "--periodic-ipopt-refinement-use-sx" in full
     assert full[full.index("--periodic-ipopt-refinement-iterations") + 1] == "2000"
+
+
+def test_full_horizon_can_use_ipopt_locally_with_mx(tmp_path):
+    args = SimpleNamespace(
+        python="python",
+        workspace=tmp_path,
+        seed_dir=tmp_path / "seed",
+        n_threads=4,
+        crank_assistance=0.0,
+        max_iterations=2000,
+        terminal_wheel_q_slack=0.002,
+        max_cycles=3,
+        full_horizon_solver="ipopt",
+    )
+
+    command = full_horizon._full_horizon_command(
+        args,
+        3,
+        tmp_path / "prefix.npz",
+        tmp_path / "full.json",
+        tmp_path / "full.npz",
+    )
+
+    assert command[command.index("--solvers") + 1] == "ipopt"
+    assert "--single-shot" in command
+    assert "--ipopt-no-use-sx" in command
+    assert command[command.index("--ipopt-linear-solver") + 1] == "mumps"
+    assert "--exact-initial-nlp-audit" not in command

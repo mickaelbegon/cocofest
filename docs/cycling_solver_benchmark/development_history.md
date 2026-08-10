@@ -2268,20 +2268,22 @@ Pour mesurer la compilation, relancer sur le même type de runner avec :
 ### 14.3 RHO reduced contre horizon complet
 
 Le mode isolé `full_horizon` n’exécute pas ACADOS. Le RHO reduced de référence
-reste en IPOPT/SX; chaque horizon complet est construit en MX et résolu par
-MadNLP/MUMPS :
+reste en IPOPT/SX; chaque horizon complet conserve aussi la dynamique reduced,
+mais est construit en MX et résolu par MadNLP/MUMPS. « Full horizon » décrit
+donc la longueur monolithique de l'OCP, pas la formulation mécanique :
 
 1. un RHO IPOPT/MUMPS reduced à fenêtres d’un cycle produit une trajectoire
    concaténée jusqu’au plafond demandé ou au premier échec; dans ce dernier
    cas, son préfixe strictement validé devient automatiquement le nouveau
    plafond;
-2. cette trajectoire est découpée en seeds appariés pour les horizons complets
-   `1, 2, 3, 5, 10, 15, 20, 25, 30`, puis `35…60` par pas de 5 et enfin
-   `70, 80, …`;
-3. une non-convergence a droit à une seconde tentative et reste visible comme
-   trou dans le rapport; la première limite mémoire déclenche un raffinement
-   cycle par cycle du dernier intervalle;
-4. le pic RSS de tout l’arbre du processus solveur est mesuré. En mode `auto`,
+2. les deux premiers RHO initialisent `FHO_2`;
+3. après chaque `FHO_N` certifié, le RHO de référence `N+1` subit une homotopie
+   de son état initial vers l'état terminal exact de `FHO_N`; chaque palier est
+   résolu et le pas `0.25` est réduit jusqu'à `1/256 = 0.00390625` en cas
+   d'échec;
+4. `FHO_(N+1)` est initialisé par le préfixe exact `FHO_N` et le RHO final du
+   palier `lambda=1`; l'horizon augmente toujours d'un seul cycle;
+5. le pic RSS de tout l’arbre du processus solveur est mesuré. En mode `auto`,
    la limite vaut `12.5 GiB` sur une machine de 16 GiB et `97.5 GiB` sur une
    machine de 128 GiB.
 
@@ -2289,12 +2291,24 @@ Le RHO utilise IPOPT/SX, dont le préfixe reduced 100/100 est certifié;
 l’horizon complet utilise MX. `--single-shot` impose une seule résolution de
 l’OCP, `--madnlp-linear-solver mumps` est transmis explicitement et
 `--ipopt-no-use-sx` verrouille le graphe MX du problème full. Un pont
-IPOPT/MX facultatif raffine d’abord le préfixe RHO relevé sur la mécanique
-complète, puis warm-starte MadNLP. Le champ `full_horizon_max_cycles` est un
-plafond arbitraire, pas une liste de valeurs codée en dur. Chaque taille est
-réinitialisée depuis le préfixe correspondant de la trajectoire RHO reduced
-concaténée; les solutions full-horizon précédentes ne sont donc pas propagées
-et ne peuvent pas biaiser la branche comparée.
+IPOPT/MX facultatif raffine d’abord le seed reduced, puis warm-starte MadNLP.
+Le champ `full_horizon_max_cycles` est un plafond arbitraire. Les solutions FHO
+précédentes sont volontairement propagées : c'est l'homotopie de taille qui
+maintient une bonne solution initiale lorsque le nombre de cycles augmente.
+
+Le test local IPOPT/MUMPS du 10 août 2026 a exposé puis corrigé deux faux
+arrêts. D'abord, `FHO_3` était rephasé d'un tour par rapport au RHO 4 : ses
+angles terminaux et initiaux étaient physiquement identiques mais séparés de
+`2π`, que l'homotopie interpolait à tort. Le runner aligne maintenant le winding
+de `theta` avant chaque palier. Ensuite, à partir du raccord FHO 9 → RHO 10,
+IPOPT retournait le statut 0 et un cycle physiquement validé, mais le verdict
+d'endurance global refusait la baisse attendue d'une capacité de Ding. Le
+certificat de raccord exige désormais explicitement le solve IPOPT convergé,
+la fenêtre reduced/SX/MUMPS validée et son checkpoint, indépendamment de cette
+sémantique d'endurance. Après correction, tous les `FHO_2…FHO_20` convergent;
+`FHO_20` prend `96.7 s` et atteint `1.01 GiB` de RSS sous la limite locale de
+`12 GiB`. Le plafond 20, et non une panne du solveur ou de la mémoire, arrête
+ce test.
 
 ```bash
 gh workflow run cycling_solver_benchmark_linux.yml \

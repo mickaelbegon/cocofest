@@ -185,6 +185,41 @@ nominal et de réserver Phase I, ou un rollout, à une **seconde tentative aprè
 échec**. Ce mode recovery évitera le coût du screen et toute perturbation des
 RHO qui convergent déjà.
 
+#### Recovery NLP mécanique déclenché uniquement par un échec
+
+Le mode opt-in `--nlp-failed-rho-phase-one-recovery` implémente cette décision
+pour IPOPT, MadNLP et Fatrop. Il requiert
+`--retry-failed-rho-without-advance` et ne peut pas être combiné avec le
+fallback MadNLP/Fatrop vers IPOPT. Après le premier solve non certifié d'un RHO
+physique, il suit exactement cette séquence :
+
+1. restaurer la primale préparée juste avant ce solve, sans changer les bornes
+   mobiles ni la cible angulaire du RHO;
+2. appliquer la Phase I sur les seuls blocs mécaniques `q/qdot` ou
+   `theta/omega`, sur tout l'horizon;
+3. vérifier bit à bit que les 20 états de Ding et toutes les PW sont inchangés;
+4. supprimer les multiplicateurs issus du solve en échec;
+5. résoudre à nouveau le même problème physique strict; seule cette résolution
+   peut avancer la fenêtre.
+
+Il n'y a donc ni screen ni projection Phase I sur le chemin nominal. Une copie
+de checkpoint reste nécessaire avant chaque solve, mais son coût est distinct
+du temps solveur et très inférieur au coût de la projection. Les artefacts de
+recovery enregistrent les écarts avant/après restauration, les défauts Phase I,
+le temps de projection, l'invariance des variables protégées et le reset des
+duals. Au 10 août 2026, l'implémentation et ses tests ciblés sont validés
+localement; le smoke Linux 5 RHO et le replay d'un échec naturel restent à
+faire avant de conclure à un gain de robustesse.
+
+Le contrôle local apparié sur cinq RHO IPOPT reduced/SX/Radau 3 confirme que
+le mode armé mais non déclenché ne change pas le résultat scientifique : les
+écarts relatifs recovery/baseline valent `8.05e-12` sur l'objectif,
+`7.99e-12` sur la fatigue exécutée et `6.53e-12` sur l'AUC; les deux cas
+certifient `5/5` RHO et le compteur de recovery reste nul. Un test séparé avec
+`max_iter=1` confirme deux appels solveur sur le même RHO, sans avancement, et
+l'invariance exacte de Ding/PW. Cette interruption artificielle ne dit rien
+sur l'efficacité face à un échec naturel.
+
 ### Reprise hybride ACADOS → IPOPT (expérimentale)
 
 Le mode `--acados-ipopt-recovery` ne compare pas le full ACADOS historique à
@@ -906,22 +941,39 @@ méthode reproduit le mieux l'ancienne référence? ».
 
 Le mode CI `full_horizon` vise maintenant le plus grand nombre de cycles dans
 un OCP unique sur les runners Linux GitHub. Il construit d'abord la trajectoire
-RHO reduced concaténée, puis explore les horizons full/MX avec MadNLP/MUMPS :
-pas de 1 cycle jusqu'à 30, de 5 jusqu'à 60, puis de 10 au-delà. Après chaque
-succès, la solution full certifiée initialise exactement les cycles déjà
-résolus; seuls les cycles ajoutés conservent l'initialisation RHO. Une seconde
-chance RHO seule distingue un mauvais raccordement d'un échec du problème.
+RHO reduced concaténée, puis résout des FHO reduced/MX avec MadNLP/MUMPS. Ici,
+`full-horizon` signifie un OCP monolithique couvrant tous les cycles; la
+mécanique reste reduced partout. La chaîne commence par `RHO_1 + RHO_2 →
+FHO_2`, puis ajoute strictement un cycle à la fois. Pour construire `FHO_(N+1)`,
+le runner part du RHO de référence `(N+1)`, déplace par homotopie son état
+initial jusqu'à l'état terminal exact de `FHO_N`, et résout un RHO à chaque
+palier. Le seed final est donc exactement `FHO_N + RHO_(N+1)`. Le pas initial
+de l'homotopie vaut `0.25` et est divisé par deux si un palier échoue.
+Le pas minimal vaut `1/256 = 0.00390625`, afin que les raccords sensibles ne
+soient pas rejetés alors qu'un palier intermédiaire plus fin reste résoluble.
+Avant l'interpolation, `theta` est ramené au winding équivalent le plus proche
+de l'état terminal FHO. Sans cet alignement, deux angles séparés exactement de
+`2π` créaient artificiellement des phases intermédiaires non équivalentes.
+Un RHO d'extension est certifié dès que son unique fenêtre IPOPT converge et
+est physiquement validée; le verdict d'endurance global n'est pas utilisé pour
+rejeter ce seed, car une baisse de capacité de Ding attendue ne rend pas le
+cycle invalide.
 Le pic RSS de tout l'arbre de processus est mesuré et le job s'arrête à
 `12.5 GiB` sur une allocation de 16 GiB ou `97.5 GiB` sur 128 GiB.
+
+Le test local IPOPT/MUMPS du 10 août 2026 a certifié la chaîne complète de
+`FHO_2` à `FHO_20`. `FHO_20` a pris `96.7 s` et culminé à `1.01 GiB` de RSS sur
+la machine 16 GiB; le plafond 20 a été atteint sans échec et ne constitue donc
+pas encore la limite locale.
 
 TODO :
 
 - lancer et suivre cette campagne sur le runner GitHub Linux standard;
 - confirmer que chaque frontière `30k` respecte le tour de pédale imposé et
-  enregistrer l'écart de raccord full/RHO;
-- raffiner à l'unité le dernier intervalle lorsqu'une limite mémoire est
-  rencontrée;
+  que tous les états reduced sont continus au raccord FHO/RHO;
 - comparer temps, RSS, faisabilité et objectif au RHO reduced apparié;
+- poursuivre localement la continuation sauvegardée de `FHO_20` vers
+  `FHO_21…FHO_30`, sans recalculer les horizons déjà certifiés;
 - dans un second temps, préparer un runner Linux à forte RAM avec GPU et
   intégrer le chemin de calcul CuSADI de la branche Bioptim pertinente; fixer
   son SHA et ajouter un benchmark CPU/GPU reproductible avant de conclure sur

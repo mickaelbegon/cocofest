@@ -1202,6 +1202,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--common-initial-solution-recenter-first-node-bounds",
+        action="store_true",
+        help=(
+            "Bind every first-node state bound to the first state stored in "
+            "--common-initial-solution. Use this when the seed is a continuation "
+            "from the terminal state of another OCP."
+        ),
+    )
+    parser.add_argument(
         "--common-initial-solution-output",
         type=Path,
         default=None,
@@ -2560,6 +2569,16 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--nlp-failed-rho-phase-one-recovery",
+        action="store_true",
+        help=(
+            "After the first uncertified IPOPT, MadNLP, or Fatrop solve of a "
+            "physical RHO, restore its exact prepared primal, apply a mechanical-only "
+            "Phase I, reset NLP multipliers, and retry without advancing. The nominal "
+            "path does not run the Phase-I defect screen."
+        ),
+    )
+    parser.add_argument(
         "--codegen-tag",
         type=str,
         default=None,
@@ -3855,13 +3874,10 @@ def apply_full_horizon_prefix_to_initial_guess(
             f"Full-horizon prefix '{prefix_path}' spans {prefix_cycles} cycles; "
             f"the target must be strictly longer than that ({target_cycles})."
         )
-    if (
-        metadata.get("mechanical_formulation") != "full"
-        or args.mechanical_formulation != "full"
-    ):
+    if metadata.get("mechanical_formulation") != args.mechanical_formulation:
         raise ValueError(
-            "--full-horizon-prefix-solution requires full mechanics for both "
-            "the prefix and target."
+            "--full-horizon-prefix-solution requires the same mechanical "
+            "formulation for the prefix and target."
         )
 
     prefix_args = copy(args)
@@ -4661,6 +4677,24 @@ def certified_physical_receding_solution(sol) -> tuple[tuple, dict[str, object]]
             "attempt": int(getattr(solution, "_cocofest_attempt_index", index)),
             "target_rho": getattr(solution, "_cocofest_target_rho", None),
             "status": int(solution.status),
+            "iterations": (
+                None
+                if getattr(solution, "iterations", None) is None
+                else int(solution.iterations)
+            ),
+            "solver_time_s": (
+                None
+                if getattr(solution, "solver_time_to_optimize", None) is None
+                else float(solution.solver_time_to_optimize)
+            ),
+            "wall_time_s": (
+                None
+                if getattr(solution, "real_time_to_optimize", None) is None
+                else float(solution.real_time_to_optimize)
+            ),
+            "feasibility": dict(
+                getattr(solution, "_cocofest_feasibility_summary", {}) or {}
+            ),
             "advanced": bool(
                 getattr(solution, "_cocofest_advanced_physical_rho", False)
             ),
@@ -4688,7 +4722,7 @@ def should_continue_same_rho_retry(
     maximum_recovery_attempts: int,
     recovery_seed_pending: bool,
 ) -> bool:
-    """Guarantee one ACADOS certification solve after an accepted recovery seed."""
+    """Guarantee one target-solver certification after preparing a recovery seed."""
 
     return bool(
         completed_physical_rhos < requested_physical_rhos
@@ -4696,6 +4730,26 @@ def should_continue_same_rho_retry(
             consecutive_failures < maximum_recovery_attempts
             or recovery_seed_pending
         )
+    )
+
+
+def receding_horizon_solver_failure_budget(
+    configured_failures: int,
+    *,
+    retry_without_advance: bool,
+    recovery_requires_target_certification: bool,
+) -> int:
+    """Reserve the backend loop slot needed to certify a prepared recovery seed.
+
+    Bioptim checks its internal consecutive-failure counter after calling the
+    user update callback.  A recovery callback may therefore request another
+    solve yet still be stopped at the loop guard.  The extra slot is only an
+    implementation allowance; the physical stopping rule continues to use
+    ``configured_failures`` in ``should_continue_same_rho_retry``.
+    """
+
+    return int(configured_failures) + int(
+        retry_without_advance and recovery_requires_target_certification
     )
 
 
@@ -5697,22 +5751,34 @@ def wheel_cycle_boundary_initial_guess_errors(periodic_nmpc) -> list[dict]:
             getattr(periodic_nmpc, "pedal_turn_in_one_cycle", -2.0 * np.pi),
         )
     )
-    q = np.asarray(periodic_nmpc.nlp[0].x_init["q"].init, dtype=float)
-    if cycle_len < 1 or q.shape[0] < 3:
+    state_guesses = periodic_nmpc.nlp[0].x_init
+    if "theta" in state_guesses:
+        wheel_state_key = "theta"
+        wheel_state_row = 0
+    elif "q" in state_guesses:
+        wheel_state_key = "q"
+        wheel_state_row = 2
+    else:
+        return []
+    wheel_states = np.asarray(
+        state_guesses[wheel_state_key].init, dtype=float
+    )
+    if cycle_len < 1 or wheel_states.shape[0] <= wheel_state_row:
         return []
 
-    first_q = float(q[2, 0])
+    first_q = float(wheel_states[wheel_state_row, 0])
     summaries = []
     for cycle_index in range(1, cycle_count):
         stage = cycle_index * cycle_len
-        if stage >= q.shape[1] - 1:
+        if stage >= wheel_states.shape[1] - 1:
             break
         target = first_q + cycle_index * cycle_shift
-        value = float(q[2, stage])
+        value = float(wheel_states[wheel_state_row, stage])
         summaries.append(
             {
                 "cycle_index": cycle_index,
                 "stage": stage,
+                "state_key": wheel_state_key,
                 "value": value,
                 "target": target,
                 "error": value - target,
@@ -10090,6 +10156,159 @@ def _restore_initial_guess_snapshot(periodic_nmpc, snapshot: dict) -> None:
         nlp.u_init[key].init[:, :] = values
 
 
+def _initial_guess_snapshot_max_difference(periodic_nmpc, snapshot: dict) -> dict:
+    """Measure physical initial-guess differences against a detached snapshot."""
+
+    nlp = periodic_nmpc.nlp[0]
+    state_changes = {
+        key: float(
+            np.max(
+                np.abs(
+                    np.asarray(nlp.x_init[key].init, dtype=float)
+                    - np.asarray(values, dtype=float)
+                )
+            )
+        )
+        for key, values in snapshot["states"].items()
+    }
+    control_changes = {
+        key: float(
+            np.max(
+                np.abs(
+                    np.asarray(nlp.u_init[key].init, dtype=float)
+                    - np.asarray(values, dtype=float)
+                )
+            )
+        )
+        for key, values in snapshot["controls"].items()
+    }
+    return {
+        "states": state_changes,
+        "controls": control_changes,
+        "maximum": max(
+            [0.0, *state_changes.values(), *control_changes.values()]
+        ),
+    }
+
+
+def apply_failed_rho_mechanical_phase_one_recovery(
+    periodic_nmpc,
+    checkpoint: dict,
+    *,
+    solver_name: str,
+    proximity_weight: float,
+    defect_weight: float,
+    n_substeps: int,
+    max_state_change: float | None,
+    max_state_change_by_block: dict,
+    project_function=None,
+    reset_dual_function=None,
+) -> dict:
+    """Restore one frozen RHO, repair mechanics, and discard failed NLP duals.
+
+    The checkpoint is restored before Phase I so a backend cannot influence the
+    recovery through mutations performed during its failed solve.  Only q and
+    qdot (or theta and omega) may move; Ding states and controls are verified
+    bit-for-bit against the restored checkpoint.
+    """
+
+    project_function = (
+        project_full_dynamics_initial_guess
+        if project_function is None
+        else project_function
+    )
+    reset_dual_function = (
+        apply_nlp_dual_warm_start
+        if reset_dual_function is None
+        else reset_dual_function
+    )
+    difference_before_restore = _initial_guess_snapshot_max_difference(
+        periodic_nmpc, checkpoint
+    )
+    _restore_initial_guess_snapshot(periodic_nmpc, checkpoint)
+    difference_after_restore = _initial_guess_snapshot_max_difference(
+        periodic_nmpc, checkpoint
+    )
+    if difference_after_restore["maximum"] != 0.0:
+        raise RuntimeError("The failed-RHO primal checkpoint was not restored exactly.")
+
+    nlp = periodic_nmpc.nlp[0]
+    mechanical_blocks = ("q", "qdot")
+    protected_state_keys = _phase_one_state_keys(nlp)["fes"]
+    protected_states = {
+        key: np.asarray(nlp.x_init[key].init, dtype=float).copy()
+        for key in protected_state_keys
+    }
+    protected_controls = {
+        key: np.asarray(nlp.u_init[key].init, dtype=float).copy()
+        for key in nlp.u_init.keys()
+    }
+
+    phase_one_start = perf_counter()
+    phase_one_summary = project_function(
+        periodic_nmpc,
+        proximity_weight=proximity_weight,
+        defect_weight=defect_weight,
+        n_substeps=n_substeps,
+        max_state_change=max_state_change,
+        max_state_change_by_block=max_state_change_by_block,
+        start_node=0,
+        mutable_blocks=mechanical_blocks,
+        monotone_blocks=mechanical_blocks,
+    )
+    phase_one_wall_time_s = perf_counter() - phase_one_start
+
+    protected_state_max_change = {
+        key: float(
+            np.max(
+                np.abs(
+                    np.asarray(nlp.x_init[key].init, dtype=float) - values
+                )
+            )
+        )
+        for key, values in protected_states.items()
+    }
+    protected_control_max_change = {
+        key: float(
+            np.max(
+                np.abs(
+                    np.asarray(nlp.u_init[key].init, dtype=float) - values
+                )
+            )
+        )
+        for key, values in protected_controls.items()
+    }
+    protected_max_change = max(
+        [
+            0.0,
+            *protected_state_max_change.values(),
+            *protected_control_max_change.values(),
+        ]
+    )
+    if protected_max_change != 0.0:
+        _restore_initial_guess_snapshot(periodic_nmpc, checkpoint)
+        raise RuntimeError(
+            "Mechanical failed-RHO Phase I changed protected Ding states or controls."
+        )
+
+    dual_reset = reset_dual_function(
+        periodic_nmpc,
+        None,
+        solver_name=solver_name,
+        mode="off",
+    )
+    return {
+        "checkpoint_difference_before_restore": difference_before_restore,
+        "checkpoint_difference_after_restore": difference_after_restore,
+        "phase_one": phase_one_summary,
+        "phase_one_wall_time_s": phase_one_wall_time_s,
+        "protected_state_max_change": protected_state_max_change,
+        "protected_control_max_change": protected_control_max_change,
+        "protected_max_change": protected_max_change,
+        "dual_reset": dual_reset,
+    }
+
+
 def _normalized_mechanical_transfer_score(
     defects: dict,
     *,
@@ -12882,7 +13101,10 @@ def apply_standard_warmup_to_periodic_nmpc(
 
 
 def apply_solution_directly_to_periodic_nmpc_initial_guess(
-    periodic_nmpc, solution, recenter_kinematic_bounds: bool = False
+    periodic_nmpc,
+    solution,
+    recenter_kinematic_bounds: bool = False,
+    recenter_first_node_bounds: bool = False,
 ):
     adapted_solution = _adapt_warmup_solution_to_periodic_nodes(periodic_nmpc, solution)
     states = adapted_solution.decision_states(to_merge=SolutionMerge.NODES)
@@ -12913,7 +13135,7 @@ def apply_solution_directly_to_periodic_nmpc_initial_guess(
         target[:, :] = values
 
     if recenter_kinematic_bounds:
-        for key in ("q", "qdot"):
+        for key in ("q", "qdot", "theta", "omega"):
             if key in periodic_nmpc.nlp[0].x_bounds.keys():
                 values = np.asarray(
                     periodic_nmpc.nlp[0].x_init[key].init,
@@ -12933,6 +13155,17 @@ def apply_solution_directly_to_periodic_nmpc_initial_guess(
                     interior_max = np.max(values[:, 1:-1], axis=1)
                     bounds.min[:, 1] = np.minimum(bounds.min[:, 1], interior_min)
                     bounds.max[:, 1] = np.maximum(bounds.max[:, 1], interior_max)
+
+    if recenter_first_node_bounds:
+        for key in periodic_nmpc.nlp[0].x_init.keys():
+            if key not in periodic_nmpc.nlp[0].x_bounds.keys():
+                continue
+            first_state = np.asarray(
+                periodic_nmpc.nlp[0].x_init[key].init[:, 0], dtype=float
+            )
+            bounds = periodic_nmpc.nlp[0].x_bounds[key]
+            bounds.min[:, 0] = first_state
+            bounds.max[:, 0] = first_state
 
     periodic_nmpc._correct_init_guess_to_fit_bounds(corrected_input="states")
     periodic_nmpc._correct_init_guess_to_fit_bounds(corrected_input="controls")
@@ -14248,6 +14481,21 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         if args.nlp_ipopt_recovery_collocation_degree < 1:
             raise ValueError(
                 "--nlp-ipopt-recovery-collocation-degree must be >= 1."
+            )
+    if getattr(args, "nlp_failed_rho_phase_one_recovery", False):
+        if args.solver not in {"ipopt", "madnlp", "fatrop"}:
+            raise ValueError(
+                "--nlp-failed-rho-phase-one-recovery requires IPOPT, MadNLP, or Fatrop."
+            )
+        if args.single_shot or not args.retry_failed_rho_without_advance:
+            raise ValueError(
+                "--nlp-failed-rho-phase-one-recovery requires the RHO mode and "
+                "--retry-failed-rho-without-advance."
+            )
+        if getattr(args, "nlp_ipopt_recovery", False):
+            raise ValueError(
+                "--nlp-failed-rho-phase-one-recovery and --nlp-ipopt-recovery "
+                "are mutually exclusive recovery strategies."
             )
     if args.acados_initial_irk_rollout and args.solver != "acados":
         raise ValueError("--acados-initial-irk-rollout requires --solver acados.")
@@ -15715,6 +15963,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             print("warmup_ipopt_linear_solver: " f"{_warmup_ipopt_linear_solver(args)}")
         if args.solver in NLP_SOLVER_NAMES:
             print(
+                "nlp_failed_rho_phase_one_recovery: "
+                f"{getattr(args, 'nlp_failed_rho_phase_one_recovery', False)}"
+            )
+            print(
                 f"{args.solver}_dual_warm_start_mode: "
                 f"{getattr(args, f'{args.solver}_dual_warm_start_mode')}"
             )
@@ -15862,7 +16114,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         apply_solution_directly_to_periodic_nmpc_initial_guess(
             nmpc,
             common_seed,
-            recenter_kinematic_bounds=mechanical_bridge,
+            recenter_kinematic_bounds=(
+                mechanical_bridge
+                or args.common_initial_solution_recenter_first_node_bounds
+            ),
+            recenter_first_node_bounds=(
+                args.common_initial_solution_recenter_first_node_bounds
+            ),
         )
         # Loading any seed can change the first crank angle, including when
         # producer and consumer share the same mechanical formulation.  The
@@ -15890,7 +16148,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     "preserved_wheel_q="
                     f"{terminal_contact_projection.get('preserved_wheel_q')}"
                 )
-        if args.solver == "acados" and not args.disable_periodic_fes_warmup_projection:
+        if args.common_initial_solution_recenter_first_node_bounds or (
+            args.solver == "acados"
+            and not args.disable_periodic_fes_warmup_projection
+        ):
             common_projection = project_periodic_fes_initial_guess(
                 nmpc,
                 projection_weight=args.periodic_fes_warmup_projection_weight,
@@ -16391,6 +16652,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     transfer_sqp_restart_summaries = []
     maxiter_retry_summaries = []
     ipopt_recovery_summaries = []
+    nlp_failed_rho_phase_one_summaries = []
     transfer_active_set_guard_summaries = []
     transfer_contact_projection_summaries = []
     transfer_bound_projection_summaries = []
@@ -16418,6 +16680,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         else None
     )
     rho_replay_checkpoint_summary = None
+    prepared_rho_primal_checkpoint = snapshot_initial_guess(nmpc)
+    phase_one_recovery_attempted_target_rhos: set[int] = set()
 
     def save_common_initial_solution(solution) -> bool:
         if (
@@ -16542,11 +16806,60 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         )
         if self._cocofest_retry_same_rho_pending:
             recovery_attempt = recovery_attempts_by_target_rho.get(target_rho, 0)
+            self._cocofest_recovery_seed_pending = False
+            if (
+                getattr(args, "nlp_failed_rho_phase_one_recovery", False)
+                and target_rho not in phase_one_recovery_attempted_target_rhos
+            ):
+                recovery_start = perf_counter()
+                phase_one_recovery_attempted_target_rhos.add(target_rho)
+                phase_one_recovery = apply_failed_rho_mechanical_phase_one_recovery(
+                    self,
+                    prepared_rho_primal_checkpoint,
+                    solver_name=args.solver,
+                    proximity_weight=args.full_dynamics_phase_one_proximity_weight,
+                    defect_weight=args.full_dynamics_phase_one_defect_weight,
+                    n_substeps=args.full_dynamics_phase_one_substeps,
+                    max_state_change=args.full_dynamics_phase_one_max_state_change,
+                    max_state_change_by_block=phase_one_max_state_change_by_block,
+                )
+                phase_one_recovery.update(
+                    {
+                        "attempt_window": int(self.total_optimization_run) + 1,
+                        "target_rho": target_rho,
+                        "target_failed_status": int(solution.status),
+                        "target_failed_feasibility": dict(feasibility),
+                        "wall_time_s": perf_counter() - recovery_start,
+                    }
+                )
+                nlp_failed_rho_phase_one_summaries.append(phase_one_recovery)
+                nlp_dual_warm_start_summaries.append(
+                    {
+                        **phase_one_recovery["dual_reset"],
+                        "window": int(self.total_optimization_run) + 1,
+                        "reason": "failed_rho_mechanical_phase_one_recovery",
+                    }
+                )
+                # A retry is required even when the configured failure budget
+                # would otherwise stop immediately: Phase I only prepares a
+                # candidate and never certifies the physical RHO itself.
+                self._cocofest_recovery_seed_pending = True
+                if echo:
+                    phase_one = phase_one_recovery["phase_one"]
+                    print(
+                        "nlp_failed_rho_phase_one_recovery: "
+                        f"target_rho={target_rho} "
+                        f"accepted={phase_one['accepted']} "
+                        f"scaled_defect={phase_one['scaled_defect_before']:.6g}->"
+                        f"{phase_one['scaled_defect_after']:.6g} "
+                        f"protected_max_change="
+                        f"{phase_one_recovery['protected_max_change']:.6g} "
+                        f"wall_time_s={phase_one_recovery['wall_time_s']:.6g}"
+                    )
             can_attempt_recovery = bool(
                 ipopt_recovery_nmpc is not None
                 and recovery_attempt < args.max_consecutive_failing
             )
-            self._cocofest_recovery_seed_pending = False
             if can_attempt_recovery:
                 recovery_attempt += 1
                 recovery_attempts_by_target_rho[target_rho] = recovery_attempt
@@ -16666,7 +16979,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     consecutive_physical_failures = 0
 
     def update_functions(_nmpc, cycle_idx, _sol):
-        nonlocal transfer_failure_window, consecutive_physical_failures
+        nonlocal transfer_failure_window
+        nonlocal consecutive_physical_failures
+        nonlocal prepared_rho_primal_checkpoint
         print(f"window {cycle_idx}")
         completed_window_count = (
             completed_physical_rhos
@@ -17609,6 +17924,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             _nmpc._cocofest_acados_main_window_retry_armed = bool(
                 continue_solving and retry_installed
             )
+        if continue_solving and args.solver in NLP_SOLVER_NAMES:
+            prepared_rho_primal_checkpoint = snapshot_initial_guess(_nmpc)
         return continue_solving
 
     solver_first_iter = None
@@ -18048,11 +18365,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             cycle_solutions=MultiCyclicCycleSolutions.ALL_CYCLES,
             get_all_iterations=True,
             cyclic_options={"states": {}},
-            max_consecutive_failing=(
-                args.max_consecutive_failing + 1
-                if ipopt_recovery_enabled
-                and args.retry_failed_rho_without_advance
-                else args.max_consecutive_failing
+            max_consecutive_failing=receding_horizon_solver_failure_budget(
+                args.max_consecutive_failing,
+                retry_without_advance=args.retry_failed_rho_without_advance,
+                recovery_requires_target_certification=(
+                    ipopt_recovery_enabled
+                    or getattr(args, "nlp_failed_rho_phase_one_recovery", False)
+                ),
             ),
             compact_solution_output=args.compact_rho_output,
         )
@@ -18107,6 +18426,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             summary["cycle_boundary_homotopy_summary"] = cycle_boundary_homotopy_summary
         if transfer_phase_one_summaries:
             summary["transfer_phase_one_summaries"] = transfer_phase_one_summaries
+        if nlp_failed_rho_phase_one_summaries:
+            summary["nlp_failed_rho_phase_one_summaries"] = (
+                nlp_failed_rho_phase_one_summaries
+            )
         attach_exact_initial_nlp_audits(summary, nmpc)
         return summary
     raw_solver_attempt_summary = None
@@ -18207,6 +18530,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         ] = transfer_ding_force_compensation_summaries
     if transfer_phase_one_summaries:
         summary["transfer_phase_one_summaries"] = transfer_phase_one_summaries
+    if nlp_failed_rho_phase_one_summaries:
+        summary["nlp_failed_rho_phase_one_summaries"] = (
+            nlp_failed_rho_phase_one_summaries
+        )
     if transfer_bound_homotopy_summaries:
         summary["transfer_bound_homotopy_summaries"] = transfer_bound_homotopy_summaries
     if transfer_sqp_restart_summaries:

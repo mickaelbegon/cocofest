@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Run an RSS-bounded RHO/full-prefix homotopy for full-horizon MadNLP.
+"""Run an RSS-bounded RHO-to-full-horizon continuation with MadNLP.
 
-The reduced one-cycle RHO is solved once up to the requested ceiling.  Its
-concatenated trajectory supplies the complete seed for each target size.  Once
-a full-mechanics horizon is certified, that solution replaces the matching
-prefix of the next target while the newly appended cycles remain RHO-seeded.
-An independent RHO-only retry remains available after a solver failure.
+Two consecutive reduced RHO cycles first initialize FHO_2.  Every subsequent
+problem is then built from the last certified full-horizon solution: its
+terminal state initializes one new reduced RHO cycle, and the concatenation
+``FHO_N + RHO_(N+1)`` initializes FHO_(N+1).  The horizon therefore grows by
+exactly one cycle and never reuses an unrelated tail from the original RHO.
 """
 
 from __future__ import annotations
@@ -27,21 +27,15 @@ import numpy as np
 GIB = 1024**3
 SMALL_RUNNER_RSS_LIMIT_GIB = 12.5
 LARGE_RUNNER_RSS_LIMIT_GIB = 97.5
+RHO_INITIAL_STATE_HOMOTOPY_MIN_STEP = 1.0 / 256.0
 
 
 def horizon_sweep_targets(max_cycles: int) -> list[int]:
-    """Return the +1 to 30, +5 to 60, then +10-cycle size ladder."""
+    """Return the strict one-cycle-at-a-time FHO continuation ladder."""
 
-    if max_cycles < 1:
-        raise ValueError("max_cycles must be strictly positive.")
-    targets = list(range(1, min(max_cycles, 30) + 1))
-    if max_cycles > 30:
-        targets.extend(range(35, min(max_cycles, 60) + 1, 5))
-    if max_cycles > 60:
-        targets.extend(range(70, max_cycles + 1, 10))
-    if targets[-1] != max_cycles:
-        targets.append(max_cycles)
-    return targets
+    if max_cycles < 2:
+        raise ValueError("max_cycles must be at least two.")
+    return list(range(2, max_cycles + 1))
 
 
 def refinement_targets(last_success: int, first_failure: int) -> list[int]:
@@ -79,7 +73,7 @@ def _read_positive_integer(path: Path) -> int | None:
 
 
 def available_memory_bytes() -> int:
-    """Return the tighter physical/cgroup memory allocation on Linux."""
+    """Return the tighter physical/cgroup allocation, with a macOS fallback."""
 
     physical = None
     try:
@@ -96,6 +90,14 @@ def available_memory_bytes() -> int:
     ]
     candidates = [value for value in (physical, *cgroup_limits) if value]
     if not candidates:
+        try:
+            page_count = int(os.sysconf("SC_PHYS_PAGES"))
+            page_size = int(os.sysconf("SC_PAGE_SIZE"))
+            if page_count > 0 and page_size > 0:
+                candidates.append(page_count * page_size)
+        except (OSError, ValueError, TypeError):
+            pass
+    if not candidates:
         raise RuntimeError("Cannot determine the runner memory allocation.")
     # Some cgroup v1 hosts expose an effectively infinite sentinel.
     finite = [value for value in candidates if value < (1 << 60)]
@@ -106,6 +108,16 @@ def _child_pids(pid: int) -> tuple[int, ...]:
     children_path = Path(f"/proc/{pid}/task/{pid}/children")
     try:
         return tuple(int(value) for value in children_path.read_text().split())
+    except (OSError, ValueError):
+        pass
+    try:
+        completed = subprocess.run(
+            ["pgrep", "-P", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return tuple(int(value) for value in completed.stdout.split())
     except (OSError, ValueError):
         return ()
 
@@ -126,13 +138,24 @@ def _process_rss_bytes(pid: int) -> int:
     try:
         lines = Path(f"/proc/{pid}/status").read_text(encoding="utf-8").splitlines()
     except OSError:
-        return 0
+        lines = []
     for line in lines:
         if line.startswith("VmRSS:"):
             try:
                 return int(line.split()[1]) * 1024
             except (ValueError, IndexError):
                 return 0
+    try:
+        completed = subprocess.run(
+            ["ps", "-o", "rss=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        rss_kib = int(completed.stdout.strip())
+        return rss_kib * 1024 if rss_kib > 0 else 0
+    except (OSError, ValueError):
+        pass
     return 0
 
 
@@ -300,6 +323,327 @@ def write_rho_seed_prefix(
     return metadata
 
 
+def write_rho_seed_cycle(
+    source_path: Path, output_path: Path, cycle_number: int
+) -> dict:
+    """Extract one one-based cycle from a concatenated reduced RHO trace."""
+
+    with np.load(source_path, allow_pickle=False) as data:
+        metadata = _load_metadata(data)
+        source_cycles = int(metadata["cycles_per_window"])
+        if cycle_number < 1 or cycle_number > source_cycles:
+            raise ValueError(
+                f"cycle_number must be in [1, {source_cycles}], got {cycle_number}."
+            )
+        cycle_index = cycle_number - 1
+        payload: dict[str, np.ndarray] = {}
+        for key in data.files:
+            if key == "metadata__json":
+                continue
+            values = np.asarray(data[key])
+            if key.startswith("states__"):
+                intervals, remainder = divmod(values.shape[-1] - 1, source_cycles)
+                if remainder:
+                    raise ValueError(f"State seed '{key}' has an invalid cycle layout.")
+                start = cycle_index * intervals
+                payload[key] = values[..., start : start + intervals + 1].copy()
+            elif key.startswith("controls__"):
+                nodes, remainder = divmod(values.shape[-1], source_cycles)
+                if remainder:
+                    raise ValueError(
+                        f"Control seed '{key}' has an invalid cycle layout."
+                    )
+                start = cycle_index * nodes
+                payload[key] = values[..., start : start + nodes].copy()
+            else:
+                payload[key] = values
+    metadata.update(
+        {
+            "cycles_per_window": 1,
+            "producer_mode": "receding_horizon_cycle_extraction",
+            "producer_source_cycles": source_cycles,
+            "producer_cycle_number": cycle_number,
+        }
+    )
+    payload["metadata__json"] = np.asarray(
+        json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(output_path, **payload)
+    return metadata
+
+
+def write_rho_initial_state_homotopy_seed(
+    source_solution_path: Path,
+    reference_cycle_path: Path,
+    target_fho_path: Path,
+    output_path: Path,
+    fraction: float,
+) -> dict:
+    """Move a one-cycle RHO warm start toward the terminal state of FHO_N."""
+
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("fraction must be finite and lie in [0, 1].")
+    with np.load(source_solution_path, allow_pickle=False) as source, np.load(
+        reference_cycle_path, allow_pickle=False
+    ) as reference, np.load(target_fho_path, allow_pickle=False) as target:
+        source_metadata = _load_metadata(source)
+        reference_metadata = _load_metadata(reference)
+        target_metadata = _load_metadata(target)
+        if any(
+            metadata.get("mechanical_formulation") != "reduced"
+            for metadata in (source_metadata, reference_metadata, target_metadata)
+        ):
+            raise ValueError(
+                "The RHO initial-state homotopy requires reduced mechanics."
+            )
+        if (
+            int(source_metadata["cycles_per_window"]) != 1
+            or int(reference_metadata["cycles_per_window"]) != 1
+        ):
+            raise ValueError(
+                "The homotopy source and reference must contain one cycle."
+            )
+
+        source_keys = set(source.files) - {"metadata__json"}
+        reference_keys = set(reference.files) - {"metadata__json"}
+        if source_keys != reference_keys or not source_keys <= set(target.files):
+            raise ValueError(
+                "The homotopy checkpoints do not expose matching variables."
+            )
+
+        payload: dict[str, np.ndarray] = {}
+        maximum_initial_state_change = 0.0
+        theta_winding_shift = 0.0
+        for key in sorted(source_keys):
+            source_values = np.asarray(source[key])
+            reference_values = np.asarray(reference[key])
+            if source_values.shape != reference_values.shape:
+                raise ValueError(f"Homotopy variable '{key}' has incompatible shapes.")
+            if key.startswith("states__"):
+                target_values = np.asarray(target[key])
+                source_for_homotopy = source_values
+                reference_for_homotopy = reference_values
+                if key == "states__theta":
+                    target_initial = target_values[..., -1:]
+                    winding_turns = np.rint(
+                        (target_initial - reference_values[..., :1]) / (2.0 * np.pi)
+                    )
+                    candidate_shift = winding_turns * (2.0 * np.pi)
+                    residual = (
+                        target_initial
+                        - reference_values[..., :1]
+                        - candidate_shift
+                    )
+                    if float(np.max(np.abs(residual))) <= 0.05:
+                        reference_for_homotopy = reference_values + candidate_shift
+                        source_shift = np.rint(
+                            (
+                                reference_for_homotopy[..., :1]
+                                - source_values[..., :1]
+                            )
+                            / (2.0 * np.pi)
+                        ) * (2.0 * np.pi)
+                        source_for_homotopy = source_values + source_shift
+                        theta_winding_shift = float(candidate_shift.reshape(-1)[0])
+                desired_initial = reference_for_homotopy[..., :1] + fraction * (
+                    target_values[..., -1:] - reference_for_homotopy[..., :1]
+                )
+                change = desired_initial - source_for_homotopy[..., :1]
+                maximum_initial_state_change = max(
+                    maximum_initial_state_change,
+                    float(np.max(np.abs(change))),
+                )
+                if key == "states__theta":
+                    shifted = source_for_homotopy + change
+                else:
+                    shifted = source_for_homotopy + change * np.linspace(
+                        1.0, 0.0, source_values.shape[-1]
+                    )
+                shifted[..., 0] = desired_initial[..., 0]
+                payload[key] = shifted
+            else:
+                payload[key] = source_values.copy()
+
+    metadata = dict(source_metadata)
+    metadata.update(
+        {
+            "cycles_per_window": 1,
+            "producer_mode": "rho_initial_state_homotopy",
+            "homotopy_fraction": float(fraction),
+            "homotopy_reference_cycle_number": reference_metadata.get(
+                "producer_cycle_number"
+            ),
+            "homotopy_target_fho_cycles": target_metadata.get("cycles_per_window"),
+            "homotopy_maximum_initial_state_change": maximum_initial_state_change,
+            "homotopy_theta_winding_shift": theta_winding_shift,
+        }
+    )
+    payload["metadata__json"] = np.asarray(
+        json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(output_path, **payload)
+    return metadata
+
+
+def write_fho_terminal_continuation_seed(source_path: Path, output_path: Path) -> dict:
+    """Extrapolate the last FHO cycle into a one-cycle seed starting at its end.
+
+    The state construction matches the established one-cycle tiling policy in
+    the cycling example.  In particular, the first node is copied exactly from
+    the FHO terminal state; the actual reduced RHO solve restores dynamics and
+    physical feasibility before this cycle may seed a longer FHO.
+    """
+
+    with np.load(source_path, allow_pickle=False) as data:
+        metadata = _load_metadata(data)
+        source_cycles = int(metadata["cycles_per_window"])
+        if source_cycles < 1:
+            raise ValueError("The full-horizon source must contain a cycle.")
+        if metadata.get("mechanical_formulation") != "reduced":
+            raise ValueError("The continuation source must use reduced mechanics.")
+
+        payload: dict[str, np.ndarray] = {}
+        for key in data.files:
+            if key == "metadata__json":
+                continue
+            values = np.asarray(data[key])
+            if key.startswith("states__"):
+                state_key = key.split("__", 1)[1]
+                intervals, remainder = divmod(values.shape[-1] - 1, source_cycles)
+                if remainder or intervals < 1:
+                    raise ValueError(
+                        f"State solution '{key}' has an invalid cycle layout."
+                    )
+                last_cycle = np.asarray(values[..., -intervals - 1 :], dtype=float)
+                drift = last_cycle[:, -1:] - last_cycle[:, :1]
+                continuation = np.empty_like(last_cycle)
+                continuation[:, :1] = last_cycle[:, -1:]
+                continuation[:, 1:] = last_cycle[:, 1:]
+                if state_key == "theta":
+                    continuation[:, 1:] += drift
+                elif state_key == "q":
+                    continuation[-1:, 1:] += drift[-1:, :]
+                    if continuation.shape[0] > 1:
+                        continuation[:-1, 1:] += drift[:-1, :] * np.linspace(
+                            1.0, 0.0, intervals
+                        )
+                elif state_key.startswith(("F_", "A_", "Tau1_", "Km_")):
+                    continuation[:, 1:] += drift
+                else:
+                    continuation[:, 1:] += drift * np.linspace(1.0, 0.0, intervals)
+                payload[key] = continuation
+            elif key.startswith("controls__"):
+                nodes, remainder = divmod(values.shape[-1], source_cycles)
+                if remainder or nodes < 1:
+                    raise ValueError(
+                        f"Control solution '{key}' has an invalid cycle layout."
+                    )
+                payload[key] = np.asarray(values[..., -nodes:]).copy()
+            else:
+                payload[key] = values
+
+    metadata.update(
+        {
+            "cycles_per_window": 1,
+            "producer_mode": "full_horizon_terminal_continuation",
+            "producer_source_cycles": source_cycles,
+        }
+    )
+    payload["metadata__json"] = np.asarray(
+        json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(output_path, **payload)
+    return metadata
+
+
+def append_rho_extension_cycle(
+    prefix_path: Path,
+    extension_path: Path,
+    output_path: Path,
+) -> dict:
+    """Append one terminal-state RHO to the reduced seed behind FHO_N.
+
+    The old reduced prefix is only a shape carrier: FHO_N will overwrite it.
+    Its last state node is replaced with the extension's initial state so the
+    boundary inspected before that overlay already represents the true
+    FHO_N-to-RHO_(N+1) seam.
+    """
+
+    with np.load(prefix_path, allow_pickle=False) as prefix_data, np.load(
+        extension_path, allow_pickle=False
+    ) as extension_data:
+        prefix_metadata = _load_metadata(prefix_data)
+        extension_metadata = _load_metadata(extension_data)
+        prefix_cycles = int(prefix_metadata["cycles_per_window"])
+        if int(extension_metadata["cycles_per_window"]) != 1:
+            raise ValueError("The RHO extension must contain exactly one cycle.")
+        if prefix_metadata.get("mechanical_formulation") != "reduced" or (
+            extension_metadata.get("mechanical_formulation") != "reduced"
+        ):
+            raise ValueError("Both concatenated RHO seeds must use reduced mechanics.")
+
+        prefix_keys = set(prefix_data.files) - {"metadata__json"}
+        extension_keys = set(extension_data.files) - {"metadata__json"}
+        if prefix_keys != extension_keys:
+            raise ValueError("The RHO prefix and extension variables do not match.")
+
+        payload: dict[str, np.ndarray] = {}
+        maximum_boundary_change = 0.0
+        for key in sorted(prefix_keys):
+            prefix = np.asarray(prefix_data[key])
+            extension = np.asarray(extension_data[key])
+            if prefix.shape[:-1] != extension.shape[:-1]:
+                raise ValueError(f"RHO seed '{key}' has incompatible row dimensions.")
+            if key.startswith("states__"):
+                intervals, remainder = divmod(prefix.shape[-1] - 1, prefix_cycles)
+                if remainder or extension.shape[-1] != intervals + 1:
+                    raise ValueError(f"RHO state '{key}' has incompatible cycle nodes.")
+                stitched_prefix = prefix.copy()
+                maximum_boundary_change = max(
+                    maximum_boundary_change,
+                    float(np.max(np.abs(stitched_prefix[..., -1] - extension[..., 0]))),
+                )
+                stitched_prefix[..., -1] = extension[..., 0]
+                payload[key] = np.concatenate(
+                    (stitched_prefix, extension[..., 1:]), axis=-1
+                )
+            elif key.startswith("controls__"):
+                nodes, remainder = divmod(prefix.shape[-1], prefix_cycles)
+                if remainder or extension.shape[-1] != nodes:
+                    raise ValueError(
+                        f"RHO control '{key}' has incompatible cycle nodes."
+                    )
+                payload[key] = np.concatenate((prefix, extension), axis=-1)
+            else:
+                if prefix.shape != extension.shape or not np.array_equal(
+                    prefix, extension
+                ):
+                    raise ValueError(f"RHO auxiliary value '{key}' does not match.")
+                payload[key] = prefix
+
+    metadata = dict(prefix_metadata)
+    metadata.update(
+        {
+            "cycles_per_window": prefix_cycles + 1,
+            "producer_mode": "full_horizon_plus_terminal_rho",
+            "producer_prefix_cycles": prefix_cycles,
+            "producer_extension_cycles": 1,
+            "replaced_reduced_boundary_maximum_absolute_change": (
+                maximum_boundary_change
+            ),
+        }
+    )
+    payload["metadata__json"] = np.asarray(
+        json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(output_path, **payload)
+    return metadata
+
+
 def _benchmark_success(
     result_path: Path,
     *,
@@ -315,10 +659,8 @@ def _benchmark_success(
         result = payload["results"][0]
         configuration = payload["configurations"][expected_solver]
         if expected_mechanics is None:
-            expected_mechanics = (
-                "full" if expected_mode == "single_shot" else "reduced"
-            )
-        expected_use_sx = expected_solver == "ipopt"
+            expected_mechanics = "full" if expected_mode == "single_shot" else "reduced"
+        expected_use_sx = expected_solver == "ipopt" and expected_mode != "single_shot"
         return bool(
             result["success"]
             and result.get("solver_success") is True
@@ -327,8 +669,7 @@ def _benchmark_success(
             and result.get("mode") == expected_mode
             and int(result.get("covered_cycles") or 0) == expected_cycles
             and int(result.get("physically_validated_cycles") or 0) == expected_cycles
-            and configuration.get("single_shot")
-            is (expected_mode == "single_shot")
+            and configuration.get("single_shot") is (expected_mode == "single_shot")
             and configuration.get("mechanical_formulation") == expected_mechanics
             and int(configuration.get("cycles_per_window") or 0)
             == (expected_cycles if expected_mode == "single_shot" else 1)
@@ -349,15 +690,46 @@ def _benchmark_payload_is_readable(result_path: Path) -> bool:
         return False
 
 
+def _rho_extension_success(result_path: Path) -> bool:
+    """Certify one solved physical cycle independently of endurance semantics.
+
+    A one-cycle extension is a warm-start construction, not an endurance
+    campaign.  The global endurance verdict may therefore reject a physically
+    validated cycle merely because a Ding capacity decreased.  The extension
+    remains usable when IPOPT converged and its sole window is certified.
+    """
+
+    try:
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        result = payload["results"][0]
+        configuration = payload["configurations"]["ipopt"]
+        windows = result.get("windows") or []
+        return bool(
+            result.get("solver_success") is True
+            and result.get("solver") == "ipopt"
+            and result.get("mode") == "rho"
+            and int(result.get("covered_cycles") or 0) == 1
+            and int(result.get("physically_validated_cycles") or 0) == 1
+            and len(windows) == 1
+            and windows[0].get("validated") is True
+            and configuration.get("single_shot") is False
+            and configuration.get("mechanical_formulation") == "reduced"
+            and int(configuration.get("cycles_per_window") or 0) == 1
+            and int(configuration.get("n_windows") or 0) == 1
+            and configuration.get("use_sx") is True
+            and configuration.get("ipopt_linear_solver") == "mumps"
+        )
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return False
+
+
 def _log_has_unknown_mumps_warning(log_path: str | Path) -> bool:
     log_path = Path(log_path)
     try:
         text = log_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return False
-    return (
-        "libMAD WARNING: option linear_solver is of unknown type mumps" in text
-    )
+    return "libMAD WARNING: option linear_solver is of unknown type mumps" in text
 
 
 def _benchmark_validated_cycles(
@@ -376,12 +748,10 @@ def _benchmark_validated_cycles(
         if (
             result.get("solver") != expected_solver
             or result.get("mode") != expected_mode
-            or configuration.get("single_shot")
-            is not (expected_mode == "single_shot")
+            or configuration.get("single_shot") is not (expected_mode == "single_shot")
             or configuration.get("mechanical_formulation") != "reduced"
             or int(configuration.get("cycles_per_window") or 0) != 1
-            or int(configuration.get("n_windows") or 0)
-            != expected_requested_cycles
+            or int(configuration.get("n_windows") or 0) != expected_requested_cycles
             or configuration.get("use_sx") is not True
             or configuration.get(f"{expected_solver}_linear_solver") != "mumps"
         ):
@@ -448,8 +818,19 @@ def _common_solver_options(args: argparse.Namespace) -> list[str]:
 
 
 def _rho_command(
-    args: argparse.Namespace, result_path: Path, seed_path: Path
+    args: argparse.Namespace,
+    result_path: Path,
+    seed_path: Path,
+    *,
+    n_windows: int | None = None,
+    common_initial_solution: Path | None = None,
 ) -> list[str]:
+    if n_windows is None:
+        n_windows = args.max_cycles
+    if n_windows < 1:
+        raise ValueError("n_windows must be strictly positive.")
+    if common_initial_solution is None:
+        common_initial_solution = args.seed_dir / "common-reduced.npz"
     return [
         args.python,
         str(
@@ -461,18 +842,23 @@ def _rho_command(
         *_common_solver_options(args),
         "--ipopt-use-sx",
         "--no-optional-nlp-periodic-ipopt-hot-start",
+        "--ipopt-enable-periodic-fes-warmup-projection",
+        "--periodic-fes-warmup-projection-strategy",
+        "rollout",
+        "--initial-guess-diagnostics",
         "--ipopt-max-iter",
         str(args.max_iterations),
         "--cycles-per-window",
         "1",
         "--n-windows",
-        str(args.max_cycles),
+        str(n_windows),
         "--max-consecutive-failing",
         "1",
         "--mechanical-formulation",
         "reduced",
         "--common-initial-solution",
-        str(args.seed_dir / "common-reduced.npz"),
+        str(common_initial_solution),
+        "--common-initial-solution-recenter-first-node-bounds",
         "--receding-horizon-solution-output",
         str(seed_path),
         "--allow-partial-receding-horizon-solution-output",
@@ -488,11 +874,12 @@ def _full_horizon_command(
     result_path: Path,
     solution_path: Path,
     *,
-    mechanical_formulation: str = "full",
+    mechanical_formulation: str = "reduced",
     prefix_solution_path: Path | None = None,
 ) -> list[str]:
     if mechanical_formulation not in {"full", "reduced"}:
         raise ValueError("mechanical_formulation must be 'full' or 'reduced'.")
+    full_horizon_solver = getattr(args, "full_horizon_solver", "madnlp")
     command = [
         args.python,
         str(
@@ -500,9 +887,11 @@ def _full_horizon_command(
             / "examples/fes_multibody/cycling/cycling_fes_solver_comparison.py"
         ),
         "--solvers",
-        "madnlp",
+        full_horizon_solver,
         *_common_solver_options(args),
         "--ipopt-no-use-sx",
+        "--ipopt-max-iter",
+        str(args.max_iterations),
     ]
     if cycles >= 3:
         # The historical bridge has 60 controls and can initialize at most two
@@ -516,36 +905,35 @@ def _full_horizon_command(
         )
     command.extend(
         [
-        "--optional-nlp-periodic-ipopt-hot-start",
-        # Store the block/FES/RK4 seed defects for MadNLP as well as ACADOS.
-        # These diagnostics distinguish a geometrically exact reduced-to-full
-        # bridge from a dynamically infeasible monolithic transcription.
-        "--initial-guess-diagnostics",
-        "--exact-initial-nlp-audit",
-        "--periodic-ipopt-refinement-use-sx",
-        "--periodic-ipopt-refinement-iterations",
-        str(args.max_iterations),
-        "--single-shot",
-        "--cycles-per-window",
-        str(cycles),
-        "--n-windows",
-        str(cycles),
-        "--mechanical-formulation",
-        mechanical_formulation,
-        "--full-contact-position-tolerance",
-        "2e-5",
-        "--common-initial-solution",
-        str(seed_path),
-        "--common-initial-solution-output",
-        str(solution_path),
-        "--output-json",
-        str(result_path),
+            "--optional-nlp-periodic-ipopt-hot-start",
+            # Store the block/FES/RK4 seed defects for MadNLP as well as ACADOS.
+            # These diagnostics distinguish a continuous RHO/FHO handoff from a
+            # dynamically infeasible monolithic transcription.
+            "--initial-guess-diagnostics",
+            "--periodic-ipopt-refinement-use-sx",
+            "--periodic-ipopt-refinement-iterations",
+            str(args.max_iterations),
+            "--single-shot",
+            "--cycles-per-window",
+            str(cycles),
+            "--n-windows",
+            str(cycles),
+            "--mechanical-formulation",
+            mechanical_formulation,
+            "--full-contact-position-tolerance",
+            "2e-5",
+            "--common-initial-solution",
+            str(seed_path),
+            "--common-initial-solution-output",
+            str(solution_path),
+            "--output-json",
+            str(result_path),
         ]
     )
+    if full_horizon_solver == "madnlp":
+        command.append("--exact-initial-nlp-audit")
     if prefix_solution_path is not None:
-        command.extend(
-            ["--full-horizon-prefix-solution", str(prefix_solution_path)]
-        )
+        command.extend(["--full-horizon-prefix-solution", str(prefix_solution_path)])
     return command
 
 
@@ -555,18 +943,17 @@ def _attempt_record(
     monitored: MonitoredRun,
     result_path: Path,
     *,
-    mechanical_formulation: str = "full",
+    mechanical_formulation: str = "reduced",
     solution_path: Path | None = None,
     prefix_solution_path: Path | None = None,
+    expected_solver: str = "madnlp",
 ) -> dict:
-    unknown_mumps_warning = _log_has_unknown_mumps_warning(
-        Path(monitored.log_path)
-    )
+    unknown_mumps_warning = _log_has_unknown_mumps_warning(Path(monitored.log_path))
     certificate = _benchmark_success(
         result_path,
         expected_mode="single_shot",
         expected_cycles=cycles,
-        expected_solver="madnlp",
+        expected_solver=expected_solver,
         expected_mechanics=mechanical_formulation,
     )
     solution_available = solution_path is None or solution_path.is_file()
@@ -590,13 +977,17 @@ def _attempt_record(
     failure_kind = (
         None
         if success
-        else "memory_limit"
-        if monitored.memory_limit_exceeded
-        else "timeout"
-        if monitored.timed_out
-        else "infrastructure_error"
-        if infrastructure_error
-        else "solver_failure"
+        else (
+            "memory_limit"
+            if monitored.memory_limit_exceeded
+            else (
+                "timeout"
+                if monitored.timed_out
+                else (
+                    "infrastructure_error" if infrastructure_error else "solver_failure"
+                )
+            )
+        )
     )
     return {
         "cycles": cycles,
@@ -611,7 +1002,7 @@ def _attempt_record(
         "result_path": str(result_path),
         "solution_path": None if solution_path is None else str(solution_path),
         "seed_origin": (
-            "rho_plus_certified_full_prefix"
+            "rho_plus_certified_fho_prefix"
             if prefix_solution_path is not None
             else "rho_prefix"
         ),
@@ -642,47 +1033,51 @@ def _write_markdown(path: Path, report: dict) -> None:
         "",
         f"- Limite RSS : `{report['rss_limit_gib']:.3f} GiB`",
         f"- Plafond demandé : `{report['max_cycles']} cycles`",
-        f"- Préfixe RHO disponible : `{report['rho_available_cycles']} cycles`",
+        f"- RHO de référence disponibles : `{report['rho_available_cycles']} cycles`",
+        f"- Chaîne RHO/FHO construite : `{report.get('homotopy_constructed_cycles', 0)} cycles`",
         f"- Plus grand full horizon validé : `{report['largest_successful_cycles']}`",
         f"- Trous de convergence : `{report.get('solver_gap_cycles', [])}`",
         (
-            "- Initialisation : `dernière solution full certifiée + queue RHO`; "
-            "seconde chance `RHO seul`"
+            "- Initialisation : `FHO_N certifié + un RHO résolu depuis son état "
+            "terminal`"
         ),
         (
-            "- RHO reduced concaténé : "
+            "- Amorçage reduced à deux RHO : "
             f"`{'succès' if report['rho']['success'] else 'échec'}`, "
             f"pic RSS `{report['rho']['peak_rss_gib']:.3f} GiB`, "
             f"temps `{report['rho']['elapsed_s']:.1f} s`"
         ),
         f"- Arrêt : `{report['stop_reason']}`",
         "",
-        "## Contrôle apparié reduced/MX",
+        "## Extensions RHO depuis le terminal FHO",
         "",
     ]
-    paired_attempts = report.get("paired_reduced_control_attempts", [])
-    if paired_attempts:
-        paired_last = paired_attempts[-1]
+    extension_attempts = report.get("extension_rho_attempts", [])
+    if extension_attempts:
         lines.extend(
             [
-                (
-                    f"- Horizon : `{paired_last['cycles']} cycles`; "
-                    f"succès : `{'oui' if paired_last['success'] else 'non'}`; "
-                    f"échec : `{paired_last.get('failure_kind') or '—'}`; "
-                    f"pic RSS : `{paired_last['peak_rss_gib']:.3f} GiB`; "
-                    f"temps : `{paired_last['elapsed_s']:.1f} s`"
-                ),
-                "",
+                "| Après FHO | RHO cible | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
+                "|---:|---:|:---:|:---|---:|---:|",
             ]
         )
+        for extension in extension_attempts:
+            lines.append(
+                f"| {extension['after_full_horizon_cycles']} | "
+                f"{extension['target_cycle']} | "
+                f"{'oui' if extension['success'] else 'non'} | "
+                f"{extension.get('failure_kind') or '—'} | "
+                f"{extension['peak_rss_gib']:.3f} | "
+                f"{extension['elapsed_s']:.1f} |"
+            )
+        lines.append("")
     else:
-        lines.extend(["- Non exécuté : moins de deux cycles RHO disponibles.", ""])
+        lines.extend(["- Aucune extension nécessaire ou atteinte.", ""])
     lines.extend(
         [
-        "## Sweep full/MX",
-        "",
-        "| Cycles | Phase | Chance | Seed | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
-        "|---:|:---|---:|:---|:---:|:---|---:|---:|",
+            "## Sweep FHO reduced/MX",
+            "",
+            "| Cycles | Phase | Chance | Seed | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
+            "|---:|:---|---:|:---|:---:|:---|---:|---:|",
         ]
     )
     for attempt in report["full_horizon_attempts"]:
@@ -719,6 +1114,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--memory-limit-gib", default="auto")
     parser.add_argument("--n-threads", type=int, required=True)
     parser.add_argument("--max-iterations", type=int, default=2000)
+    parser.add_argument(
+        "--full-horizon-solver",
+        choices=("madnlp", "ipopt"),
+        default="madnlp",
+        help="NLP solver used for the reduced/MX monolithic FHO problems.",
+    )
     parser.add_argument("--crank-assistance", type=float, default=0.0)
     parser.add_argument("--terminal-wheel-q-slack", type=float, default=0.002)
     parser.add_argument("--python", default=sys.executable)
@@ -740,19 +1141,13 @@ def _run_horizon_attempt(
     phase: str,
     chance: int,
     rss_limit_bytes: int,
-    mechanical_formulation: str = "full",
+    mechanical_formulation: str = "reduced",
     prefix_solution_path: Path | None = None,
 ) -> dict:
     if chance < 1:
         raise ValueError("chance must be strictly positive.")
-    case_prefix = (
-        "full-horizon"
-        if mechanical_formulation == "full"
-        else "paired-reduced-control"
-    )
-    case_dir = (
-        args.output_dir / f"{case_prefix}-{cycles:04d}" / f"chance-{chance}"
-    )
+    case_prefix = "full-horizon"
+    case_dir = args.output_dir / f"{case_prefix}-{cycles:04d}" / f"chance-{chance}"
     seed_path = case_dir / "rho-reduced-prefix.npz"
     result_path = case_dir / "result.json"
     solution_path = case_dir / "full-solution.npz"
@@ -783,15 +1178,194 @@ def _run_horizon_attempt(
         mechanical_formulation=mechanical_formulation,
         solution_path=solution_path,
         prefix_solution_path=prefix_solution_path,
+        expected_solver=getattr(args, "full_horizon_solver", "madnlp"),
     )
+
+
+def _run_extension_rho(
+    args: argparse.Namespace,
+    *,
+    source_full_solution: Path,
+    reference_rho_seed: Path,
+    after_cycles: int,
+    rss_limit_bytes: int,
+) -> dict:
+    """Homotope RHO_(N+1) from its RHO reference to the FHO_N terminal state."""
+
+    case_dir = args.output_dir / f"rho-extension-after-fho-{after_cycles:04d}"
+    reference_cycle_path = case_dir / "reference-rho-cycle.npz"
+    write_rho_seed_cycle(reference_rho_seed, reference_cycle_path, after_cycles + 1)
+
+    accepted_fraction = 0.0
+    step = 0.25
+    minimum_step = RHO_INITIAL_STATE_HOMOTOPY_MIN_STEP
+    source_solution_path = reference_cycle_path
+    stages: list[dict] = []
+    peak_rss_bytes = 0
+    elapsed_s = 0.0
+    final_solution_path: Path | None = None
+    final_result_path: Path | None = None
+    final_seed_path: Path | None = None
+    failure_kind = None
+    infrastructure_error = False
+    unknown_mumps_warning = False
+    memory_limit_exceeded = False
+    timed_out = False
+    return_code = 0
+
+    while accepted_fraction < 1.0:
+        fraction = min(1.0, accepted_fraction + step)
+        attempt_number = len(stages) + 1
+        stage_dir = case_dir / f"stage-{attempt_number:02d}-{fraction:.6f}"
+        seed_path = stage_dir / "homotopy-seed.npz"
+        result_path = stage_dir / "result.json"
+        solution_path = stage_dir / "rho-solution.npz"
+        for stale_path in (result_path, solution_path):
+            stale_path.unlink(missing_ok=True)
+        seed_metadata = write_rho_initial_state_homotopy_seed(
+            source_solution_path,
+            reference_cycle_path,
+            source_full_solution,
+            seed_path,
+            fraction,
+        )
+        monitored = run_monitored(
+            _rho_command(
+                args,
+                result_path,
+                solution_path,
+                n_windows=1,
+                common_initial_solution=seed_path,
+            ),
+            cwd=args.workspace,
+            log_path=stage_dir / "solver.log",
+            rss_limit_bytes=rss_limit_bytes,
+            poll_interval_s=args.poll_interval_s,
+            timeout_s=args.attempt_timeout_s,
+        )
+        certificate = _rho_extension_success(result_path)
+        solution_available = bool(
+            solution_path.is_file() and _seed_cycle_count(solution_path) == 1
+        )
+        stage_unknown_warning = _log_has_unknown_mumps_warning(monitored.log_path)
+        stage_infrastructure_error = bool(
+            not monitored.memory_limit_exceeded
+            and not monitored.timed_out
+            and (
+                monitored.return_code != 0
+                or not _benchmark_payload_is_readable(result_path)
+                or stage_unknown_warning
+                or (certificate and not solution_available)
+            )
+        )
+        stage_success = bool(
+            certificate
+            and solution_available
+            and monitored.return_code == 0
+            and not monitored.memory_limit_exceeded
+            and not monitored.timed_out
+        )
+        stage_failure_kind = (
+            None
+            if stage_success
+            else (
+                "memory_limit"
+                if monitored.memory_limit_exceeded
+                else (
+                    "timeout"
+                    if monitored.timed_out
+                    else (
+                        "infrastructure_error"
+                        if stage_infrastructure_error
+                        else "solver_failure"
+                    )
+                )
+            )
+        )
+        stages.append(
+            {
+                "attempt": attempt_number,
+                "fraction": fraction,
+                "step": step,
+                "success": stage_success,
+                "failure_kind": stage_failure_kind,
+                "maximum_initial_state_change": seed_metadata[
+                    "homotopy_maximum_initial_state_change"
+                ],
+                "result_path": str(result_path),
+                "solution_path": str(solution_path),
+                "seed_path": str(seed_path),
+                "log_path": monitored.log_path,
+                "peak_rss_gib": monitored.peak_rss_bytes / GIB,
+                "elapsed_s": monitored.elapsed_s,
+            }
+        )
+        peak_rss_bytes = max(peak_rss_bytes, monitored.peak_rss_bytes)
+        elapsed_s += monitored.elapsed_s
+        return_code = monitored.return_code
+        unknown_mumps_warning = unknown_mumps_warning or stage_unknown_warning
+        infrastructure_error = infrastructure_error or stage_infrastructure_error
+        memory_limit_exceeded = memory_limit_exceeded or monitored.memory_limit_exceeded
+        timed_out = timed_out or monitored.timed_out
+        final_result_path = result_path
+        final_seed_path = seed_path
+
+        if stage_success:
+            accepted_fraction = fraction
+            source_solution_path = solution_path
+            final_solution_path = solution_path
+            step = min(0.25, step * 2.0)
+            continue
+        failure_kind = stage_failure_kind
+        if (
+            stage_infrastructure_error
+            or monitored.memory_limit_exceeded
+            or monitored.timed_out
+            or step / 2.0 < minimum_step
+        ):
+            break
+        step /= 2.0
+
+    success = accepted_fraction == 1.0 and final_solution_path is not None
+    if success:
+        failure_kind = None
+    return {
+        "after_full_horizon_cycles": after_cycles,
+        "target_cycle": after_cycles + 1,
+        "success": success,
+        "failure_kind": failure_kind,
+        "certificate_valid": success,
+        "solution_available": final_solution_path is not None,
+        "infrastructure_error": infrastructure_error,
+        "unknown_mumps_warning": unknown_mumps_warning,
+        "seed_origin": "rho_reference_to_certified_fho_terminal_homotopy",
+        "accepted_fraction": accepted_fraction,
+        "homotopy_stages": stages,
+        "reference_cycle_path": str(reference_cycle_path),
+        "continuation_seed_path": (
+            None if final_seed_path is None else str(final_seed_path)
+        ),
+        "continuation_source_cycles": after_cycles,
+        "result_path": (None if final_result_path is None else str(final_result_path)),
+        "solution_path": (
+            None if final_solution_path is None else str(final_solution_path)
+        ),
+        "peak_rss_bytes": peak_rss_bytes,
+        "peak_rss_gib": peak_rss_bytes / GIB,
+        "return_code": return_code,
+        "elapsed_s": elapsed_s,
+        "memory_limit_exceeded": memory_limit_exceeded,
+        "timed_out": timed_out,
+        "log_path": None if not stages else stages[-1]["log_path"],
+    }
 
 
 def run(args: argparse.Namespace) -> int:
     args.workspace = args.workspace.resolve()
     args.seed_dir = args.seed_dir.resolve()
     args.output_dir = args.output_dir.resolve()
-    if args.max_cycles < 1:
-        raise ValueError("--max-cycles must be strictly positive.")
+    if args.max_cycles < 2:
+        raise ValueError("--max-cycles must be at least two.")
     if args.n_threads < 1:
         raise ValueError("--n-threads must be strictly positive.")
     if args.poll_interval_s <= 0:
@@ -806,7 +1380,7 @@ def run(args: argparse.Namespace) -> int:
     report_path = args.output_dir / "full-horizon-report.json"
     markdown_path = args.output_dir / "full-horizon-report.md"
     report = {
-        "schema": "cocofest-full-horizon-sweep-v1",
+        "schema": "cocofest-full-horizon-sweep-v2",
         "max_cycles": args.max_cycles,
         "rho_available_cycles": 0,
         "total_memory_bytes": total_memory,
@@ -816,11 +1390,13 @@ def run(args: argparse.Namespace) -> int:
         "rho_graph": "SX",
         "full_horizon_graph": "MX",
         "rho_solver": "ipopt",
-        "full_horizon_solver": "madnlp",
+        "full_horizon_solver": args.full_horizon_solver,
         "linear_solver": "mumps",
-        "initialization": "rho_tail_with_last_certified_full_prefix",
+        "initialization": "rho_reference_to_fho_terminal_state_homotopy",
         "rho": None,
         "paired_reduced_control_attempts": [],
+        "extension_rho_attempts": [],
+        "homotopy_constructed_cycles": 0,
         "full_horizon_attempts": [],
         "largest_successful_cycles": 0,
         "stop_reason": "not_started",
@@ -833,7 +1409,7 @@ def run(args: argparse.Namespace) -> int:
     for stale_path in (rho_result_path, rho_seed_path):
         stale_path.unlink(missing_ok=True)
     rho_monitored = run_monitored(
-        _rho_command(args, rho_result_path, rho_seed_path),
+        _rho_command(args, rho_result_path, rho_seed_path, n_windows=args.max_cycles),
         cwd=args.workspace,
         log_path=rho_dir / "solver.log",
         rss_limit_bytes=rss_limit_bytes,
@@ -860,13 +1436,13 @@ def run(args: argparse.Namespace) -> int:
     report["rho"].update(
         {
             "success": (
-                rho_available_cycles > 0
+                rho_available_cycles >= 2
                 and rho_monitored.return_code == 0
                 and not rho_monitored.memory_limit_exceeded
                 and not rho_monitored.timed_out
                 and not _log_has_unknown_mumps_warning(rho_monitored.log_path)
             ),
-            "certificate_valid": rho_result_cycles > 0,
+            "certificate_valid": rho_result_cycles >= 2,
             "unknown_mumps_warning": _log_has_unknown_mumps_warning(
                 rho_monitored.log_path
             ),
@@ -887,138 +1463,102 @@ def run(args: argparse.Namespace) -> int:
         report["stop_reason"] = (
             "rho_memory_limit"
             if rho_monitored.memory_limit_exceeded
-            else "rho_timeout"
-            if rho_monitored.timed_out
-            else "rho_infrastructure_error"
-            if rho_infrastructure_error
-            else "rho_solver_failure"
+            else (
+                "rho_timeout"
+                if rho_monitored.timed_out
+                else (
+                    "rho_infrastructure_error"
+                    if rho_infrastructure_error
+                    else "rho_solver_failure"
+                )
+            )
         )
         _write_report(report_path, report)
         _write_markdown(markdown_path, report)
         return 3 if rho_infrastructure_error else 2
 
-    def run_with_two_solver_chances(
-        cycles: int,
-        phase: str,
-        *,
-        mechanical_formulation: str = "full",
-        destination: list[dict] | None = None,
-        certified_prefix_solution: Path | None = None,
-    ) -> dict:
-        if destination is None:
-            destination = report["full_horizon_attempts"]
-        last_attempt = None
-        for chance in (1, 2):
-            prefix_solution_path = (
-                certified_prefix_solution
-                if chance == 1 and mechanical_formulation == "full"
-                else None
-            )
-            attempt = _run_horizon_attempt(
+    solver_gap_cycles: list[int] = []
+    effective_max_cycles = min(args.max_cycles, rho_available_cycles)
+    report["effective_max_cycles"] = effective_max_cycles
+    current_seed_path = args.output_dir / "homotopy-seeds" / "rho-prefix-0002.npz"
+    write_rho_seed_prefix(rho_seed_path, current_seed_path, 2)
+    report["homotopy_constructed_cycles"] = 2
+    current_full_solution: Path | None = None
+
+    for cycles in horizon_sweep_targets(effective_max_cycles):
+        if cycles > 2:
+            if current_full_solution is None:
+                raise RuntimeError(
+                    "A certified FHO prefix is required for continuation."
+                )
+            extension_attempt = _run_extension_rho(
                 args,
-                rho_seed=rho_seed_path,
-                cycles=cycles,
-                phase=phase,
-                chance=chance,
+                source_full_solution=current_full_solution,
+                reference_rho_seed=rho_seed_path,
+                after_cycles=cycles - 1,
                 rss_limit_bytes=rss_limit_bytes,
-                mechanical_formulation=mechanical_formulation,
-                prefix_solution_path=prefix_solution_path,
             )
-            attempt["chance"] = chance
-            destination.append(attempt)
+            report["extension_rho_attempts"].append(extension_attempt)
             _write_report(report_path, report)
-            last_attempt = attempt
-            if (
-                attempt["success"]
-                or attempt["memory_limit_exceeded"]
-                or attempt["infrastructure_error"]
-            ):
+            if extension_attempt["infrastructure_error"]:
+                report["stop_reason"] = "rho_extension_infrastructure_error"
+                _write_report(report_path, report)
+                _write_markdown(markdown_path, report)
+                return 3
+            if not extension_attempt["success"]:
+                report["stop_reason"] = "rho_extension_" + str(
+                    extension_attempt["failure_kind"]
+                )
                 break
-        return last_attempt
 
-    if rho_available_cycles >= 2:
-        run_with_two_solver_chances(
-            2,
-            "paired_control",
-            mechanical_formulation="reduced",
-            destination=report["paired_reduced_control_attempts"],
-        )
+            next_seed_path = (
+                args.output_dir
+                / "homotopy-seeds"
+                / f"fho-{cycles - 1:04d}-plus-rho-{cycles:04d}.npz"
+            )
+            append_rho_extension_cycle(
+                current_seed_path,
+                Path(extension_attempt["solution_path"]),
+                next_seed_path,
+            )
+            current_seed_path = next_seed_path
+            report["homotopy_constructed_cycles"] = cycles
 
-    first_memory_failure = None
-    last_success = 0
-    last_success_solution = None
-    solver_gap_cycles = []
-    for cycles in horizon_sweep_targets(rho_available_cycles):
-        attempt = run_with_two_solver_chances(
-            cycles,
-            "coarse",
-            certified_prefix_solution=last_success_solution,
+        attempt = _run_horizon_attempt(
+            args,
+            rho_seed=current_seed_path,
+            cycles=cycles,
+            phase="continuation",
+            chance=1,
+            rss_limit_bytes=rss_limit_bytes,
+            prefix_solution_path=current_full_solution,
         )
+        attempt["chance"] = 1
+        report["full_horizon_attempts"].append(attempt)
+        _write_report(report_path, report)
         if attempt["infrastructure_error"]:
             report["stop_reason"] = "infrastructure_error"
             _write_report(report_path, report)
             _write_markdown(markdown_path, report)
             return 3
-        if attempt["success"]:
-            last_success = cycles
-            last_success_solution = Path(attempt["solution_path"])
-            report["largest_successful_cycles"] = cycles
-            if cycles == rho_available_cycles:
-                report["stop_reason"] = (
-                    "requested_ceiling_reached"
-                    if rho_available_cycles == args.max_cycles
-                    else "rho_prefix_ceiling_reached"
-                )
-            else:
-                report["stop_reason"] = "running"
-            continue
-        if attempt["memory_limit_exceeded"]:
-            first_memory_failure = cycles
-            report["stop_reason"] = "memory_limit"
+        if not attempt["success"]:
+            solver_gap_cycles.append(cycles)
+            report["stop_reason"] = attempt["failure_kind"]
             break
-        solver_gap_cycles.append(cycles)
-        report["stop_reason"] = attempt["failure_kind"]
-        if cycles == 1:
-            report["stop_reason"] = "one_cycle_bridge_not_certified"
-            _write_report(report_path, report)
-            _write_markdown(markdown_path, report)
-            return 2
 
-    if (
-        first_memory_failure is not None
-        and first_memory_failure - last_success > 1
-    ):
-        for cycles in refinement_targets(last_success, first_memory_failure):
-            attempt = run_with_two_solver_chances(
-                cycles,
-                "refinement",
-                certified_prefix_solution=last_success_solution,
+        current_full_solution = Path(attempt["solution_path"])
+        report["largest_successful_cycles"] = cycles
+        report["stop_reason"] = (
+            "requested_ceiling_reached"
+            if cycles == args.max_cycles
+            else (
+                "rho_prefix_ceiling_reached"
+                if cycles == effective_max_cycles
+                else "running"
             )
-            if attempt["infrastructure_error"]:
-                report["stop_reason"] = "infrastructure_error"
-                _write_report(report_path, report)
-                _write_markdown(markdown_path, report)
-                return 3
-            if attempt["memory_limit_exceeded"]:
-                report["stop_reason"] = "memory_limit_bracketed"
-                break
-            if attempt["success"]:
-                last_success = cycles
-                last_success_solution = Path(attempt["solution_path"])
-                report["largest_successful_cycles"] = cycles
-            else:
-                solver_gap_cycles.append(cycles)
+        )
 
-    report["solver_gap_cycles"] = sorted(set(solver_gap_cycles))
-    if first_memory_failure is None:
-        if report["largest_successful_cycles"] == rho_available_cycles:
-            report["stop_reason"] = (
-                "requested_ceiling_reached"
-                if rho_available_cycles == args.max_cycles
-                else "rho_prefix_ceiling_reached"
-            )
-        else:
-            report["stop_reason"] = "sweep_completed_with_solver_gaps"
+    report["solver_gap_cycles"] = solver_gap_cycles
     _write_markdown(markdown_path, report)
     _write_report(report_path, report)
     return 0
