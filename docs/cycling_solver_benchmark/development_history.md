@@ -4608,3 +4608,54 @@ corrige ce contrôle. L'artefact a aussi révélé que `first_failed_rho` valait
 tort `1` pour une trace partielle de 80 RHO; le commit `fb82cdc` rapporte
 désormais le premier RHO absent, soit `81`, tout en conservant `1` pour une
 trajectoire complète rejetée par un audit physique global.
+
+## 29. Checkpoint proactif et état interne ACADOS (10 août 2026)
+
+Le commit `e88ad7d` exporte la primale **après** toutes les opérations de
+transfert aux fenêtres 17, 35 et 80. Le premier replay du run `31392321501`
+a révélé une mutation cachée : les defaults `assisted hot start` réactivaient
+une Phase I initiale complète malgré la désactivation de la projection FES.
+Cette Phase I déplaçait le bloc FES jusqu'à `0.0647`; le commit `b548822`
+permet donc de désactiver explicitement cette préparation pour un replay exact.
+
+Le run corrigé
+[31393608026](https://github.com/mickaelbegon/cocofest/actions/runs/31393608026)
+est vert au sens infrastructure et reproduit les résultats appariés : baseline
+et lazy s'arrêtent à `80/100`, tandis que la Phase I mécanique proactive atteint
+`100/100`. Sur ce runner, la médiane complète proactive vaut `0.6051 s`, le P90
+`0.7634 s` et le maximum `0.7996 s`; les 99 projections coûtent `48.230 s` et
+34 sont acceptées.
+
+Le replay exact du primal destiné au RHO 81 a la signature
+`ddcab1b1304cf946`. Ses résidus ACADOS initiaux sont identiques à ceux observés
+dans la chaîne proactive :
+
+```text
+stationnarité = 353.47621196696434
+dynamique      = 6.569181824911396e-5
+inégalité      = 3.3593629890892545e-8
+complémentarité= 0
+```
+
+Malgré cette égalité, la capsule neuve retourne `ACADOS_MINSTEP` au premier SQP,
+alors que la capsule ayant résolu les 80 RHO précédents converge en deux
+itérations. La cause n'est donc ni une nouvelle Phase I, ni le primal, ni les
+bornes visibles, ni les résidus initiaux. `dual_warm_start=reset` annule `lam`
+et `pi`, mais ne prouve pas que les slacks, variables internes HPIPM, scaling et
+mémoire du QP sont identiques à ceux d'une capsule neuve. Le checkpoint `.npz`
+actuel est un checkpoint primal, pas un snapshot natif complet.
+
+Les trajectoires baseline/proactive donnent en outre :
+
+| Cycle | Écart mécanique RMS | Écart mécanique max | PW RMS | PW max |
+|---:|---:|---:|---:|---:|
+| 17 | `3.77e-12` | `2.29e-11` | `3.88e-9 µs` | `4.15e-8 µs` |
+| 35 | `0.4446` | `3.0674` | `29.62 µs` | `312.78 µs` |
+| 80 | `0.07064` | `0.77809` | `4.97 µs` | `53.85 µs` |
+
+La première divergence mesurable survient au cycle 19, immédiatement après la
+projection qui prépare ce RHO. Le commit `1372b3f` ajoute donc un calendrier
+explicite de Phase I et deux ablations 100 RHO : seulement le RHO 19, puis les
+RHO 19--36. Cette voie est prioritaire pour la production; l'export des champs
+natifs ACADOS/HPIPM sert à expliquer le replay isolé, mais réutiliser une même
+capsule est déjà le fonctionnement nominal du RHO.

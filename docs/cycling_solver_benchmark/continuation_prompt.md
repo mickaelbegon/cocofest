@@ -79,7 +79,13 @@ Le commit Cocofest `a8f1955` ajoute aussi la récupération lazy
 réduit pas les résidus du retry. Ne change pas les tolérances. Produis les
 checkpoints exacts baseline/proactif aux RHO 17, 35 et 80, compare-les, puis
 rejoue le RHO 81 depuis le checkpoint proactif pour distinguer l'effet local
-de Phase I de l'histoire du bassin de warm start.
+de Phase I de l'histoire du bassin de warm start. Cette expérience est
+maintenant faite dans le run `31393608026` : le primal exact et ses résidus
+initiaux sont identiques, mais une capsule neuve échoue avec `ACADOS_MINSTEP`
+alors que la capsule historique converge en deux itérations. Ne traite donc
+pas un `.npz` primal comme un snapshot natif ACADOS/HPIPM. Lis ensuite le run
+`31394895014`, qui teste Phase I au seul RHO 19 puis aux RHO 19--36; la première
+divergence baseline/proactive apparaît au cycle 19.
 
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un

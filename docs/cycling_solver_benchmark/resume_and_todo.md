@@ -509,17 +509,20 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 1. Lire les artefacts complets des runs `31389585968` et `31390381640`.
 2. Vérifier que le recovery ACADOS cible deux fois le même angle absolu et le
    même état de fatigue, sans fenêtre intermédiaire exportée.
-3. Comparer les checkpoints baseline/proactif aux RHO 17, 35 et 80, puis
-   exécuter le replay checkpoint 80 avant de modifier les tolérances ou le
-   budget SQP.
-4. Construire ensuite un prédicteur déterministe et bon marché des projections
+3. [fait] Exporter les checkpoints proactifs aux RHO 17, 35 et 80 et rejouer
+   le RHO 81. Le primal exact échoue dans une capsule neuve malgré des résidus
+   identiques : l'état interne ACADOS/HPIPM contribue au succès en chaîne.
+4. [en cours, run `31394895014`] Tester Phase I uniquement au RHO 19, puis aux
+   RHO 19--36; la première divergence baseline/proactive apparaît au cycle 19.
+5. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-5. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+6. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
-6. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+7. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
-La première question à trancher est donc causale : quelles projections entre
-les RHO 18 et 35 conduisent ACADOS dans le bassin qui franchit le RHO 81, et
-peut-on les prédire sans payer la Phase I aux 99 transferts?
+La première question à trancher est donc causale : la projection qui prépare
+le RHO 19 suffit-elle à sélectionner le bassin franchissant le RHO 81, ou faut-il
+conserver toute la séquence 19--36? Le résultat fixe directement le coût minimal
+de la Phase I sélective.

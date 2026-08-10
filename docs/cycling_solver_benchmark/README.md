@@ -1012,6 +1012,25 @@ aux RHO `18--35` ont donc vraisemblablement changé le bassin avant le RHO 81.
 La prochaine issue plausible est une activation prédictive bon marché des
 projections utiles, pas une projection déclenchée seulement après l'échec.
 
+Le
+[run 31393608026](https://github.com/mickaelbegon/cocofest/actions/runs/31393608026)
+précise le mécanisme. Le primal préparé après 80 RHO a exactement la même
+signature et les mêmes résidus initiaux que le RHO 81 de la chaîne proactive :
+dynamique `6.569e-5`, inégalité `3.359e-8`, stationnarité `353.476`. Rechargé
+dans une capsule ACADOS neuve, il échoue pourtant au premier SQP avec
+`ACADOS_MINSTEP`, alors que la capsule conservée converge en deux itérations.
+Le primal seul n'explique donc pas le succès : un état interne ACADOS/HPIPM
+non exporté intervient encore, même lorsque `lam` et `pi` sont remis à zéro.
+
+La comparaison des trajectoires localise parallèlement la bifurcation. Baseline
+et proactive sont identiques jusqu'au cycle 17; la première différence apparaît
+au cycle 19, après la Phase I qui prépare ce RHO. Deux variantes sélectives sont
+donc en cours d'évaluation : Phase I au seul RHO 19, puis aux RHO 19--36. Elles
+testent directement si l'on peut conserver le bassin `100/100` sans payer les
+99 projections. L'export/replay natif complet des variables HPIPM reste un
+diagnostic utile, mais n'est pas requis pour la stratégie de production tant
+que la même capsule compilée est réutilisée entre RHO.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier
