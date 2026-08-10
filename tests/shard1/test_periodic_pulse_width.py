@@ -10046,6 +10046,17 @@ def test_common_seed_can_recenter_every_reduced_first_node_bound():
     assert nlp.x_bounds["F_Biceps"].max[0, 0] == pytest.approx(42.0)
 
 
+def test_common_seed_first_node_pairing_does_not_recenter_kinematic_path_bounds():
+    args = SimpleNamespace(common_initial_solution_recenter_first_node_bounds=True)
+
+    assert periodic_example._common_initial_solution_recenter_modes(
+        args, mechanical_bridge=False
+    ) == (False, True)
+    assert periodic_example._common_initial_solution_recenter_modes(
+        args, mechanical_bridge=True
+    ) == (True, True)
+
+
 def test_cycle_boundary_diagnostic_uses_reduced_theta_state():
     nmpc = SimpleNamespace(
         cycle_len=2,

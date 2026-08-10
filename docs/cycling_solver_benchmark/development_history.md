@@ -4957,3 +4957,20 @@ alors que le seed commun IPOPT/MadNLP contient déjà un transitoire de fatigue,
 notamment `A/A_scale=0.98463` au deltoïde antérieur. Les figures et le résumé
 machine-readable sont générés par `generate_reduced_solver_comparison.py`;
 la prochaine campagne doit imposer le même état initial aux trois backends.
+
+La première campagne appariée a ensuite révélé une erreur de préparation du
+problème plutôt qu'une faiblesse d'ACADOS. L'option
+`--common-initial-solution-recenter-first-node-bounds` fixait correctement les
+22 états du premier nœud sur le seed commun, mais activait aussi par erreur
+`recenter_kinematic_bounds`. Cette seconde opération élargissait la borne de
+chemin de `omega` de `-2*pi-2.55` à `-9.274 rad/s` et remplaçait sa borne
+terminale par la valeur du seed, `-10.212 rad/s`. Les runs
+[`31442152939`](https://github.com/mickaelbegon/cocofest/actions/runs/31442152939)
+et
+[`31442920674`](https://github.com/mickaelbegon/cocofest/actions/runs/31442920674)
+échouent donc sur deux OCP involontairement modifiés. Le resynchronisme des
+bornes après création de la capsule native était une correction d'interface
+utile, mais son résultat identique a permis d'écarter une donnée ACADOS
+obsolète. Les deux modes sont maintenant séparés : une comparaison reduced à
+formulation identique ne recale que le premier nœud; l'adaptation de toutes les
+bornes cinématiques est réservée au véritable bridge full/reduced.

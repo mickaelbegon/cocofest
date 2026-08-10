@@ -13338,6 +13338,23 @@ def apply_solution_directly_to_periodic_nmpc_initial_guess(
     return adapted_solution
 
 
+def _common_initial_solution_recenter_modes(
+    args, mechanical_bridge: bool
+) -> tuple[bool, bool]:
+    """Separate a formulation bridge from an exact first-node pairing.
+
+    A mechanical bridge may require adapting all kinematic boundary columns to
+    the lifted trajectory.  Pairing two runs of the *same* formulation only
+    requires fixing the first state to the common seed; widening the path and
+    terminal columns would silently change the physical cadence constraints.
+    """
+
+    return (
+        bool(mechanical_bridge),
+        bool(args.common_initial_solution_recenter_first_node_bounds),
+    )
+
+
 def _copy_list_values(source, target, attribute_name: str) -> None:
     """Compatibility wrapper for the reusable initial-guess helper."""
 
@@ -16451,16 +16468,15 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             seed_mechanical_formulation is not None
             and seed_mechanical_formulation != args.mechanical_formulation
         )
+        (
+            recenter_kinematic_bounds,
+            recenter_first_node_bounds,
+        ) = _common_initial_solution_recenter_modes(args, mechanical_bridge)
         apply_solution_directly_to_periodic_nmpc_initial_guess(
             nmpc,
             common_seed,
-            recenter_kinematic_bounds=(
-                mechanical_bridge
-                or args.common_initial_solution_recenter_first_node_bounds
-            ),
-            recenter_first_node_bounds=(
-                args.common_initial_solution_recenter_first_node_bounds
-            ),
+            recenter_kinematic_bounds=recenter_kinematic_bounds,
+            recenter_first_node_bounds=recenter_first_node_bounds,
         )
         # Loading any seed can change the first crank angle, including when
         # producer and consumer share the same mechanical formulation.  The
@@ -16477,7 +16493,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         if echo:
             print(
                 f"common_initial_solution: applied ({common_seed_path}, "
-                f"mechanical_bridge={mechanical_bridge})"
+                f"mechanical_bridge={mechanical_bridge}, "
+                f"recenter_kinematic_bounds={recenter_kinematic_bounds}, "
+                f"recenter_first_node_bounds={recenter_first_node_bounds})"
             )
             if terminal_contact_projection is not None:
                 print(

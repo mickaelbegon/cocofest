@@ -634,6 +634,14 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     fatigue, les quatre AUC, le nombre d'itérations, les recoveries et les
     quantiles/maxima de `|PW_k-PW_{k-1}|`; ne pas imposer arbitrairement un
     slew avant cette ablation.
+25. [en cours] Comparaison appariée reduced IPOPT/MadNLP/ACADOS+IPOPT sur 145
+    RHO. Le producteur NLP `31441917891` est vert. Les deux premiers
+    consommateurs ACADOS (`31442152939`, `31442920674`) ont exposé un couplage
+    erroné entre le recalage du premier nœud et celui de toutes les bornes
+    cinématiques : le path et le terminal de `omega` étaient élargis jusqu'aux
+    valeurs du seed. Le correctif sépare ces opérations et possède une
+    régression locale. Relancer ACADOS avec le même artefact, puis régénérer les
+    figures, les quatre fatigues finales/AUC et les temps sur le préfixe commun.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO
