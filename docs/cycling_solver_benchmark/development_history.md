@@ -4745,3 +4745,13 @@ full native certifiée avec le bridge reduced-to-full éprouvé. Lors de
 l'interruption artificielle, IPOPT reçoit explicitement la solution cible
 certifiée (`seed_source=certified_target_solution`), tandis qu'un échec naturel
 continue d'utiliser le primal préparé du RHO gelé.
+
+Le run suivant
+[31409126265](https://github.com/mickaelbegon/cocofest/actions/runs/31409126265)
+a révélé une distinction de transcription utile avant même le cas full. En
+reduced, recopier directement la trajectoire IRK ACADOS certifiée dans
+IPOPT/Radau-5 laisse une violation collocation de `2.17e-5`, au-dessus du seuil
+strict `1e-5`, alors que le solve final valide bien `5/5` RHO. Le gate reduced
+doit donc conserver son primal Radau préparé. La provenance ACADOS native est
+réservée au smoke full, qui en a besoin pour éviter le bridge `common-full`
+non physique; aucun seuil n'a été relâché.

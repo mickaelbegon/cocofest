@@ -246,7 +246,10 @@ Le gate Linux reduced prépare le seed avec un raffinement IPOPT/Radau-5 en SX,
 puis le propage une fois avec la carte IRK générée par ACADOS avant le premier
 SQP. Le gate full construit d'abord une solution ACADOS full certifiée avec le
 bridge reduced-to-full déjà validé, puis force le chemin de recovery depuis
-cette trajectoire native. Ce choix évite de confondre la validation du câblage
+cette trajectoire native. Le gate reduced conserve son primal Radau préparé :
+une trajectoire IRK pourtant certifiée peut violer les contraintes de la
+transcription collocation lors de l'injection directe. Ce choix évite de
+confondre la validation du câblage
 avec la réparation du seed générique `common-full`, dont le run
 [31405588817](https://github.com/mickaelbegon/cocofest/actions/runs/31405588817)
 a mesuré une erreur de contact de `0.63 rad` et un résidu tangent de

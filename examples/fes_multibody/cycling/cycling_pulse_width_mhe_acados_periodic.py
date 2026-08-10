@@ -17185,7 +17185,11 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 _copy_initial_guesses_and_bounds(self, ipopt_recovery_nmpc)
                 _copy_objective_targets(self, ipopt_recovery_nmpc)
                 recovery_seed_source = "prepared_target_rho_primal"
-                if forced_recovery and target_solution_was_certified:
+                if (
+                    forced_recovery
+                    and target_solution_was_certified
+                    and args.mechanical_formulation == "full"
+                ):
                     # The deterministic CI gate deliberately interrupts a
                     # certified target solve. Seed IPOPT from that certified
                     # physical trajectory, rather than from the older primal
