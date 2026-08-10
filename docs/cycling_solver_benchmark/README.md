@@ -1002,9 +1002,15 @@ nominal tant qu'il converge. Au premier échec d'un RHO, elle :
 5. exige une nouvelle résolution ACADOS avant tout avancement.
 
 Le mode CI `acados_lazy_recovery` compare le baseline et cette variante sur la
-même machine. Cette approche est une issue plausible pour supprimer la plupart
-des `0.61 s` de projection, mais elle n'est pas encore un résultat : le succès
-proactif peut dépendre des changements de bassin produits avant le RHO 81.
+même machine. Le
+[run 31390381640](https://github.com/mickaelbegon/cocofest/actions/runs/31390381640)
+montre que la récupération lazy seule ne suffit pas : baseline et lazy gardent
+le même préfixe `80/100`. La Phase I du RHO 81 est bien acceptée et améliore le
+défaut mécanique initial, mais le retry termine avec un défaut dynamique
+`1.09e-3` et une stationnarité `2.37e-2`. Les projections proactives acceptées
+aux RHO `18--35` ont donc vraisemblablement changé le bassin avant le RHO 81.
+La prochaine issue plausible est une activation prédictive bon marché des
+projections utiles, pas une projection déclenchée seulement après l'échec.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,

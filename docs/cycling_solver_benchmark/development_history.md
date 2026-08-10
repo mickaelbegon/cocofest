@@ -4579,15 +4579,32 @@ Le mode CI `acados_lazy_recovery` place sur le même runner :
 
 Les répertoires, logs et JSON restent séparés. La campagne
 [31390381640](https://github.com/mickaelbegon/cocofest/actions/runs/31390381640)
-est en cours au moment de cette entrée. Deux issues sont informatives :
+réfute l'hypothèse la plus simple : baseline et lazy s'arrêtent tous deux à
+`80/100`, avec le même coût certifié `1221.912531` et la même AUC `4.986474`.
+Le baseline effectue 81 appels solveur; le lazy en effectue 82 et ajoute une
+Phase I de `0.614351 s`.
 
-- `100/100` avec peu de recoveries démontrerait que les projections proactives
-  étaient surtout un coût évitable;
-- un arrêt persistant au RHO 81 indiquerait soit que la projection locale ne
-  suffit pas depuis le checkpoint baseline, soit que les projections
-  antérieures ont sélectionné le bassin qui permet le franchissement.
+La restauration elle-même agit bien sur la mécanique : `q` change au maximum
+de `0.153856 rad`, `qdot` de `1.413055 rad/s`, tandis que Ding et PW restent
+exactement invariants. Le défaut qdot mis à l'échelle passe de `0.155016` à
+`0.080866`. Le défaut global reste `0.264983`, car il est dominé par le bloc
+FES protégé. Malgré cette meilleure primale mécanique, le second ACADOS termine
+à 100 itérations avec stationnarité `2.3744e-2` et dynamique `1.0888e-3`,
+légèrement pire que la tentative précédente (`2.2973e-2`, `1.0491e-3`).
 
-Dans le second cas, l'expérience suivante n'est pas de relâcher les
-tolérances. Il faut rejouer le checkpoint 80 de la chaîne proactive, puis
-appliquer la même récupération lazy au RHO 81. Cette comparaison sépare
-l'effet local de Phase I de l'histoire du warm start.
+Le résultat est cohérent avec l'histoire proactive : ses projections acceptées
+se situent surtout aux RHO `18--35`, alors que la correction du transfert vers
+le RHO 81 n'est pas dans ce groupe. Le franchissement du RHO 81 dépend donc
+probablement d'un changement de branche accumulé bien avant l'échec. La
+prochaine expérience n'est pas de relâcher les tolérances. Il faut produire les
+checkpoints exacts baseline/proactif aux RHO 17, 35 et 80, quantifier leur
+divergence, puis rejouer le RHO 81 depuis le checkpoint proactif sans nouvelle
+Phase I. Ensuite seulement, un écran prédictif pourra viser les projections
+qui changent réellement le bassin.
+
+Le workflow était rouge malgré les trois JSON valides : son gate de référence
+ne neutralisait pas le mode spécial `acados_lazy_recovery`. Le commit `811f75d`
+corrige ce contrôle. L'artefact a aussi révélé que `first_failed_rho` valait à
+tort `1` pour une trace partielle de 80 RHO; le commit `fb82cdc` rapporte
+désormais le premier RHO absent, soit `81`, tout en conservant `1` pour une
+trajectoire complète rejetée par un audit physique global.

@@ -74,10 +74,12 @@ RTI vient seulement après cette certification continue.
 
 Le commit Cocofest `a8f1955` ajoute aussi la récupération lazy
 `--acados-failed-rho-phase-one-recovery`. Lire d'abord le run
-`31390381640`, qui compare baseline et lazy sur 100 RHO, avant de changer les
-tolérances. Si le lazy reste bloqué au RHO 81, rejouer le checkpoint 80 de la
-chaîne proactive pour distinguer l'effet local de Phase I de l'histoire du
-bassin de warm start.
+`31390381640`, qui compare baseline et lazy sur 100 RHO : les deux s'arrêtent
+à `80/100`. La correction mécanique locale du RHO 81 est acceptée, mais ne
+réduit pas les résidus du retry. Ne change pas les tolérances. Produis les
+checkpoints exacts baseline/proactif aux RHO 17, 35 et 80, compare-les, puis
+rejoue le RHO 81 depuis le checkpoint proactif pour distinguer l'effet local
+de Phase I de l'histoire du bassin de warm start.
 
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un

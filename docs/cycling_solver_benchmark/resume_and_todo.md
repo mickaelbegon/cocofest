@@ -239,8 +239,10 @@ SQP/QP puis exige une nouvelle certification ACADOS. Le mode CI
 `acados_lazy_recovery` exécute baseline et lazy successivement sur la même
 machine. La campagne Linux 100 RHO
 [31390381640](https://github.com/mickaelbegon/cocofest/actions/runs/31390381640)
-est en cours; aucune conclusion de performance ne doit être tirée avant ses
-artefacts.
+donne `80/100` dans les deux cas. Au RHO 81, la Phase I lazy modifie `q` de
+`0.154 rad` et `qdot` de `1.413 rad/s`, tout en gardant Ding/PW exactement
+inchangés. Le retry reste néanmoins à `2.37e-2` de stationnarité et `1.09e-3`
+de défaut dynamique. Le déclenchement après échec est donc trop tardif.
 
 La Phase-I sur tous les états atteint aussi `100/100` et semble plus rapide
 (`0.450 s` médian, projection incluse), mais elle modifie les états Ding du
@@ -413,12 +415,15 @@ invalide.
   restaurer le checkpoint exact et réinitialiser complètement ACADOS.
 - [x] Ajouter les tests du contrat CLI, de l'invariance Ding/PW et du reset
   natif. Le module ciblé passe `333/333` localement le 10 août 2026.
-- [ ] Lire la campagne `31390381640` et comparer baseline/lazy sur 100 RHO :
+- [x] Lire la campagne `31390381640` et comparer baseline/lazy sur 100 RHO :
   préfixe strict, premier échec, nombre et coût des recoveries, temps médian,
   P90, maximum, objectif et fatigue par muscle.
-- [ ] Si la lazy échoue encore au RHO 81, rejouer directement le checkpoint 80
-  de la chaîne proactive. Cela séparera un défaut de la récupération locale
-  d'une dépendance au changement de bassin produit aux RHO 18--35.
+- [ ] Produire et comparer les checkpoints exacts baseline/proactif aux RHO 17,
+  35 et 80. Les projections proactives acceptées aux RHO 18--35 sont le premier
+  endroit où les deux histoires de warm start peuvent diverger durablement.
+- [ ] Rejouer le RHO 81 depuis le checkpoint 80 de la chaîne proactive sans
+  nouvelle Phase I. Si ce RHO converge, l'histoire du bassin est confirmée;
+  sinon, rechercher une différence de mémoire SQP/QP ou de paramètres runtime.
 - [ ] Si nécessaire, précompiler deux capsules synchronisées : restauration de
   faisabilité puis objectif de fatigue.
 - [ ] N'évaluer RTI qu'après plusieurs chaînes SQP complètes certifiées.
@@ -504,16 +509,17 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 1. Lire les artefacts complets des runs `31389585968` et `31390381640`.
 2. Vérifier que le recovery ACADOS cible deux fois le même angle absolu et le
    même état de fatigue, sans fenêtre intermédiaire exportée.
-3. Si le lazy atteint `100/100`, mesurer le gain contre les `60.436 s` de Phase
-   I proactive et conserver l'option seulement si tous les audits physiques
-   restent identiques.
-4. Sinon, exécuter le replay checkpoint 80 décrit ci-dessus avant de modifier
-   les tolérances ou le budget SQP.
+3. Comparer les checkpoints baseline/proactif aux RHO 17, 35 et 80, puis
+   exécuter le replay checkpoint 80 avant de modifier les tolérances ou le
+   budget SQP.
+4. Construire ensuite un prédicteur déterministe et bon marché des projections
+   utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
+   de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
 5. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
 6. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
-La première question à trancher est donc causale : la Phase I doit-elle agir
-uniquement au RHO difficile, ou les projections antérieures sont-elles
-nécessaires pour conduire ACADOS dans le bassin qui franchit le RHO 81?
+La première question à trancher est donc causale : quelles projections entre
+les RHO 18 et 35 conduisent ACADOS dans le bassin qui franchit le RHO 81, et
+peut-on les prédire sans payer la Phase I aux 99 transferts?
