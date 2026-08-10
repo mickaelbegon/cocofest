@@ -4551,3 +4551,43 @@ respectivement `2.902 s` et `1.605 s`, contre `2.557 s` et `1.458 s` sans
 préparation. La Phase I mécanique proactive est donc réfutée comme
 accélération nominale. Elle reste pertinente comme tentative de restauration
 après un échec, sans screen ni perturbation sur les RHO déjà convergents.
+
+## 28. Récupération ACADOS Phase-I à la demande (10 août 2026)
+
+Le résultat `100/100` du run `30763188906` démontre qu'une primale mécanique
+distincte permet de franchir le RHO 81, mais la stratégie proactive paie 99
+projections (`60.435536 s`) pour seulement 34 acceptations. Les modifications
+acceptées se concentrent aux RHO `1--2`, `18--35` et `86--99`. Un simple
+screen par défaut mécanique n'est donc pas évidemment causal : une projection
+rejetée coûte encore du temps, et une projection acceptée très tôt peut changer
+le bassin local plusieurs dizaines de cycles plus tard.
+
+Le commit Cocofest `a8f1955` introduit une ablation plus nette. Avec
+`--acados-failed-rho-phase-one-recovery`, chaque RHO utilise d'abord le shift
+nominal. Après un résultat non certifié seulement, le wrapper restaure la
+primale préparée avant le solve, exécute la Phase I avec `q/qdot` comme seuls
+blocs mutables, vérifie que les 20 états Ding et les PW sont identiques, remet
+à zéro toute la mémoire native SQP/QP et relance exactement le même OCP. La
+Phase I ne certifie jamais elle-même un RHO et aucun terminal échoué ne peut
+alimenter la fenêtre suivante.
+
+Le mode CI `acados_lazy_recovery` place sur le même runner :
+
+1. une référence full d'un RHO;
+2. le baseline full/garde `2.60` sur 100 RHO;
+3. le même cas avec la récupération lazy sur 100 RHO.
+
+Les répertoires, logs et JSON restent séparés. La campagne
+[31390381640](https://github.com/mickaelbegon/cocofest/actions/runs/31390381640)
+est en cours au moment de cette entrée. Deux issues sont informatives :
+
+- `100/100` avec peu de recoveries démontrerait que les projections proactives
+  étaient surtout un coût évitable;
+- un arrêt persistant au RHO 81 indiquerait soit que la projection locale ne
+  suffit pas depuis le checkpoint baseline, soit que les projections
+  antérieures ont sélectionné le bassin qui permet le franchissement.
+
+Dans le second cas, l'expérience suivante n'est pas de relâcher les
+tolérances. Il faut rejouer le checkpoint 80 de la chaîne proactive, puis
+appliquer la même récupération lazy au RHO 81. Cette comparaison sépare
+l'effet local de Phase I de l'histoire du warm start.

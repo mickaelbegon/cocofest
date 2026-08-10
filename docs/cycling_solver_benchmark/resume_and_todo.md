@@ -232,6 +232,16 @@ incluse, vaut `0.739 s` en médiane, `0.909 s` au P90 et `0.963 s` au maximum.
 La projection coûte `60.436 s` sur 99 transferts et n'est acceptée que 34 fois;
 une présélection moins coûteuse reste donc possible.
 
+Le commit `a8f1955` ajoute une récupération lazy opt-in. Elle restaure le
+checkpoint du même RHO seulement après un échec, projette `q/qdot`, garantit
+l'invariance exacte des états Ding et des PW, réinitialise la mémoire native
+SQP/QP puis exige une nouvelle certification ACADOS. Le mode CI
+`acados_lazy_recovery` exécute baseline et lazy successivement sur la même
+machine. La campagne Linux 100 RHO
+[31390381640](https://github.com/mickaelbegon/cocofest/actions/runs/31390381640)
+est en cours; aucune conclusion de performance ne doit être tirée avant ses
+artefacts.
+
 La Phase-I sur tous les états atteint aussi `100/100` et semble plus rapide
 (`0.450 s` médian, projection incluse), mais elle modifie les états Ding du
 guess jusqu'à `33.46`, double presque le temps solveur et dégrade fortement le
@@ -398,6 +408,17 @@ invalide.
 - [ ] Ajouter un écran bon marché avant la Phase-I mécanique : elle coûte
   actuellement environ `0.61 s` à chacun des 99 transferts, mais 65 candidats
   sur 99 sont finalement rejetés.
+- [x] Implémenter une alternative plus stricte à l'écran : déclencher la
+  Phase-I mécanique seulement après le premier échec certifié du même RHO,
+  restaurer le checkpoint exact et réinitialiser complètement ACADOS.
+- [x] Ajouter les tests du contrat CLI, de l'invariance Ding/PW et du reset
+  natif. Le module ciblé passe `333/333` localement le 10 août 2026.
+- [ ] Lire la campagne `31390381640` et comparer baseline/lazy sur 100 RHO :
+  préfixe strict, premier échec, nombre et coût des recoveries, temps médian,
+  P90, maximum, objectif et fatigue par muscle.
+- [ ] Si la lazy échoue encore au RHO 81, rejouer directement le checkpoint 80
+  de la chaîne proactive. Cela séparera un défaut de la récupération locale
+  d'une dépendance au changement de bassin produit aux RHO 18--35.
 - [ ] Si nécessaire, précompiler deux capsules synchronisées : restauration de
   faisabilité puis objectif de fatigue.
 - [ ] N'évaluer RTI qu'après plusieurs chaînes SQP complètes certifiées.
@@ -478,17 +499,21 @@ gain `30x` ou `48x` sans mesure.
 Une piste archivée peut être réouverte uniquement si un changement précis de
 modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 
-## 7. Première session de reprise conseillée
+## 7. Prochaine session de reprise conseillée
 
-1. Vérifier le statut Git et les SHA effectifs de Cocofest, Bioptim et ACADOS.
-2. Lire le [README actif](README.md), puis uniquement les sections historiques
-   liées au calcium et à la force passive.
-3. Implémenter le profil scientifique commun et son test analytique du calcium.
-4. Lancer localement un RHO reduced IPOPT et MadNLP.
-5. Déclencher le gate Linux 5 RHO.
-6. N'ouvrir le gate 30 qu'après inspection des artefacts de convergence
-   temporelle et de faisabilité.
+1. Lire les artefacts complets des runs `31389585968` et `31390381640`.
+2. Vérifier que le recovery ACADOS cible deux fois le même angle absolu et le
+   même état de fatigue, sans fenêtre intermédiaire exportée.
+3. Si le lazy atteint `100/100`, mesurer le gain contre les `60.436 s` de Phase
+   I proactive et conserver l'option seulement si tous les audits physiques
+   restent identiques.
+4. Sinon, exécuter le replay checkpoint 80 décrit ci-dessus avant de modifier
+   les tolérances ou le budget SQP.
+5. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+   des mêmes PW en mécanique reduced.
+6. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+   ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
-La première question à trancher à la reprise est donc : Radau 5 suffit-il au
-critère de convergence du calcium, ou faut-il raffiner encore les états sans
-augmenter le nombre de décisions de PW?
+La première question à trancher est donc causale : la Phase I doit-elle agir
+uniquement au RHO difficile, ou les projections antérieures sont-elles
+nécessaires pour conduire ACADOS dans le bassin qui franchit le RHO 81?

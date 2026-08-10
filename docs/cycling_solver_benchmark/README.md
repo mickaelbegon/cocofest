@@ -979,6 +979,40 @@ TODO :
   son SHA et ajouter un benchmark CPU/GPU reproductible avant de conclure sur
   l'accélération.
 
+### 6.2 ACADOS : méthode rapide active et issue étudiée
+
+La meilleure chaîne ACADOS full certifiée aux nœuds utilise SQP/IRK, cinq
+sous-pas, la garde rapide de cadence à `2.60 rad/s` et une Phase-I mécanique
+qui ne modifie que `q/qdot`. Elle atteint `100/100` RHO dans le
+[run 30763188906](https://github.com/mickaelbegon/cocofest/actions/runs/30763188906).
+Le temps réellement pertinent, préparation incluse, vaut `0.739 s` en médiane,
+`0.909 s` au P90 et `0.963 s` au maximum. La seule résolution ACADOS vaut
+environ `0.105 s`, mais ne doit pas être présentée comme le temps en ligne
+complet.
+
+Le principal coût évitable est connu : la Phase I proactive est appelée 99
+fois, coûte `60.436 s` au total et seulement 34 projections sont acceptées.
+La variante `--acados-failed-rho-phase-one-recovery` conserve donc le shift
+nominal tant qu'il converge. Au premier échec d'un RHO, elle :
+
+1. restaure le checkpoint primal exact du même RHO;
+2. projette uniquement les états mécaniques;
+3. vérifie l'invariance bit-à-bit des 20 états Ding et des PW;
+4. remet à zéro la mémoire native SQP/QP;
+5. exige une nouvelle résolution ACADOS avant tout avancement.
+
+Le mode CI `acados_lazy_recovery` compare le baseline et cette variante sur la
+même machine. Cette approche est une issue plausible pour supprimer la plupart
+des `0.61 s` de projection, mais elle n'est pas encore un résultat : le succès
+proactif peut dépendre des changements de bassin produits avant le RHO 81.
+
+L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
+enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
+alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier
+ACADOS de référence de production, il faut rejouer les mêmes PW avec un DOP853
+full réinitialisé à chaque RHO et dans la mécanique reduced, puis comparer coût,
+AUC et fatigue des quatre muscles.
+
 ## 7. Reproductibilité
 
 Le workflow de benchmark est

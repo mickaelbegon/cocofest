@@ -6,7 +6,7 @@ si la campagne a déjà commencé.
 
 ```text
 Reprends le benchmark des solveurs du RHO de pédalage FES sur la branche
-codex/acados-pr-refresh de mickaelbegon/cocofest.
+codex/full-horizon-homotopy de mickaelbegon/cocofest.
 
 Commence impérativement par lire, dans cet ordre :
 1. docs/cycling_solver_benchmark/README.md
@@ -72,6 +72,13 @@ contact full si nécessaire. Ajouter ensuite un écran bon marché avant la
 Phase-I mécanique, puisque 65 projections sur 99 sont rejetées après calcul.
 RTI vient seulement après cette certification continue.
 
+Le commit Cocofest `a8f1955` ajoute aussi la récupération lazy
+`--acados-failed-rho-phase-one-recovery`. Lire d'abord le run
+`31390381640`, qui compare baseline et lazy sur 100 RHO, avant de changer les
+tolérances. Si le lazy reste bloqué au RHO 81, rejouer le checkpoint 80 de la
+chaîne proactive pour distinguer l'effet local de Phase I de l'histoire du
+bassin de warm start.
+
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un
 échec attendu : Bioptim `4179bf07` corrige le rangement stage-wise et le smoke
@@ -87,5 +94,5 @@ résultats certifiés seulement.
 
 À la fin : donne le tableau comparatif, les échecs et leur premier RHO, les
 limites restantes et le prochain TODO précis. Commit et pousse uniquement les
-changements testés sur codex/acados-pr-refresh.
+changements testés sur codex/full-horizon-homotopy.
 ```
