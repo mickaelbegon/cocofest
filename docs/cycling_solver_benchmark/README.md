@@ -1191,6 +1191,15 @@ jusqu'à `3.16e-5 rad` et `3.99e-4 rad/s`. Le mode
 les SHA dans l'artefact. Il ne constitue pas encore une conservation durable,
 car l'artefact source expirera.
 
+L'ablation croisée
+[31423661232](https://github.com/mickaelbegon/cocofest/actions/runs/31423661232)
+réutilise ensuite le seed Intel sur un nouveau runner. Les RHO 1 à 5
+reproduisent exactement les nombres d'itérations et résidus du run 150, y
+compris au RHO 5 (`2` itérations, résidu primal `3.22e-11`), et aucun recovery
+n'est appelé. La cause du recovery précoce est donc la branche sélectionnée par
+IPOPT lors de la création du seed, pas le CPU qui exécute ACADOS. La prochaine
+comparaison pertinente est 300 RHO avec ce même seed épinglé.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier

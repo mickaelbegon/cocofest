@@ -565,19 +565,24 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     runs AMD ont des seeds bit-à-bit identiques. La PW biceps diffère jusqu'à
     `180.6 µs`. L'input temporaire `acados_seed_source_run_id` permet maintenant
     de rejouer le seed Intel sur un nouveau CPU, avec SHA journalisés.
-15. Réduire le coût du recovery : les sorties IPOPT faisables mais arrêtées à
+    [confirmé, run `31423661232`] Le seed Intel reproduit exactement les cinq
+    premiers RHO du run 150 sur un nouveau runner, sans recovery. Le seed, et
+    non le CPU ACADOS, cause le changement de branche précoce.
+15. [CI à lancer] Rejouer 300 RHO avec le seed Intel épinglé et comparer coût,
+    recoveries, fatigue et patrons de PW avec le run AMD `31420496210`.
+16. Réduire le coût du recovery : les sorties IPOPT faisables mais arrêtées à
     2 000 itérations coûtent à elles seules environ `280.6 s`. Tester une
     terminaison acceptable ou une Phase I de faisabilité bornée, sans relâcher
     la certification ACADOS finale.
-16. En alternative contrôlée, tester une Phase I de faisabilité qui peut
+17. En alternative contrôlée, tester une Phase I de faisabilité qui peut
     déplacer les états Ding dans une trust region stricte; auditer calcium,
     force, capacités et PW avant toute acceptation.
-17. Construire ensuite un prédicteur déterministe et bon marché des projections
+18. Construire ensuite un prédicteur déterministe et bon marché des projections
     utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
     de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-18. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+19. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
     des mêmes PW en mécanique reduced.
-19. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+20. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
     ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19

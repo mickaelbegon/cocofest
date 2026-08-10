@@ -4852,3 +4852,13 @@ accepte donc temporairement `acados_seed_source_run_id` pour télécharger le
 seed certifié d'un run précis, journaliser ses SHA et effectuer une ablation
 seed/CPU. Ce mécanisme dépend de la rétention des artefacts; après sélection,
 le seed devra être versionné dans `.github/benchmark-seeds/`.
+
+Le run croisé
+[31423661232](https://github.com/mickaelbegon/cocofest/actions/runs/31423661232)
+charge le seed Intel (`SHA-256 72a9c1a8...`) sur un nouveau runner. Les cinq
+RHO reproduisent exactement les résidus et itérations du run 150, sans recovery
+IPOPT; au RHO 5, ACADOS converge en deux itérations avec un résidu primal de
+`3.22e-11`. Cette ablation sépare donc les causes : le CPU de résolution ACADOS
+n'est pas suffisant pour produire l'échec; la branche choisie pendant la
+préparation IPOPT du seed le détermine. Une campagne 300 RHO avec le seed Intel
+mesurera maintenant le bénéfice à horizon identique.

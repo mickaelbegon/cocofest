@@ -32,6 +32,11 @@ artifact from a specified run and records all seed SHA-256 values. Because CI
 artifacts expire, this is an ablation mechanism, not the durable solution; the
 selected seed must ultimately be stored as a versioned benchmark asset.
 
+The crossed ablation in run `31423661232` reuses the Intel seed on a new
+runner. RHO 1--5 reproduce the Intel-run residuals exactly and need no IPOPT
+recovery. This isolates the common seed as the cause of the early branch
+change; the ACADOS execution CPU is not sufficient to produce it.
+
 The certified common seeds produced from this continuation may enforce start
 constraints. Such a seed is accepted by a consumer that releases these
 constraints because it belongs to a stricter feasible subset. Reuse in the
