@@ -4777,3 +4777,15 @@ maintenant le pipeline full éprouvé : chargement du même seed standard pour
 établir l'index absolu, remplacement par le seed ACADOS natif, et aucun
 raffinement IPOPT initial. L'IPOPT/Radau-5 du recovery reste indépendant et
 n'est appelé qu'après l'échec ou l'interruption forcée du solve cible.
+
+Le run corrigé
+[31414366905](https://github.com/mickaelbegon/cocofest/actions/runs/31414366905)
+est vert. Le full valide `5/5` RHO et l'audit mécanique, sans violation de
+cadence et avec `1.63e-4 rad` d'erreur maximale de projection. L'unique
+recovery forcé part bien de `seed_source=certified_target_solution` :
+IPOPT/Radau-5 converge (`status=0`, `inf_pr=2.09e-9`, infaisabilité auditée
+`6.19e-8`) en `87.98 s`, le primal est injecté, la capsule ACADOS est remise à
+zéro et le même RHO est recertifié avant tout avancement. La médiane ACADOS
+chaude full vaut `0.466 s` et son P90 `0.681 s`. L'extension est donc validée
+fonctionnellement; son utilité au vrai changement de bassin du RHO 141 reste à
+mesurer sur 150 RHO sans interruption forcée.

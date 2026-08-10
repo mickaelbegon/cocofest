@@ -528,7 +528,7 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 9. [fait, run `31401580984`] La Phase I proactive échoue également au RHO 141,
    avec une trajectoire quasi identique à `19--35`. Une seconde fenêtre
    mécanique n'est pas une solution.
-10. [implémenté, quatrième smoke CI à certifier] Étendre le recovery IPOPT/Radau-5 du reduced
+10. [fait, run `31414366905`] Étendre le recovery IPOPT/Radau-5 du reduced
     vers le full : même RHO gelé, mêmes bornes/targets, audit structurel,
     injection du primal certifié, reset natif puis obligation d'un retry
     ACADOS réussi avant d'avancer. Le premier smoke a confirmé l'identité
@@ -540,8 +540,10 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     sur l'OCP cible muni de la garde rapide `2.60`. Le troisième smoke a
     ensuite exposé un index absolu de cycle mal établi lors du rechargement du
     seed natif; le consommateur utilise désormais le pipeline standard qui a
-    produit ce seed, sans raffinement IPOPT initial redondant.
-11. Après le smoke full vert, relancer 150 RHO avec `19--35` et recovery naturel
+    produit ce seed, sans raffinement IPOPT initial redondant. Le smoke final
+    valide `5/5`, l'audit physique, l'injection, le reset et la recertification
+    ACADOS du même RHO.
+11. Relancer 150 RHO avec `19--35` et recovery naturel
     pour vérifier qu'IPOPT franchit réellement le RHO 141.
 12. En alternative contrôlée, tester une Phase I de faisabilité qui peut
     déplacer les états Ding dans une trust region stricte; auditer calcium,
