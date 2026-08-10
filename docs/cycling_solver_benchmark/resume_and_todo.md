@@ -543,8 +543,11 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     produit ce seed, sans raffinement IPOPT initial redondant. Le smoke final
     valide `5/5`, l'audit physique, l'injection, le reset et la recertification
     ACADOS du même RHO.
-11. Relancer 150 RHO avec `19--35` et recovery naturel
-    pour vérifier qu'IPOPT franchit réellement le RHO 141.
+11. [implémenté, CI à lancer] Relancer 150 RHO reduced sans interruption
+    forcée, avec recovery IPOPT/Radau-5 naturel. Exporter le préfixe certifié,
+    que la chaîne atteigne `150/150` ou s'arrête après deux tentatives. La
+    fenêtre Phase I `19--35`, propre au full, n'est pas transférée
+    arbitrairement au reduced.
 12. En alternative contrôlée, tester une Phase I de faisabilité qui peut
     déplacer les états Ding dans une trust region stricte; auditer calcium,
     force, capacités et PW avant toute acceptation.

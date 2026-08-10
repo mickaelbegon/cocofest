@@ -4789,3 +4789,13 @@ zéro et le même RHO est recertifié avant tout avancement. La médiane ACADOS
 chaude full vaut `0.466 s` et son P90 `0.681 s`. L'extension est donc validée
 fonctionnellement; son utilité au vrai changement de bassin du RHO 141 reste à
 mesurer sur 150 RHO sans interruption forcée.
+
+Le chemin retenu pour cette mesure est désormais explicitement **reduced en
+ligne, full hors ligne**. Le mode `cycles=acados_reduced_recovery` réutilise le
+gate hybride sans son interruption forcée : ACADOS reduced traite jusqu'à 150
+RHO, IPOPT/Radau-5 n'est appelé qu'après un échec réel et ACADOS doit toujours
+recertifier le même RHO avant tout shift. Le préfixe physique validé est exporté
+pour un replay full ultérieur, y compris lors d'un arrêt documenté après les
+deux tentatives autorisées. Cette séparation évite que le test de câblage forcé
+perturbe la branche de la campagne naturelle et n'importe pas la Phase I full
+`19--35` dans une mécanique reduced où elle n'a pas été justifiée.

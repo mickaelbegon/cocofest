@@ -325,6 +325,10 @@ gh workflow run cycling_solver_benchmark_linux.yml \
   -f cycles=acados_hybrid -f acados_option_rhos=5
 
 gh workflow run cycling_solver_benchmark_linux.yml \
+  --ref codex/full-horizon-homotopy \
+  -f cycles=acados_reduced_recovery -f acados_smoke_rhos=150
+
+gh workflow run cycling_solver_benchmark_linux.yml \
   --ref codex/acados-pr-refresh \
   -f cycles=fatigue_endurance -f fatigue_endurance_max_rhos=2000
 
@@ -358,6 +362,7 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
 | Reprise hybride ACADOS full/reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, avec un OCP IPOPT strictement isomorphe à la formulation cible | Reduced : gate `5/5`; full : gate `5/5`, IPOPT `status=0`, `inf_pr=2.09e-9`, recovery `87.98 s`, ACADOS chaud médian `0.466 s` et P90 `0.681 s` | Câblage full certifié au run `31414366905`; le recovery reste exceptionnel et doit maintenant être testé naturellement au RHO 141 |
+| Campagne naturelle ACADOS reduced + recovery IPOPT/Radau-5 | Mesurer le chemin de production sans provoquer artificiellement un échec au premier RHO | `cycles=acados_reduced_recovery` exécute le nombre demandé (`150` pour la campagne courante), n'appelle IPOPT qu'après un véritable échec ACADOS et exporte le plus long préfixe certifié | Un horizon entièrement certifié et un arrêt documenté après deux tentatives sont deux outcomes scientifiques valides; résultats CI à venir |
 | Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
 
 Les premiers dispatches
@@ -1113,6 +1118,15 @@ place d'ACADOS : le primal certifié est injecté, la mémoire SQP/QP est remise
 zéro, puis un retry ACADOS doit satisfaire les tolérances. Le gate Linux
 `acados_hybrid` force ce chemin au premier RHO dans les deux formulations avant
 de tester l'échec naturel long.
+
+Cette interruption forcée est utile pour valider le câblage, mais elle peut
+modifier la branche non convexe suivie ensuite. Le mode
+`cycles=acados_reduced_recovery` isole donc le chemin de production : mécanique
+reduced seulement, aucune interruption artificielle, recovery IPOPT/Radau-5
+sur le même RHO uniquement après un échec réel, puis recertification ACADOS. Il
+exporte `reduced-validated-prefix.npz` pour un replay full hors ligne. La fenêtre
+Phase I `19--35`, établie spécifiquement pour la mécanique full, n'est pas
+transférée sans preuve à la formulation reduced.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
