@@ -4862,3 +4862,25 @@ IPOPT; au RHO 5, ACADOS converge en deux itérations avec un résidu primal de
 n'est pas suffisant pour produire l'échec; la branche choisie pendant la
 préparation IPOPT du seed le détermine. Une campagne 300 RHO avec le seed Intel
 mesurera maintenant le bénéfice à horizon identique.
+
+La campagne appariée
+[31424509992](https://github.com/mickaelbegon/cocofest/actions/runs/31424509992)
+utilise bien le seed Intel (`SHA-256 72a9c1a8...`) et reste sans recovery
+jusqu'au RHO 218. Elle valide 233 RHO puis s'arrête au RHO 234. Les trois
+recoveries IPOPT convergent : un au RHO 218 (`10.58 s`), qui est recertifié,
+et deux au RHO 234 (`13.74 s` et `2.43 s`), qui ne le sont pas. Les trois
+retries ACADOS du dernier RHO restent au plafond avec un résidu primal
+`1.46e-7`, mais une stationnarité `1.40e-5`. La médiane/P90 murale chaude vaut
+`0.168/0.212 s`; le mur-à-mur est `353.7 s`, dont `201.3 s` de préparation.
+L'audit mécanique passe et la capacité biceps vaut encore `0.8969` : l'arrêt
+n'est pas attribuable à la fatigue avec les preuves actuelles.
+
+Cette campagne sépare deux phénomènes. Le seed commun explique la bifurcation
+précoce du RHO 5, mais pas l'échec tardif de recertification. Puisque le NLP
+IPOPT du RHO 234 est convergé et sous les seuils de faisabilité, la prochaine
+expérience doit comparer le contrat actuel « IPOPT prépare, ACADOS recertifie »
+à un vrai fallback hybride où IPOPT certifie exceptionnellement ce RHO, le
+shift est calculé depuis sa solution adaptée, puis ACADOS reprend au RHO
+suivant. Ce chemin doit conserver l'audit physique complet et compter
+séparément les RHO IPOPT; il ne doit pas être présenté comme un résultat
+ACADOS pur.

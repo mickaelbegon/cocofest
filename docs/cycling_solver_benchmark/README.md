@@ -1200,6 +1200,30 @@ n'est appelé. La cause du recovery précoce est donc la branche sélectionnée 
 IPOPT lors de la création du seed, pas le CPU qui exécute ACADOS. La prochaine
 comparaison pertinente est 300 RHO avec ce même seed épinglé.
 
+Cette comparaison longue,
+[31424509992](https://github.com/mickaelbegon/cocofest/actions/runs/31424509992),
+confirme le bénéfice du seed Intel au début, mais révèle une autre limite.
+ACADOS valide 233 RHO, sans recovery précoce, puis s'arrête proprement au RHO
+234 après les deux chances autorisées. Un premier recovery IPOPT au RHO 218
+est recertifié par ACADOS; les deux recoveries du RHO 234 convergent aussi
+(`13.74 s` puis `2.40 s`), mais leurs retries ACADOS reproduisent
+`ACADOS_MAXITER` avec un résidu primal faible (`1.46e-7`) et un résidu de
+stationnarité de `1.40e-5`. Le solveur ACADOS reste rapide avant l'arrêt :
+médiane/P90 solveur `0.153/0.197 s` et murale `0.168/0.212 s`. L'audit
+mécanique passe, mais la capacité biceps vaut encore `0.8969`; l'outcome est
+donc `unconfirmed_endurance_stop`, pas un échec de fatigue démontré.
+
+Le diagnostic change la priorité du recovery. La génération d'un seed commun
+stable reste indispensable pour comparer les solveurs, mais choisir une bonne
+branche initiale ne suffit pas à garantir 300 RHO. Au RHO 234, IPOPT fournit
+une solution convergée et faisable du problème gelé, alors que la
+recertification ACADOS du même RHO échoue deux fois. La prochaine variante
+doit donc tester explicitement un **fallback hybride certifié** : accepter le
+RHO IPOPT après les mêmes audits de bornes, dynamique et mécanique, effectuer
+le shift depuis cette solution, puis rendre le RHO suivant à ACADOS. Cette
+variante doit rester distincte du benchmark ACADOS pur et journaliser chaque
+RHO résolu par le fallback.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier

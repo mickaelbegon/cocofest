@@ -568,21 +568,32 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     [confirmé, run `31423661232`] Le seed Intel reproduit exactement les cinq
     premiers RHO du run 150 sur un nouveau runner, sans recovery. Le seed, et
     non le CPU ACADOS, cause le changement de branche précoce.
-15. [CI à lancer] Rejouer 300 RHO avec le seed Intel épinglé et comparer coût,
-    recoveries, fatigue et patrons de PW avec le run AMD `31420496210`.
-16. Réduire le coût du recovery : les sorties IPOPT faisables mais arrêtées à
+15. [fait, run `31424509992`] Le seed Intel supprime le recovery du RHO 5 et
+    valide 233 RHO. IPOPT converge lors des recoveries aux RHO 218 et 234,
+    mais ACADOS ne recertifie pas le RHO 234 après deux injections. L'audit
+    mécanique passe et la capacité biceps vaut encore `0.8969`; l'arrêt reste
+    `unconfirmed_endurance_stop`.
+16. Implémenter et tester un fallback hybride explicitement étiqueté : si
+    IPOPT/Radau-5 converge et passe tous les audits du RHO gelé après un échec
+    ACADOS, avancer exceptionnellement depuis sa solution adaptée puis rendre
+    le RHO suivant à ACADOS. Conserver en parallèle le mode strict qui exige
+    une recertification ACADOS.
+17. Versionner le seed commun retenu avec son SHA et sa provenance; l'input
+    inter-run actuel expire avec l'artefact et ne suffit pas à la
+    reproductibilité du benchmark.
+18. Réduire le coût du recovery : les sorties IPOPT faisables mais arrêtées à
     2 000 itérations coûtent à elles seules environ `280.6 s`. Tester une
     terminaison acceptable ou une Phase I de faisabilité bornée, sans relâcher
     la certification ACADOS finale.
-17. En alternative contrôlée, tester une Phase I de faisabilité qui peut
+19. En alternative contrôlée, tester une Phase I de faisabilité qui peut
     déplacer les états Ding dans une trust region stricte; auditer calcium,
     force, capacités et PW avant toute acceptation.
-18. Construire ensuite un prédicteur déterministe et bon marché des projections
+20. Construire ensuite un prédicteur déterministe et bon marché des projections
     utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
     de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-19. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+21. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
     des mêmes PW en mécanique reduced.
-20. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+22. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
     ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
