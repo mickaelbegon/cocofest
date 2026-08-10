@@ -1043,9 +1043,13 @@ même capsule ACADOS compilée. La fenêtre `19--36` est une borne supérieure
 certifiée, pas encore un optimum. Le
 [run 31396677025](https://github.com/mickaelbegon/cocofest/actions/runs/31396677025)
 resserre sa borne minimale : `19--27` échoue au RHO 86 et `19--31` au RHO 87.
-La prochaine bissection teste donc `19--33` et `19--35`. L'export/replay natif
-complet des variables HPIPM reste utile pour expliquer le replay isolé, mais
-n'est pas requis pour ce chemin de production.
+Le run suivant
+[31398686286](https://github.com/mickaelbegon/cocofest/actions/runs/31398686286)
+place cette borne à `34` ou `35` : `19--33` échoue au RHO 88, tandis que
+`19--35` atteint `100/100` et reproduit l'objectif/AUC de `19--36`. Son statut
+rouge est un défaut du post-gate CI, corrigé depuis, et non un échec ACADOS.
+L'export/replay natif complet des variables HPIPM reste utile pour expliquer le
+replay isolé, mais n'est pas requis pour ce chemin de production.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,

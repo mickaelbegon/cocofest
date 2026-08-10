@@ -4685,3 +4685,12 @@ valide 86 RHO puis échoue au RHO 87. Leurs 9 et 13 projections coûtent
 respectivement `5.452 s` et `7.927 s`. Le témoin `19--36` reste `100/100`.
 La borne supérieure minimale se trouve donc dans `32--36`; la campagne
 suivante compare `19--33`, `19--35` et le témoin `19--36` seulement.
+
+Le run
+[31398686286](https://github.com/mickaelbegon/cocofest/actions/runs/31398686286)
+resserre encore la borne : `19--33` valide 87 RHO puis échoue au RHO 88;
+`19--35` et `19--36` atteignent `100/100`. L'écart entre leurs objectifs est
+`1.68e-7` et celui des AUC `1.91e-10`. Le statut rouge vient uniquement du
+post-gate, qui cherchait encore le JSON de la variante lazy retirée de cette
+campagne. Le gate est corrigé pour certifier `19--35`; le dernier test est
+`19--34`.

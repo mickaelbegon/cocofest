@@ -6456,7 +6456,6 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "ACADOS_RECOVERY_ONLY" in workflow
     assert "inputs.cycles == 'acados_lazy_recovery'" in workflow
     assert "ACADOS_LAZY_RECOVERY_ONLY" in workflow
-    assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-lazy" in workflow
     assert "--acados-failed-rho-phase-one-recovery" in workflow
     assert 'if [[ "$variant" == *"phase-one-mechanical-lazy"* ]]; then' in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-history" in workflow
@@ -6469,8 +6468,10 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "phase-one-mechanical-target-19-27" in workflow
     assert "phase-one-mechanical-target-19-31" in workflow
     assert "phase-one-mechanical-target-19-33" in workflow
+    assert "phase-one-mechanical-target-19-34" in workflow
     assert "phase-one-mechanical-target-19-35" in workflow
     assert "phase-one-mechanical-target-19-36" in workflow
+    assert ".results[0].validated_cycles == 100" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2" in workflow

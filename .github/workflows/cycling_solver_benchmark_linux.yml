@@ -1203,6 +1203,11 @@ jobs:
                 --acados-transfer-phase-one-target-rhos
                 19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
               )
+            elif [[ "$variant" == "sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-34" ]]; then
+              solver_options+=(
+                --acados-transfer-phase-one-target-rhos
+                19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34
+              )
             elif [[ "$variant" == "sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-35" ]]; then
               solver_options+=(
                 --acados-transfer-phase-one-target-rhos
@@ -1307,14 +1312,13 @@ jobs:
           elif [[ "$ACADOS_LAZY_RECOVERY_ONLY" == "true" ]]; then
             # Focused causal bisection on one runner. Earlier runs certified
             # 19--36 and rejected 19--27 and 19--31, so retain only the
-            # successful control and the two new upper-bound candidates.
+            # successful control and the final upper-bound candidate.
             printf '%s\n' \
               sqp-irk-reference-full \
               > acados-smoke-results/reference-cases.txt
             run_case sqp-irk-reference full 1 SQP IRK 5 5
-            run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-33 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-34 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-35 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
-            run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-36 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
           elif [[ "$ACADOS_CADENCE_GUARD_ONLY" == "true" ]]; then
             # Focused physical A/B: preserve the common references, then test
             # only the two asymmetric fast-side cadence guards. This avoids
@@ -1593,10 +1597,12 @@ jobs:
             ' "$result"
           done
           if [[ "$ACADOS_LAZY_RECOVERY_ONLY" == "true" ]]; then
-            result="acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-lazy-full/result.json"
+            result="acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-35-full/result.json"
             jq -e '
-              .configurations.acados.acados_failed_rho_phase_one_recovery == true and
-              (.results[0].error == null)
+              .configurations.acados.acados_transfer_phase_one_target_rhos ==
+                [19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35] and
+              (.results[0].error == null) and
+              (.results[0].validated_cycles == 100)
             ' "$result"
           fi
           if [[ "$ACADOS_FATIGUE_ENDURANCE_ONLY" == "true" ]]; then
