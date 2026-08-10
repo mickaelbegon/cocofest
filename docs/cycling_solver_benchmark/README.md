@@ -362,7 +362,7 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
 | Reprise hybride ACADOS full/reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, avec un OCP IPOPT strictement isomorphe à la formulation cible | Reduced : gate `5/5`; full : gate `5/5`, IPOPT `status=0`, `inf_pr=2.09e-9`, recovery `87.98 s`, ACADOS chaud médian `0.466 s` et P90 `0.681 s` | Câblage full certifié au run `31414366905`; le recovery reste exceptionnel et doit maintenant être testé naturellement au RHO 141 |
-| Campagne naturelle ACADOS reduced + recovery IPOPT/Radau-5 | Mesurer le chemin de production sans provoquer artificiellement un échec au premier RHO | `cycles=acados_reduced_recovery` exécute le nombre demandé (`150` pour la campagne courante), n'appelle IPOPT qu'après un véritable échec ACADOS et exporte le plus long préfixe certifié | Un horizon entièrement certifié et un arrêt documenté après deux tentatives sont deux outcomes scientifiques valides; résultats CI à venir |
+| Campagne naturelle ACADOS reduced + recovery IPOPT/Radau-5 | Mesurer le chemin de production sans provoquer artificiellement un échec au premier RHO | Run `31419405169` : `150/150`, aucun recovery, solveur chaud médian/P90 `0.127/0.128 s`, mur chaud `0.140/0.141 s`; préfixe de 150 cycles exporté | Le calcul est certifié; seul le post-gate CI a donné un faux rouge sur un test de chemin relatif, corrigé avant la campagne 300 RHO |
 | Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
 
 Les premiers dispatches
@@ -1127,6 +1127,21 @@ sur le même RHO uniquement après un échec réel, puis recertification ACADOS.
 exporte `reduced-validated-prefix.npz` pour un replay full hors ligne. La fenêtre
 Phase I `19--35`, établie spécifiquement pour la mécanique full, n'est pas
 transférée sans preuve à la formulation reduced.
+
+La première campagne naturelle,
+[31419405169](https://github.com/mickaelbegon/cocofest/actions/runs/31419405169),
+certifie `150/150` RHO sans appeler IPOPT. Les 150 appels ACADOS sont acceptés,
+la médiane/P90 solveur chaude vaut `0.127/0.128 s` et la médiane/P90 murale
+chaude `0.140/0.141 s`. Le mur-à-mur total vaut `235.4 s`, dont `166.8 s` de
+préparation initiale; la partie RHO validée cumule `20.88 s`. L'audit mécanique
+passe avec `1.14e-13 rad` d'erreur de projection maximale, `6.12e-13 rad/s` de
+résidu tangent et aucune violation de cadence. Le biceps est le muscle limitant
+à ce stade (`A/A_scale=0.9172`), devant le triceps (`0.9827`), le deltoïde
+antérieur (`0.9901`) et le deltoïde postérieur (`0.9998`). Le run apparaît rouge
+uniquement parce que le contrôle de présence relatif exécuté après le `jq`
+réussi a retourné `1`, bien que l'artefact de `927 KiB` soit présent. Cette
+incohérence de shell n'est pas reproduite localement; le contrôle utilise
+maintenant un chemin absolu et journalise le répertoire en cas d'échec.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,

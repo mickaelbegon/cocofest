@@ -543,21 +543,24 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     produit ce seed, sans raffinement IPOPT initial redondant. Le smoke final
     valide `5/5`, l'audit physique, l'injection, le reset et la recertification
     ACADOS du même RHO.
-11. [implémenté, CI à lancer] Relancer 150 RHO reduced sans interruption
-    forcée, avec recovery IPOPT/Radau-5 naturel. Exporter le préfixe certifié,
-    que la chaîne atteigne `150/150` ou s'arrête après deux tentatives. La
-    fenêtre Phase I `19--35`, propre au full, n'est pas transférée
-    arbitrairement au reduced.
-12. En alternative contrôlée, tester une Phase I de faisabilité qui peut
+11. [fait numériquement, run `31419405169`] La campagne reduced naturelle
+    atteint `150/150` sans recovery IPOPT. ACADOS chaud vaut `0.127 s` en
+    médiane solveur et `0.140 s` en médiane murale; le préfixe certifié est
+    exporté. Le rouge final est un faux négatif du post-gate sur le chemin du
+    fichier, corrigé par un contrôle absolu et diagnostiqué.
+12. [CI à lancer] Étendre exactement ce cas naturel à 300 RHO. Conserver comme
+    outcomes recevables `300/300` ou un arrêt documenté après les deux
+    tentatives de recovery sur le même RHO.
+13. En alternative contrôlée, tester une Phase I de faisabilité qui peut
     déplacer les états Ding dans une trust region stricte; auditer calcium,
     force, capacités et PW avant toute acceptation.
-13. Construire ensuite un prédicteur déterministe et bon marché des projections
-   utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
-   de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-14. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
-   des mêmes PW en mécanique reduced.
-15. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
-   ne pas confondre cette validation de transcription avec l'ablation ACADOS.
+14. Construire ensuite un prédicteur déterministe et bon marché des projections
+    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
+    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
+15. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+    des mêmes PW en mécanique reduced.
+16. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

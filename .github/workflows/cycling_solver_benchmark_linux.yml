@@ -571,6 +571,7 @@ jobs:
               .configurations.acados.mechanical_formulation == "reduced" and
               .results[0].error == null and
               .results[0].requested_cycles == $requested and
+              .results[0].receding_horizon_solution_output_error == null and
               .results[0].mechanical_equivalence_audit.passes_tolerance == true and
               (
                 (.results[0].success == true and
@@ -581,7 +582,13 @@ jobs:
                  .results[0].acados_ipopt_recovery.attempt_count >= 1)
               )
             ' acados-ipopt-hybrid-results/result.json
-            test -f acados-ipopt-hybrid-results/reduced-validated-prefix.npz
+            reduced_prefix="$GITHUB_WORKSPACE/acados-ipopt-hybrid-results/reduced-validated-prefix.npz"
+            if [[ ! -s "$reduced_prefix" ]]; then
+              echo "Expected non-empty certified reduced prefix: $reduced_prefix" >&2
+              find "$GITHUB_WORKSPACE/acados-ipopt-hybrid-results" -maxdepth 1 -type f -ls >&2
+              exit 1
+            fi
+            ls -lh "$reduced_prefix"
             exit 0
           fi
           jq -e '

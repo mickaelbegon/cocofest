@@ -6497,6 +6497,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
         in workflow
     )
     assert ".results[0].requested_cycles == $requested" in workflow
+    assert ".results[0].receding_horizon_solution_output_error == null" in workflow
+    assert 'reduced_prefix="$GITHUB_WORKSPACE/acados-ipopt-hybrid-results/' in workflow
     assert "full-reference/native-full-seed.npz" in workflow
     assert '.seed_source == "certified_target_solution"' in workflow
     assert ".results[0].nlp_validated_cycles == 1" in workflow

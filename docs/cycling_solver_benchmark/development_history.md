@@ -4799,3 +4799,17 @@ pour un replay full ultérieur, y compris lors d'un arrêt documenté après les
 deux tentatives autorisées. Cette séparation évite que le test de câblage forcé
 perturbe la branche de la campagne naturelle et n'importe pas la Phase I full
 `19--35` dans une mécanique reduced où elle n'a pas été justifiée.
+
+La première exécution naturelle,
+[31419405169](https://github.com/mickaelbegon/cocofest/actions/runs/31419405169),
+atteint `150/150` sans aucune tentative IPOPT. Les médianes chaudes solveur et
+murale sont respectivement `0.127 s` et `0.140 s`; leurs P90 valent `0.128 s`
+et `0.141 s`. Les 150 RHO validés cumulent `20.88 s` de temps mural, tandis que
+le mur-à-mur de `235.4 s` inclut `166.8 s` de préparation initiale. L'audit
+reduced/full projeté ne trouve aucune violation de cadence. Le préfixe certifié
+de `927 KiB` est bien dans l'artefact, mais le contrôle relatif immédiatement
+après le `jq` réussi a retourné `1`; cette incohérence n'est pas reproduite
+localement. Le post-gate emploie désormais un chemin absolu, exige un fichier
+non vide et imprime le répertoire si cette invariance est à nouveau violée. La
+prochaine campagne passe directement à 300 RHO, puisque le solve numérique 150
+est déjà certifié.
