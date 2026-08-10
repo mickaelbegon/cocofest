@@ -163,6 +163,28 @@ vérifie désormais le contrat sérialisé avant d'accepter un artefact. Une
 campagne `mechanical` n'est scientifique que si le JSON confirme le mode, le
 seuil et l'absence de `fes` dans `mutable_blocks`.
 
+Le [run 31380186719](https://github.com/mickaelbegon/cocofest/actions/runs/31380186719)
+est la première ablation `mechanical` valide sur `145` RHO. Les deux solveurs
+convergent et les artefacts confirment le seuil `10^-3` ainsi que les seuls
+blocs `q/qdot`, mais la préparation proactive n'accélère pas la chaîne :
+
+| Solveur | Préparation | Projections / skips | Itérations chaudes | Médiane solveur | Médiane solveur + préparation | Mur-à-mur |
+|---|---|---:|---:|---:|---:|---:|
+| IPOPT | `none` | 0 / 144 | 8 743 | 2,557 s | 2,557 s | 921,7 s |
+| IPOPT | Phase I `mechanical` | 68 / 76 | 9 038 | 2,653 s | 2,902 s | 1 012,2 s |
+| MadNLP | `none` | 0 / 144 | 8 617 | 1,458 s | 1,458 s | 672,6 s |
+| MadNLP | Phase I `mechanical` | 17 / 127 | 8 637 | 1,505 s | 1,605 s | 746,0 s |
+
+IPOPT augmente donc ses itérations de `3,37 %` et MadNLP de `0,23 %`. Sur les
+17 fenêtres MadNLP effectivement projetées, le bilan est de `+24` itérations;
+la réduction du défaut mécanique n'est pas corrélée à une meilleure direction
+Newton. Les écarts d'objectif restent faibles mais non nuls (`-0,0090 %` pour
+IPOPT et `-0,0011 %` pour MadNLP), ce qui signale encore une petite sensibilité
+au bassin. La décision est de conserver le shift historique pour le chemin
+nominal et de réserver Phase I, ou un rollout, à une **seconde tentative après
+échec**. Ce mode recovery évitera le coût du screen et toute perturbation des
+RHO qui convergent déjà.
+
 ### Reprise hybride ACADOS → IPOPT (expérimentale)
 
 Le mode `--acados-ipopt-recovery` ne compare pas le full ACADOS historique à

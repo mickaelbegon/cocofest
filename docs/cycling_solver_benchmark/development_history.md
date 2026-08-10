@@ -4515,3 +4515,25 @@ première est forcée par la CI. Au RHO 5, deux échecs ACADOS naturels ont exig
 deux recoveries avant une certification en cinq itérations ACADOS. La prochaine
 étape est donc une campagne 30 RHO sans recovery artificielle, avec fréquence
 et coût des reprises rapportés séparément du solve chaud.
+
+## 27. Transfert de Phase I vers IPOPT/MadNLP (10 août 2026)
+
+Les rollouts et la Phase I ACADOS ont été adaptés aux états internes de la
+collocation Radau puis testés sur `145` RHO reduced/Radau-5 à assistance nulle.
+Le premier run annoncé `mechanical`,
+[30904900725](https://github.com/mickaelbegon/cocofest/actions/runs/30904900725),
+était mal étiqueté : le comparateur propageait le booléen partagé, mais pas le
+mode ni le seuil. Les artefacts montraient encore `all`, seuil `null` et
+`q/qdot/fes`. Le commit `96185c1` corrige la propagation vers IPOPT et vers la
+configuration MadNLP clonée, et ajoute un gate sur le contrat JSON.
+
+Le run corrigé
+[31380186719](https://github.com/mickaelbegon/cocofest/actions/runs/31380186719)
+certifie `145/145` pour les deux solveurs avec `mechanical`, seuil `10^-3` et
+blocs mutables limités à `q/qdot`. IPOPT applique 68 projections et augmente
+ses itérations chaudes de `8 743` à `9 038`; MadNLP applique 17 projections et
+passe de `8 617` à `8 637`. Les médianes incluant la préparation deviennent
+respectivement `2.902 s` et `1.605 s`, contre `2.557 s` et `1.458 s` sans
+préparation. La Phase I mécanique proactive est donc réfutée comme
+accélération nominale. Elle reste pertinente comme tentative de restauration
+après un échec, sans screen ni perturbation sur les RHO déjà convergents.
