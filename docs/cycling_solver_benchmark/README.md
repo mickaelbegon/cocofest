@@ -1258,10 +1258,22 @@ ACADOS consécutifs. Aucun autre fallback n'est nécessaire. La médiane/P90
 chaude vaut `0.131/0.170 s` côté solveur et `0.144/0.183 s` côté mur; la somme
 murale des 300 RHO certifiés est `46.15 s`, soit `0.154 s/RHO`. La préparation
 initiale coûte `168.75 s`. Le mur-à-mur total vaut `304.39 s`; après retrait de
-la préparation, il reste `135.64 s`, soit `0.452 s/RHO`, dont `89.49 s` de
-post-traitement ou d'overhead non attribué aux appels solveur. Le temps de
-résolution une fois l'OCP construit est donc nettement sous une seconde, mais
-le pipeline complet doit encore sortir les audits lourds du chemin online.
+la préparation, il reste `135.64 s`, soit `0.452 s/RHO`, dont `89.49 s`
+étaient initialement non attribuées aux appels solveur. Le temps de résolution
+une fois l'OCP construit est donc nettement sous une seconde.
+
+Le run instrumenté
+[31429249538](https://github.com/mickaelbegon/cocofest/actions/runs/31429249538)
+localise ce résidu sans changer le résultat numérique : coût, fatigue et
+recoveries sont identiques bit à bit. Sur ce runner plus lent, la boucle RHO
+complète coûte `120.20 s`, soit `0.401 s/RHO`; les appels solveurs certifiés en
+représentent `60.95 s` (`0.203 s/RHO`) et l'orchestration Bioptim restante
+environ `59.25 s` (`0.198 s/RHO`). Le post-traitement final ne coûte que
+`6.62 s`, dont `3.07 s` pour l'audit mécanique et `1.38 s` pour le résumé.
+Environ `53.9 s` sont consommées une seule fois entre la préparation du seed et
+la première résolution par la construction/configuration des solveurs de
+recovery. La cible suivante est donc de réduire l'orchestration par RHO et de
+préconstruire complètement le fallback, pas de supprimer les audits finaux.
 
 Le coût total vaut `22016.54`, dont `21308.91` pour la fatigue exécutée. Les
 AUC de fatigue normalisée des Biceps, Delt_ant, Delt_post et Triceps valent

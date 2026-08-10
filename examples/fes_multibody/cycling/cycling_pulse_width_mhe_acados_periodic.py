@@ -16927,6 +16927,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             "initial_guess_preparation_time_s: "
             f"{initial_guess_preparation_time_s:.6f}"
         )
+    pre_solve_setup_start = perf_counter()
 
     ipopt_recovery_enabled = bool(
         args.acados_ipopt_recovery or getattr(args, "nlp_ipopt_recovery", False)
@@ -18890,6 +18891,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         args.transfer_contact_manifold_projection_mode == "position_velocity"
     )
     nmpc.last_transfer_contact_projection = None
+    pre_solve_setup_wall_time_s = perf_counter() - pre_solve_setup_start
     rho_solve_loop_start = perf_counter()
     try:
         sol = nmpc.solve_fes_nmpc(
@@ -18982,6 +18984,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         summary["rho_replay_checkpoint"] = rho_replay_checkpoint_summary
         summary["rho_prepared_checkpoints"] = rho_prepared_checkpoint_summaries
         summary["execution_timing"] = {
+            "pre_solve_setup_wall_time_s": pre_solve_setup_wall_time_s,
             "rho_solve_loop_wall_time_s": rho_solve_loop_wall_time_s,
             "post_solve_wall_time_s": 0.0,
             "certified_trace_filter_wall_time_s": 0.0,
@@ -19226,6 +19229,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         )
         solution_export_wall_time_s = perf_counter() - solution_export_start
     summary["execution_timing"] = {
+        "pre_solve_setup_wall_time_s": pre_solve_setup_wall_time_s,
         "rho_solve_loop_wall_time_s": rho_solve_loop_wall_time_s,
         "post_solve_wall_time_s": perf_counter() - post_solve_start,
         "certified_trace_filter_wall_time_s": certified_trace_filter_wall_time_s,

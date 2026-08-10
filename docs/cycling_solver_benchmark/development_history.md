@@ -4920,3 +4920,16 @@ cycles pour Biceps, Delt_ant, Delt_post et Triceps; les capacités finales sont
 fallback autour des RHO 217--225 : ce phénomène appartient au paysage
 d'optimisation et aux changements d'ensemble actif, pas au seul adaptateur
 hybride.
+
+Le run de profiling
+[31429249538](https://github.com/mickaelbegon/cocofest/actions/runs/31429249538)
+reproduit exactement le coût `22016.539399`, la fatigue exécutée
+`21308.910865`, les quatre AUC et les trois appels de recovery. La variation de
+temps absolu provient donc du runner, pas d'une autre branche numérique. La
+boucle `solve_fes_nmpc` coûte `120.20 s` (`0.401 s/RHO`) : `60.95 s` sont les
+appels certifiés et environ `59.25 s` l'orchestration Bioptim par RHO. Après la
+boucle, le filtrage du préfixe coûte `0.004 s`, le résumé `1.381 s`, l'audit
+mécanique `3.070 s`, l'export `0.003 s` et le post-traitement complet `6.621 s`.
+Le solde d'environ `53.9 s` se situe avant le premier RHO, après la préparation
+du seed; une métrique dédiée `pre_solve_setup_wall_time_s` est ajoutée pour les
+prochaines campagnes.

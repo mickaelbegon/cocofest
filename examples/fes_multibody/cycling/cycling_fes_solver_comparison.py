@@ -2881,6 +2881,32 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
             if end_to_end_wall_time is not None and preparation_time is not None
             else None
         )
+        execution_timing = dict(result.get("execution_timing") or {})
+        rho_solve_loop_wall_time = _finite_float(
+            execution_timing.get("rho_solve_loop_wall_time_s")
+        )
+        if rho_solve_loop_wall_time is not None:
+            rho_orchestration_wall_time = max(
+                0.0, rho_solve_loop_wall_time - attempted_effective_wall_time
+            )
+            execution_timing.update(
+                {
+                    "rho_solver_attempt_wall_sum_s": attempted_effective_wall_time,
+                    "rho_orchestration_wall_time_s": rho_orchestration_wall_time,
+                }
+            )
+            validated_cycle_count = int(performance["validated_cycles"] or 0)
+            if validated_cycle_count > 0:
+                execution_timing.update(
+                    {
+                        "rho_pipeline_wall_time_per_cycle_s": (
+                            rho_solve_loop_wall_time / validated_cycle_count
+                        ),
+                        "rho_orchestration_wall_time_per_cycle_s": (
+                            rho_orchestration_wall_time / validated_cycle_count
+                        ),
+                    }
+                )
         status = _effective_status(result)
         if status is None and result.get("window_statuses"):
             status = result["window_statuses"][-1]
@@ -2945,7 +2971,7 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 ),
                 "feasibility_restoration": restoration_timing,
                 "unattributed_wall_time_s": unattributed_wall_time,
-                "execution_timing": result.get("execution_timing"),
+                "execution_timing": execution_timing or None,
                 "validated_solver_time_s": performance["successful_solver_time_s"],
                 "validated_wall_time_s": performance["successful_wall_time_s"],
                 "solver_time_per_cycle_s": performance["solver_time_per_cycle_s"],

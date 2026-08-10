@@ -5951,10 +5951,9 @@ def test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization():
     assert row["acados_ipopt_recovery"]["injected_count"] == 1
     assert row["acados_ipopt_recovery_summaries"][0]["provisional"] is True
     assert row["solver_attempt_accounting"]["attempt_count"] == 2
-    assert row["execution_timing"] == {
-        "rho_solve_loop_wall_time_s": 1.25,
-        "post_solve_wall_time_s": 0.5,
-    }
+    assert row["execution_timing"]["rho_solve_loop_wall_time_s"] == 1.25
+    assert row["execution_timing"]["post_solve_wall_time_s"] == 0.5
+    assert row["execution_timing"]["rho_pipeline_wall_time_per_cycle_s"] == 1.25
 
 
 def test_same_rho_retries_are_excluded_from_physical_solution_traces():
