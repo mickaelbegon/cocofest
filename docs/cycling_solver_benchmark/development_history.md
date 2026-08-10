@@ -4933,3 +4933,13 @@ mécanique `3.070 s`, l'export `0.003 s` et le post-traitement complet `6.621 s`
 Le solde d'environ `53.9 s` se situe avant le premier RHO, après la préparation
 du seed; une métrique dédiée `pre_solve_setup_wall_time_s` est ajoutée pour les
 prochaines campagnes.
+
+Le smoke corrigé
+[31435870919](https://github.com/mickaelbegon/cocofest/actions/runs/31435870919)
+valide la métrique sur le chemin hybride naturel : 235/235 RHO, un fallback,
+coût `13238.607362` et fatigue exécutée `12813.316069`, identiques au run
+antérieur. Le setup pré-solve vaut `42.15 s`; la boucle RHO `72.46 s`, soit
+`0.308 s/RHO`, dont `0.145 s/RHO` dans les appels solveurs et `0.163 s/RHO`
+d'orchestration Bioptim. Le test CI initial avait un dénominateur erroné dans
+son attendu (`1.25` au lieu de `1.25/3` pour trois cycles validés); le calcul de
+production n'était pas en cause.

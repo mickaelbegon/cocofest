@@ -606,13 +606,14 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     des mêmes PW en mécanique reduced.
 22. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
     ne pas confondre cette validation de transcription avec l'ablation ACADOS.
-23. [profilé, run `31429249538`] Séparer les postes online et offline. La
+23. [profilé, runs `31429249538` et `31435870919`] Séparer les postes online et offline. La
     boucle RHO complète coûte `0.401 s/RHO` sur le runner instrumenté, dont
     `0.203 s/RHO` dans les appels solveurs et `0.198 s/RHO` d'orchestration
     Bioptim. Le post-traitement final ne coûte que `6.62 s`; supprimer les
     audits n'est donc pas la priorité. Mesurer désormais explicitement les
     `~53.9 s` de setup pré-solve unique et réduire la création/fusion des
-    objets solution dans la boucle.
+    objets solution dans la boucle. Le smoke 235 confirme `42.15 s` de setup
+    pré-solve et `0.308 s/RHO` online, dont `0.163 s/RHO` d'orchestration.
 24. Tester une régularisation de variation de PW et/ou une trust region mobile
     par rapport au cycle précédent. Comparer au mode non régularisé le coût de
     fatigue, les quatre AUC, le nombre d'itérations, les recoveries et les

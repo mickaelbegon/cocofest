@@ -1275,6 +1275,15 @@ la première résolution par la construction/configuration des solveurs de
 recovery. La cible suivante est donc de réduire l'orchestration par RHO et de
 préconstruire complètement le fallback, pas de supprimer les audits finaux.
 
+Le smoke de validation du découpage
+[31435870919](https://github.com/mickaelbegon/cocofest/actions/runs/31435870919)
+passe 235/235 RHO avec le fallback naturel. Il mesure explicitement
+`42.15 s` de setup pré-solve unique. La boucle online complète vaut
+`0.308 s/RHO` sur ce runner : `0.145 s/RHO` pour les appels solveurs et
+`0.163 s/RHO` pour l'orchestration. Le coût (`13238.6074`), la fatigue exécutée
+(`12813.3161`) et le compteur d'un fallback sont identiques au smoke de
+référence; l'instrumentation est donc numériquement neutre.
+
 Le coût total vaut `22016.54`, dont `21308.91` pour la fatigue exécutée. Les
 AUC de fatigue normalisée des Biceps, Delt_ant, Delt_post et Triceps valent
 respectivement `22.5570`, `3.2036`, `0.0920` et `4.5829` cycles; leurs capacités
