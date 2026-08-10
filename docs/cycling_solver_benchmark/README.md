@@ -1066,6 +1066,17 @@ fatigue. `19--35` est donc la meilleure fenêtre **100 RHO**, pas encore une
 politique de production longue durée. La campagne suivante compare la Phase I
 proactive sur 300 RHO afin de localiser une seconde transition de bassin.
 
+Le
+[run 31401580984](https://github.com/mickaelbegon/cocofest/actions/runs/31401580984)
+réfute finalement cette explication : la Phase I proactive s'arrête elle aussi
+au RHO 141, avec le même défaut `1.05e-3`. Elle paie 140 appels (`68.845 s`),
+dont 75 acceptés, sans prolonger le préfixe. À 140 RHO, les chemins proactif et
+`19--35` restent presque identiques : PW max `0.00239 µs`, mécanique max
+`1.52e-6`, objectif `1.27e-5` et AUC `3.77e-8`. Une nouvelle fenêtre mécanique
+n'est donc pas l'issue. Il faut changer de bassin avec un recovery IPOPT full
+sur le RHO gelé, ou construire une vraie Phase I de faisabilité autorisant des
+ajustements Ding strictement bornés et audités.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier

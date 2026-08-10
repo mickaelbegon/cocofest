@@ -525,14 +525,21 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 8. [fait, run `31400668993`] `19--35` valide 140 RHO puis échoue au 141;
    capacité minimale `0.946`, arrêt fatigue non confirmé. C'est une nouvelle
    perte de bassin numérique.
-9. [CI préparée] Comparer sur 300 RHO `19--35` et la Phase I mécanique
-   proactive; utiliser les trajectoires pour localiser la seconde bifurcation.
-10. Construire ensuite un prédicteur déterministe et bon marché des projections
+9. [fait, run `31401580984`] La Phase I proactive échoue également au RHO 141,
+   avec une trajectoire quasi identique à `19--35`. Une seconde fenêtre
+   mécanique n'est pas une solution.
+10. Étendre le recovery IPOPT/Radau-5 du reduced vers le full : même RHO 141
+    gelé, mêmes bornes/targets, injection du primal certifié, reset natif puis
+    obligation d'un retry ACADOS réussi avant d'avancer.
+11. En alternative contrôlée, tester une Phase I de faisabilité qui peut
+    déplacer les états Ding dans une trust region stricte; auditer calcium,
+    force, capacités et PW avant toute acceptation.
+12. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-11. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+13. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
-12. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+14. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19

@@ -94,7 +94,10 @@ de Phase I cumulée. Bisecte maintenant la borne supérieure en testant d'abord
 la fenêtre minimale 19--35 sur 300 RHO. Le run `31400668993` montre depuis un
 arrêt numérique au RHO 141, sans fatigue confirmée. Le workflow long compare
 maintenant `19--35` à la Phase I proactive 300 RHO pour localiser la seconde
-bifurcation.
+bifurcation. Le run `31401580984` montre que le proactif échoue au même RHO
+141 avec la même trajectoire. N'ajoute pas une nouvelle fenêtre mécanique :
+étends plutôt le recovery IPOPT/Radau-5 au full sur le RHO gelé, puis exige un
+retry ACADOS certifié avant tout avancement.
 
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un

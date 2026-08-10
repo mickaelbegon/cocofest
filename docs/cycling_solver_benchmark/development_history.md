@@ -4712,3 +4712,15 @@ l'outcome `unconfirmed_endurance_stop` excluent une fatigue terminale. Le
 workflow long compare désormais cette fenêtre au témoin Phase I mécanique
 proactif sur la même machine; leurs trajectoires serviront à localiser la
 deuxième bifurcation avant de définir une deuxième fenêtre sélective.
+
+Le témoin du
+[run 31401580984](https://github.com/mickaelbegon/cocofest/actions/runs/31401580984)
+montre au contraire que la Phase I mécanique proactive échoue au même RHO 141.
+Ses 140 appels, dont 75 acceptés, coûtent `68.845 s` sans gain d'endurance. Les
+deux trajectoires à 140 RHO diffèrent au maximum de `0.00239 µs` sur les PW et
+de `1.52e-6` sur la mécanique; l'objectif diffère de `1.27e-5` et l'AUC de
+`3.77e-8`. La perte de convergence est donc commune au bassin atteint et ne se
+corrige plus en projetant uniquement `q/qdot`. La prochaine intégration doit
+étendre le recovery IPOPT/Radau-5, actuellement limité à la mécanique reduced,
+au problème full, en gelant exactement angle terminal, fatigue et bornes du RHO
+141 puis en exigeant une nouvelle certification ACADOS avant d'avancer.
