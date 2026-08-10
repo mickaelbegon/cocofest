@@ -909,6 +909,7 @@ def test_acados_ipopt_recovery_cli_is_opt_in():
     assert args.acados_ipopt_recovery_max_iterations == 800
     assert args.acados_ipopt_recovery_collocation_degree == 5
     assert args.acados_ipopt_recovery_force_first_rho is True
+    assert args.acados_ipopt_fallback_advance is False
     assert args.acados_initial_irk_rollout is True
     assert args.acados_failed_rho_phase_one_recovery is False
 
@@ -920,6 +921,13 @@ def test_acados_ipopt_recovery_cli_is_opt_in():
     )
     assert lazy_args.acados_failed_rho_phase_one_recovery is True
     assert comparison_lazy_args.acados_failed_rho_phase_one_recovery is True
+
+    fallback_args = parser.parse_args(["--acados-ipopt-fallback-advance"])
+    comparison_fallback_args = comparison_example.build_cli().parse_args(
+        ["--acados-ipopt-fallback-advance"]
+    )
+    assert fallback_args.acados_ipopt_fallback_advance is True
+    assert comparison_fallback_args.acados_ipopt_fallback_advance is True
 
 
 def test_prepared_rho_checkpoint_cli_parses_ordered_milestones():
@@ -5982,6 +5990,76 @@ def test_same_rho_retries_are_excluded_from_physical_solution_traces():
     assert accounting["attempts"][0]["feasibility"] == {
         "passes_tolerance": False
     }
+
+
+def test_ipopt_fallback_replaces_failed_acados_trace_without_hiding_attempt():
+    merged = SimpleNamespace(status=None)
+    fallback = SimpleNamespace(
+        status=0,
+        _cocofest_advanced_physical_rho=True,
+        _cocofest_hybrid_certifier="ipopt_radau",
+    )
+    failed_acados = SimpleNamespace(
+        status=2,
+        iterations=100,
+        solver_time_to_optimize=4.0,
+        real_time_to_optimize=4.1,
+        _cocofest_feasibility_summary={"passes_tolerance": True},
+        _cocofest_attempt_index=1,
+        _cocofest_target_rho=1,
+        _cocofest_advanced_physical_rho=False,
+        _cocofest_fallback_solution=fallback,
+    )
+
+    filtered, accounting = periodic_example.certified_physical_receding_solution(
+        (merged, [failed_acados], [])
+    )
+
+    assert filtered[1] == [fallback]
+    assert filtered[2] == [fallback]
+    assert accounting["certified_physical_rho_count"] == 1
+    assert accounting["attempts"][0]["status"] == 2
+    assert accounting["attempts"][0]["advanced"] is True
+    assert accounting["attempts"][0]["certifier"] == "ipopt_radau"
+
+
+def test_ipopt_fallback_adapter_uses_acados_shooting_grid():
+    target_nlp = SimpleNamespace(
+        x_init={
+            "theta": SimpleNamespace(init=np.zeros((1, 31))),
+            "omega": SimpleNamespace(init=np.zeros((1, 31))),
+        },
+        u_init={
+            "last_pulse_width_Biceps": SimpleNamespace(init=np.zeros((1, 30)))
+        },
+        model=SimpleNamespace(muscles_dynamics_model=[]),
+    )
+    target = SimpleNamespace(nlp=[target_nlp])
+    radau = periodic_example._WarmupSolutionAdapter(
+        states={
+            "theta": np.linspace(0.0, -2.0 * np.pi, 151)[None, :],
+            "omega": -2.0 * np.pi * np.ones((1, 151)),
+        },
+        controls={"last_pulse_width_Biceps": 2.0e-4 * np.ones((1, 30))},
+    )
+    radau.status = 0
+    radau.iterations = 12
+    radau.solver_time_to_optimize = 1.5
+    radau.real_time_to_optimize = 1.6
+    radau.cost = np.array([[3.0]])
+    radau.parameters = {}
+
+    adapted = periodic_example.certified_ipopt_fallback_adapter(
+        target, radau, {"passes_tolerance": True}
+    )
+
+    assert adapted.decision_states()["theta"].shape == (1, 31)
+    assert adapted.decision_states()["omega"].shape == (1, 31)
+    assert adapted.decision_controls()["last_pulse_width_Biceps"].shape == (1, 30)
+    assert adapted.status == 0
+    assert adapted.iterations == 12
+    assert adapted._cocofest_hybrid_certifier == "ipopt_radau"
+    assert adapted._cocofest_feasibility_summary["passes_tolerance"] is True
 
 
 def test_recovery_seed_always_receives_one_final_acados_certification_attempt():

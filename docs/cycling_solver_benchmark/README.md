@@ -1224,6 +1224,17 @@ le shift depuis cette solution, puis rendre le RHO suivant à ACADOS. Cette
 variante doit rester distincte du benchmark ACADOS pur et journaliser chaque
 RHO résolu par le fallback.
 
+Le mode expérimental correspondant est
+`cycles=acados_reduced_fallback`, avec le flag
+`--acados-ipopt-fallback-advance`. Il n'autorise le fallback qu'après le
+dernier échec ACADOS permis, et seulement si IPOPT termine avec `status=0` et
+passe l'audit de faisabilité indépendant. Les états Radau internes sont
+rééchantillonnés sur les 31 shooting nodes ACADOS avant le shift; ils ne sont
+donc pas surpondérés dans les AUC de fatigue. Le résultat conserve le statut de
+l'appel ACADOS échoué et ajoute `certifier=ipopt_radau` ainsi que
+`fallback_advanced_count`. Ce chemin reste expérimental jusqu'à la campagne
+300 RHO avec seed épinglé.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier

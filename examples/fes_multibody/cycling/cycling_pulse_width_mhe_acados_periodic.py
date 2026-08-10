@@ -2280,7 +2280,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "uncertified after its local retry, solve the identical frozen "
             "window with "
             "IPOPT/Radau-5 and use only a certified IPOPT primal as the seed "
-            "of one final ACADOS retry. The RHO is never advanced by IPOPT."
+            "of one final ACADOS retry. By default the RHO is never advanced "
+            "by IPOPT; the separate hybrid fallback option can change that "
+            "contract explicitly."
         ),
     )
     parser.add_argument(
@@ -2305,6 +2307,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "Test-only deterministic recovery gate: after the first ACADOS "
             "result, force the same-RHO IPOPT recovery path and require a "
             "subsequent ACADOS retry. It must not be used for performance runs."
+        ),
+    )
+    parser.add_argument(
+        "--acados-ipopt-fallback-advance",
+        action="store_true",
+        help=(
+            "Hybrid reduced-RHO mode: after the final authorized ACADOS "
+            "failure, allow a converged and independently feasible IPOPT/"
+            "Radau recovery to certify that frozen RHO, shift from its "
+            "shooting-node trajectory, and return the next RHO to ACADOS. "
+            "Each fallback is reported separately from pure ACADOS solves."
         ),
     )
     parser.add_argument(
@@ -4730,6 +4743,7 @@ def certified_physical_receding_solution(sol) -> tuple[tuple, dict[str, object]]
     )
     annotated = any(
         hasattr(solution, "_cocofest_advanced_physical_rho")
+        or hasattr(solution, "_cocofest_fallback_solution")
         for solution in source_window_solutions
     )
     if not annotated:
@@ -4739,11 +4753,13 @@ def certified_physical_receding_solution(sol) -> tuple[tuple, dict[str, object]]
             "certified_physical_rho_count": len(source_window_solutions),
         }
 
-    certified_solutions = [
-        solution
-        for solution in source_window_solutions
-        if getattr(solution, "_cocofest_advanced_physical_rho", False)
-    ]
+    certified_solutions = []
+    for solution in source_window_solutions:
+        fallback_solution = getattr(solution, "_cocofest_fallback_solution", None)
+        if fallback_solution is not None:
+            certified_solutions.append(fallback_solution)
+        elif getattr(solution, "_cocofest_advanced_physical_rho", False):
+            certified_solutions.append(solution)
     attempts = [
         {
             "attempt": int(getattr(solution, "_cocofest_attempt_index", index)),
@@ -4769,6 +4785,12 @@ def certified_physical_receding_solution(sol) -> tuple[tuple, dict[str, object]]
             ),
             "advanced": bool(
                 getattr(solution, "_cocofest_advanced_physical_rho", False)
+                or getattr(solution, "_cocofest_fallback_solution", None) is not None
+            ),
+            "certifier": (
+                "ipopt_radau"
+                if getattr(solution, "_cocofest_fallback_solution", None) is not None
+                else "target_solver"
             ),
         }
         for index, solution in enumerate(source_window_solutions, start=1)
@@ -12392,6 +12414,35 @@ class _WarmupSolutionAdapter:
         return self._controls
 
 
+def certified_ipopt_fallback_adapter(
+    periodic_nmpc,
+    solution,
+    feasibility: dict[str, object],
+) -> _WarmupSolutionAdapter:
+    """Represent a certified Radau solution on the ACADOS shooting grid.
+
+    IPOPT/Radau contains internal collocation states.  Keeping those denser
+    nodes in an otherwise IRK/ACADOS RHO trace would overweight the fallback
+    cycle in fatigue integrals and would make the next cyclic shift
+    inconsistent.  This adapter retains only the target shooting grid while
+    preserving the IPOPT certification and timing metadata.
+    """
+
+    adapted = _adapt_warmup_solution_to_periodic_nodes(periodic_nmpc, solution)
+    adapted.status = 0
+    adapted.iterations = getattr(solution, "iterations", None)
+    adapted.solver_time_to_optimize = getattr(
+        solution, "solver_time_to_optimize", None
+    )
+    adapted.real_time_to_optimize = getattr(solution, "real_time_to_optimize", None)
+    adapted.cost = getattr(solution, "cost", None)
+    adapted.parameters = getattr(solution, "parameters", {})
+    adapted._cocofest_feasibility_summary = dict(feasibility)
+    adapted._cocofest_hybrid_certifier = "ipopt_radau"
+    adapted._cocofest_advanced_physical_rho = True
+    return adapted
+
+
 def _resample_warmup_data(
     values: np.ndarray, target_len: int, has_terminal_node: bool
 ) -> np.ndarray:
@@ -13680,7 +13731,9 @@ def run_periodic_ipopt_recovery(
     therefore an auditable primal-restoration step, not an alternative RHO
     transfer path. A status-zero solution or an iteration-limited primal with
     measured feasibility may be copied back; the requested solver still has
-    to certify its subsequent retry before the physical RHO can advance.
+    to certify its subsequent retry before the physical RHO can advance in
+    strict mode. The opt-in hybrid mode may instead certify the last allowed
+    failure with this converged IPOPT solution.
     """
 
     summary: dict[str, object] = {
@@ -14707,6 +14760,23 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             "--acados-ipopt-recovery-force-first-rho requires "
             "--acados-ipopt-recovery."
         )
+    if args.acados_ipopt_fallback_advance:
+        if not args.acados_ipopt_recovery:
+            raise ValueError(
+                "--acados-ipopt-fallback-advance requires "
+                "--acados-ipopt-recovery."
+            )
+        if args.mechanical_formulation != "reduced":
+            raise ValueError(
+                "--acados-ipopt-fallback-advance is initially restricted to "
+                "the reduced formulation, whose physical theta/omega trace "
+                "can be audited directly."
+            )
+        if args.acados_ipopt_recovery_force_first_rho:
+            raise ValueError(
+                "--acados-ipopt-fallback-advance cannot be combined with the "
+                "artificial first-RHO recovery gate."
+            )
     if getattr(args, "nlp_ipopt_recovery", False):
         if args.solver not in {"madnlp", "fatrop"}:
             raise ValueError(
@@ -17048,6 +17118,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         """
 
         nonlocal completed_physical_rhos
+        nonlocal rho_replay_checkpoint_summary
         target_rho = completed_physical_rhos + 1
         solution._cocofest_attempt_index = int(self.total_optimization_run) + 1
         solution._cocofest_target_rho = target_rho
@@ -17175,6 +17246,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 ipopt_recovery_nmpc is not None
                 and recovery_attempt < args.max_consecutive_failing
             )
+            fallback_adapter = None
             if can_attempt_recovery:
                 recovery_attempt += 1
                 recovery_attempts_by_target_rho[target_rho] = recovery_attempt
@@ -17207,7 +17279,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                         corrected_input="controls"
                     )
                     recovery_seed_source = "certified_target_solution"
-                _, recovery_summary = run_periodic_ipopt_recovery(
+                recovery_solution, recovery_summary = run_periodic_ipopt_recovery(
                     ipopt_recovery_nmpc,
                     self,
                     max_iterations=ipopt_recovery_max_iterations,
@@ -17249,12 +17321,88 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                         ]
                     self._cocofest_recovery_seed_pending = True
                 ipopt_recovery_summaries.append(recovery_summary)
+                fallback_eligible = bool(
+                    args.acados_ipopt_fallback_advance
+                    and recovery_attempt >= args.max_consecutive_failing
+                    and recovery_solution is not None
+                    and recovery_summary.get("quality") == "converged"
+                    and _rho_solution_is_certified(
+                        recovery_solution.status,
+                        recovery_summary.get("feasibility"),
+                    )
+                )
+                if fallback_eligible:
+                    fallback_adapter = certified_ipopt_fallback_adapter(
+                        self,
+                        recovery_solution,
+                        recovery_summary["feasibility"],
+                    )
+                    fallback_adapter._cocofest_attempt_index = int(
+                        self.total_optimization_run
+                    ) + 1
+                    fallback_adapter._cocofest_target_rho = target_rho
+                    solution._cocofest_fallback_solution = fallback_adapter
+                    recovery_summary["fallback_advanced"] = True
+                    recovery_summary["fallback_certifier"] = "ipopt_radau"
+                else:
+                    recovery_summary["fallback_advanced"] = False
                 if echo:
                     print(
                         f"{args.solver}_ipopt_recovery_seed: "
                         f"attempt_window={recovery_summary['attempt_window']} "
                         f"injected={recovery_summary['seed_injected']}"
                     )
+            if fallback_adapter is not None:
+                # This is an explicitly hybrid RHO, not an ACADOS success.
+                # Shift only from the independently certified Radau primal on
+                # the ACADOS shooting grid, then let ACADOS solve the next
+                # physical RHO.  The failed ACADOS attempt remains in raw
+                # accounting and points to this replacement trajectory.
+                self._cocofest_retry_same_rho_pending = False
+                self._cocofest_recovery_seed_pending = False
+                original_before_window_advance = self.before_window_advance
+                self.before_window_advance = None
+                try:
+                    advance_result = original_advance_window(
+                        fallback_adapter, *advance_args, **advance_kwargs
+                    )
+                finally:
+                    self.before_window_advance = original_before_window_advance
+                completed_physical_rhos += 1
+                retry_same_rho_summaries.append(
+                    {
+                        "attempt_window": int(self.total_optimization_run) + 1,
+                        "native_status": _native_solver_status(self),
+                        "status": int(solution.status),
+                        "primal_feasible": bool(
+                            recovery_summary["feasibility"].get("passes_tolerance")
+                        ),
+                        "forced_for_ci": forced_recovery,
+                        "target_rho": target_rho,
+                        "recovery_seed_pending": False,
+                        "advanced": True,
+                        "certifier": "ipopt_radau",
+                    }
+                )
+                if rho_replay_checkpoint_output is not None:
+                    _save_rho_replay_checkpoint(
+                        rho_replay_checkpoint_output,
+                        self,
+                        args,
+                        completed_windows=int(self.total_optimization_run),
+                    )
+                    rho_replay_checkpoint_summary = {
+                        "available": True,
+                        "path": str(rho_replay_checkpoint_output),
+                        "completed_windows": int(self.total_optimization_run),
+                    }
+                if echo:
+                    print(
+                        "rho_advanced_by_ipopt_fallback: "
+                        f"attempt_window={self.total_optimization_run + 1} "
+                        f"target_rho={target_rho}"
+                    )
+                return advance_result
             retry_same_rho_summaries.append(
                 {
                     "attempt_window": int(self.total_optimization_run) + 1,
@@ -17292,7 +17440,6 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             self.before_window_advance = original_before_window_advance
         solution._cocofest_advanced_physical_rho = True
         completed_physical_rhos += 1
-        nonlocal rho_replay_checkpoint_summary
         if rho_replay_checkpoint_output is not None:
             _save_rho_replay_checkpoint(
                 rho_replay_checkpoint_output,
@@ -17358,6 +17505,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     f"continue={continue_solving}"
                 )
             return continue_solving
+        if _sol is not None:
+            fallback_solution = getattr(
+                _sol, "_cocofest_fallback_solution", None
+            )
+            if fallback_solution is not None:
+                _sol = fallback_solution
+                consecutive_physical_failures = 0
         contact_projection = getattr(_nmpc, "last_transfer_contact_projection", None)
         if contact_projection is not None:
             contact_projection = {"window": cycle_idx, **contact_projection}
@@ -18702,6 +18856,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     bool(item.get("seed_injected"))
                     for item in ipopt_recovery_summaries
                 ),
+                "fallback_advance_enabled": bool(
+                    args.acados_ipopt_fallback_advance
+                ),
+                "fallback_advanced_count": sum(
+                    bool(item.get("fallback_advanced"))
+                    for item in ipopt_recovery_summaries
+                ),
             }
         elif getattr(args, "nlp_ipopt_recovery", False):
             summary["nlp_ipopt_recovery"] = {
@@ -18786,6 +18947,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     bool(item.get("seed_injected"))
                     for item in ipopt_recovery_summaries
                 ),
+                "fallback_advance_enabled": bool(
+                    args.acados_ipopt_fallback_advance
+                ),
+                "fallback_advanced_count": sum(
+                    bool(item.get("fallback_advanced"))
+                    for item in ipopt_recovery_summaries
+                ),
             }
         elif getattr(args, "nlp_ipopt_recovery", False):
             summary["nlp_ipopt_recovery"] = {
@@ -18866,6 +19034,11 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             "attempt_count": len(ipopt_recovery_summaries),
             "injected_count": sum(
                 bool(item.get("seed_injected"))
+                for item in ipopt_recovery_summaries
+            ),
+            "fallback_advance_enabled": bool(args.acados_ipopt_fallback_advance),
+            "fallback_advanced_count": sum(
+                bool(item.get("fallback_advanced"))
                 for item in ipopt_recovery_summaries
             ),
         }

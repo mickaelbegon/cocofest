@@ -10,7 +10,7 @@ on:
         default: ubuntu-24.04
         type: string
       cycles:
-        description: Number of RHO solves, or "screen", "acados", "acados_guard", "acados_recovery", "acados_lazy_recovery", "acados_homotopy", "acados_reduced_100", "acados_hybrid", "acados_reduced_recovery", "radau5_100", "radau35_comparison", "fatigue_endurance", "fatigue_endurance_radau5", or "full_horizon"
+        description: Number of RHO solves, or "screen", "acados", "acados_guard", "acados_recovery", "acados_lazy_recovery", "acados_homotopy", "acados_reduced_100", "acados_hybrid", "acados_reduced_recovery", "acados_reduced_fallback", "radau5_100", "radau35_comparison", "fatigue_endurance", "fatigue_endurance_radau5", or "full_horizon"
         required: true
         default: "100"
         type: string
@@ -424,7 +424,7 @@ jobs:
 
   acados-ipopt-hybrid:
     name: ACADOS full/reduced — IPOPT/Radau-5 recovery wiring
-    if: ${{ inputs.cycles == 'acados_hybrid' || inputs.cycles == 'acados_reduced_recovery' }}
+    if: ${{ inputs.cycles == 'acados_hybrid' || inputs.cycles == 'acados_reduced_recovery' || inputs.cycles == 'acados_reduced_fallback' }}
     needs: [prepare-seed, prepare-acados-stack]
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: 240
@@ -497,6 +497,8 @@ jobs:
             tests/shard1/test_periodic_pulse_width.py::test_ipopt_inf_pr_is_restored_from_native_solver_stats \
             tests/shard1/test_periodic_pulse_width.py::test_acados_hybrid_recovery_diagnostics_survive_benchmark_serialization \
             tests/shard1/test_periodic_pulse_width.py::test_same_rho_retries_are_excluded_from_physical_solution_traces \
+            tests/shard1/test_periodic_pulse_width.py::test_ipopt_fallback_replaces_failed_acados_trace_without_hiding_attempt \
+            tests/shard1/test_periodic_pulse_width.py::test_ipopt_fallback_adapter_uses_acados_shooting_grid \
             tests/shard1/test_periodic_pulse_width.py::test_recovery_seed_always_receives_one_final_acados_certification_attempt
 
       - name: Download the validated full/reduced seeds
@@ -533,13 +535,16 @@ jobs:
             > acados-ipopt-hybrid-results/seed-source-run-id.txt
           reduced_rhos="${{ inputs.acados_option_rhos }}"
           reduced_recovery_options=(--acados-ipopt-recovery-force-first-rho)
-          if [[ "${{ inputs.cycles }}" == "acados_reduced_recovery" ]]; then
+          if [[ "${{ inputs.cycles }}" == "acados_reduced_recovery" || "${{ inputs.cycles }}" == "acados_reduced_fallback" ]]; then
             reduced_rhos="${{ inputs.acados_smoke_rhos }}"
             reduced_recovery_options=(
               --receding-horizon-solution-output
               acados-ipopt-hybrid-results/reduced-validated-prefix.npz
               --allow-partial-receding-horizon-solution-output
             )
+          fi
+          if [[ "${{ inputs.cycles }}" == "acados_reduced_fallback" ]]; then
+            reduced_recovery_options+=(--acados-ipopt-fallback-advance)
           fi
           python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
             --solvers acados \
@@ -608,6 +613,23 @@ jobs:
               exit 1
             fi
             ls -lh "$reduced_prefix"
+          elif [[ "${{ inputs.cycles }}" == "acados_reduced_fallback" ]]; then
+            jq -e --argjson requested "$reduced_rhos" '
+              .configurations.acados.acados_ipopt_recovery == true and
+              .configurations.acados.acados_ipopt_fallback_advance == true and
+              .configurations.acados.mechanical_formulation == "reduced" and
+              .results[0].success == true and
+              .results[0].validated_cycles == $requested and
+              .results[0].mechanical_equivalence_audit.passes_tolerance == true and
+              .results[0].acados_ipopt_recovery.fallback_advance_enabled == true and
+              .results[0].acados_ipopt_recovery.fallback_advanced_count >= 1 and
+              any(.results[0].acados_ipopt_recovery_summaries[];
+                  .fallback_advanced == true and
+                  .fallback_certifier == "ipopt_radau" and
+                  .quality == "converged" and
+                  .feasibility.passes_tolerance == true)
+            ' acados-ipopt-hybrid-results/result.json
+            test -s acados-ipopt-hybrid-results/reduced-validated-prefix.npz
           else
           jq -e '
             .configurations.acados.acados_ipopt_recovery == true and
@@ -883,7 +905,7 @@ jobs:
 
   acados-smoke:
     name: ACADOS — sequential full/reduced and option screen
-    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'full_horizon' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'acados_reduced_recovery' && inputs.cycles_per_window == '1' }}
+    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'full_horizon' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'acados_reduced_recovery' && inputs.cycles != 'acados_reduced_fallback' && inputs.cycles_per_window == '1' }}
     needs: [prepare-seed, prepare-acados-stack]
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: 240
@@ -2115,7 +2137,7 @@ jobs:
 
   benchmark:
     name: ${{ matrix.case_slug }} — sequential full/reduced
-    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_lazy_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'acados_reduced_recovery' && inputs.cycles != 'full_horizon' }}
+    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_lazy_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'acados_reduced_recovery' && inputs.cycles != 'acados_reduced_fallback' && inputs.cycles != 'full_horizon' }}
     needs: prepare-seed
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
@@ -3012,7 +3034,7 @@ jobs:
 
   report:
     name: Aggregate Kevin benchmark
-    if: ${{ always() && inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_lazy_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'acados_reduced_recovery' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'full_horizon' }}
+    if: ${{ always() && inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_lazy_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'acados_reduced_recovery' && inputs.cycles != 'acados_reduced_fallback' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'full_horizon' }}
     needs: [benchmark, acados-smoke]
     runs-on: ubuntu-24.04
     permissions:

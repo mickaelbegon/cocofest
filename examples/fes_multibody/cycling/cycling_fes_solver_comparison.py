@@ -143,6 +143,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "acados_ipopt_recovery_max_iterations",
     "acados_ipopt_recovery_collocation_degree",
     "acados_ipopt_recovery_force_first_rho",
+    "acados_ipopt_fallback_advance",
     "nlp_ipopt_recovery",
     "nlp_ipopt_recovery_max_iterations",
     "nlp_ipopt_recovery_collocation_degree",
@@ -3403,6 +3404,7 @@ def main(
     acados_ipopt_recovery_max_iterations: int = 2000,
     acados_ipopt_recovery_collocation_degree: int = 5,
     acados_ipopt_recovery_force_first_rho: bool = False,
+    acados_ipopt_fallback_advance: bool = False,
     nlp_ipopt_recovery: bool = False,
     nlp_ipopt_recovery_max_iterations: int = 2000,
     nlp_ipopt_recovery_collocation_degree: int = 5,
@@ -3936,6 +3938,7 @@ def main(
     acados_args.acados_ipopt_recovery_force_first_rho = (
         acados_ipopt_recovery_force_first_rho
     )
+    acados_args.acados_ipopt_fallback_advance = acados_ipopt_fallback_advance
     acados_args.acados_failed_rho_phase_one_recovery = (
         acados_failed_rho_phase_one_recovery
     )
@@ -5472,6 +5475,15 @@ def build_cli() -> argparse.ArgumentParser:
     )
     parser.add_argument("--acados-ipopt-recovery-force-first-rho", action="store_true")
     parser.add_argument(
+        "--acados-ipopt-fallback-advance",
+        action="store_true",
+        help=(
+            "After the final allowed reduced ACADOS failure, let a converged "
+            "and feasible IPOPT/Radau recovery certify that RHO and resume "
+            "ACADOS on the next one."
+        ),
+    )
+    parser.add_argument(
         "--acados-failed-rho-phase-one-recovery",
         action="store_true",
         help=(
@@ -5935,6 +5947,7 @@ if __name__ == "__main__":
         acados_ipopt_recovery_force_first_rho=(
             args.acados_ipopt_recovery_force_first_rho
         ),
+        acados_ipopt_fallback_advance=args.acados_ipopt_fallback_advance,
         acados_failed_rho_phase_one_recovery=(
             args.acados_failed_rho_phase_one_recovery
         ),

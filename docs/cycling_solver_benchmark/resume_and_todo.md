@@ -573,11 +573,14 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     mais ACADOS ne recertifie pas le RHO 234 après deux injections. L'audit
     mécanique passe et la capacité biceps vaut encore `0.8969`; l'arrêt reste
     `unconfirmed_endurance_stop`.
-16. Implémenter et tester un fallback hybride explicitement étiqueté : si
+16. [implémenté, CI 300 RHO à lancer] Tester le fallback hybride explicitement
+    étiqueté : si
     IPOPT/Radau-5 converge et passe tous les audits du RHO gelé après un échec
     ACADOS, avancer exceptionnellement depuis sa solution adaptée puis rendre
     le RHO suivant à ACADOS. Conserver en parallèle le mode strict qui exige
-    une recertification ACADOS.
+    une recertification ACADOS. Le mode `acados_reduced_fallback` exige
+    `status=0`, rééchantillonne Radau sur les shooting nodes ACADOS et compte
+    séparément les RHO certifiés par IPOPT.
 17. Versionner le seed commun retenu avec son SHA et sa provenance; l'input
     inter-run actuel expire avec l'artefact et ne suffit pas à la
     reproductibilité du benchmark.
