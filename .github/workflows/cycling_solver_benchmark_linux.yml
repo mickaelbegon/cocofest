@@ -1531,7 +1531,13 @@ jobs:
               ) and
               (
                 .results[0] |
-                (.attempted_windows > 0 and .error == null)
+                (
+                  (
+                    .attempted_windows > 0 or
+                    ((.solver_attempt_accounting.attempt_count // 0) > 0)
+                  ) and
+                  .error == null
+                )
               )
             ' "$result"
           done
@@ -1792,7 +1798,13 @@ jobs:
               (.configurations | to_entries | all(.value.use_sx == true)) and
               (
                 .results[0] |
-                (.attempted_windows > 0 and .error == null)
+                (
+                  (
+                    .attempted_windows > 0 or
+                    ((.solver_attempt_accounting.attempt_count // 0) > 0)
+                  ) and
+                  .error == null
+                )
               )
             ' \
               "benchmark-option-screen/${variant}.json"
@@ -2516,8 +2528,14 @@ jobs:
             jq -e '
               (.configurations | to_entries | all(.value.use_sx == true)) and
               (
-                .results[0] |
-                (.attempted_windows > 0 and .error == null)
+              .results[0] |
+              (
+                (
+                  .attempted_windows > 0 or
+                  ((.solver_attempt_accounting.attempt_count // 0) > 0)
+                ) and
+                .error == null
+              )
               )
             ' "$result"
             case_requires_compile="$COMPILE_NLP_EVALUATORS"

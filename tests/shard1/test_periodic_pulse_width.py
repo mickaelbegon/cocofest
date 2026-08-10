@@ -6418,6 +6418,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "sqp-irk-fast-guard-2p6-phase-one-all" in workflow
     assert "sqp-byrd-fast-guard-2p6" in workflow
     assert "--allow-partial-receding-horizon-solution-output" in workflow
+    assert workflow.count(".solver_attempt_accounting.attempt_count // 0") >= 3
     assert "solver_options+=(--validate-integrator-maps)" in workflow
     assert '--arg recovery_only "$ACADOS_RECOVERY_ONLY"' in workflow
     assert "ipopt-radau5-reduced" in workflow
