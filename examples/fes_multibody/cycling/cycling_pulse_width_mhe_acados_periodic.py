@@ -18890,6 +18890,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         args.transfer_contact_manifold_projection_mode == "position_velocity"
     )
     nmpc.last_transfer_contact_projection = None
+    rho_solve_loop_start = perf_counter()
     try:
         sol = nmpc.solve_fes_nmpc(
             update_functions,
@@ -18912,6 +18913,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             compact_solution_output=args.compact_rho_output,
         )
     except RuntimeError as exc:
+        rho_solve_loop_wall_time_s = perf_counter() - rho_solve_loop_start
         if "did not produce a valid solution" not in str(exc):
             raise
         if echo:
@@ -18979,11 +18981,28 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             )
         summary["rho_replay_checkpoint"] = rho_replay_checkpoint_summary
         summary["rho_prepared_checkpoints"] = rho_prepared_checkpoint_summaries
+        summary["execution_timing"] = {
+            "rho_solve_loop_wall_time_s": rho_solve_loop_wall_time_s,
+            "post_solve_wall_time_s": 0.0,
+            "certified_trace_filter_wall_time_s": 0.0,
+            "summary_build_wall_time_s": 0.0,
+            "exact_initial_audits_wall_time_s": 0.0,
+            "mechanical_audit_wall_time_s": 0.0,
+            "high_accuracy_trace_rollout_wall_time_s": 0.0,
+            "solution_export_wall_time_s": 0.0,
+        }
         attach_exact_initial_nlp_audits(summary, nmpc)
         return summary
+    rho_solve_loop_wall_time_s = perf_counter() - rho_solve_loop_start
+    post_solve_start = perf_counter()
+    certified_trace_filter_wall_time_s = 0.0
     raw_solver_attempt_summary = None
     if args.retry_failed_rho_without_advance:
+        certified_trace_filter_start = perf_counter()
         sol, raw_solver_attempt_summary = certified_physical_receding_solution(sol)
+        certified_trace_filter_wall_time_s = (
+            perf_counter() - certified_trace_filter_start
+        )
     if (
         common_initial_solution_output is not None
         and not common_initial_solution_output.exists()
@@ -19007,6 +19026,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         if args.solver == "acados" and args.acados_diagnostics:
             if not acados_window_diagnostics:
                 print_acados_diagnostics("merged", collect_acados_diagnostics(sol[0]))
+    summary_build_start = perf_counter()
     summary = build_window_summary(
         sol,
         requested_windows=args.n_windows,
@@ -19016,6 +19036,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         absolute_cycle_reference=absolute_wheel_q_reference,
         absolute_cycle_tolerance=wheel_absolute_cycle_tolerance,
     )
+    summary_build_wall_time_s = perf_counter() - summary_build_start
     if raw_solver_attempt_summary is not None:
         summary["solver_attempt_accounting"] = raw_solver_attempt_summary
     if args.solver == "acados" and args.acados_diagnostics:
@@ -19163,10 +19184,17 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     summary["absolute_wheel_q_origin_reference"] = absolute_wheel_q_origin_reference
     summary["absolute_wheel_q_start_cycle_index"] = absolute_wheel_q_start_cycle_index
     summary["native_solver_status"] = _native_solver_status(nmpc)
+    exact_initial_audits_start = perf_counter()
     attach_exact_initial_nlp_audits(summary, nmpc)
+    exact_initial_audits_wall_time_s = perf_counter() - exact_initial_audits_start
+    mechanical_audit_wall_time_s = 0.0
     if build_mechanical_audit_profile:
+        mechanical_audit_start = perf_counter()
         attach_mechanical_equivalence_audit(summary, reduced_cycling_dynamics)
+        mechanical_audit_wall_time_s = perf_counter() - mechanical_audit_start
+    high_accuracy_trace_rollout_wall_time_s = 0.0
     if args.validate_integrator_maps:
+        high_accuracy_trace_rollout_start = perf_counter()
         covered_cycles = int(summary.get("covered_cycles") or 0)
         if covered_cycles > 0:
             summary["high_accuracy_trace_rollout"] = (
@@ -19184,13 +19212,31 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 "reason": "no_strictly_validated_cycle",
                 "cycle_count": 0,
             }
+        high_accuracy_trace_rollout_wall_time_s = (
+            perf_counter() - high_accuracy_trace_rollout_start
+        )
+    solution_export_wall_time_s = 0.0
     if args.receding_horizon_solution_output is not None:
+        solution_export_start = perf_counter()
         rho_output_path = (
             Path(args.receding_horizon_solution_output).expanduser().resolve()
         )
         _try_save_receding_horizon_solution(
             rho_output_path, summary, args, echo=echo
         )
+        solution_export_wall_time_s = perf_counter() - solution_export_start
+    summary["execution_timing"] = {
+        "rho_solve_loop_wall_time_s": rho_solve_loop_wall_time_s,
+        "post_solve_wall_time_s": perf_counter() - post_solve_start,
+        "certified_trace_filter_wall_time_s": certified_trace_filter_wall_time_s,
+        "summary_build_wall_time_s": summary_build_wall_time_s,
+        "exact_initial_audits_wall_time_s": exact_initial_audits_wall_time_s,
+        "mechanical_audit_wall_time_s": mechanical_audit_wall_time_s,
+        "high_accuracy_trace_rollout_wall_time_s": (
+            high_accuracy_trace_rollout_wall_time_s
+        ),
+        "solution_export_wall_time_s": solution_export_wall_time_s,
+    }
     return summary
 
 

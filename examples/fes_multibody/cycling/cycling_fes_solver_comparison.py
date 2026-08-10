@@ -2945,6 +2945,7 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 ),
                 "feasibility_restoration": restoration_timing,
                 "unattributed_wall_time_s": unattributed_wall_time,
+                "execution_timing": result.get("execution_timing"),
                 "validated_solver_time_s": performance["successful_solver_time_s"],
                 "validated_wall_time_s": performance["successful_wall_time_s"],
                 "solver_time_per_cycle_s": performance["solver_time_per_cycle_s"],
