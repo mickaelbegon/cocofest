@@ -4724,3 +4724,12 @@ corrige plus en projetant uniquement `q/qdot`. La prochaine intégration doit
 étendre le recovery IPOPT/Radau-5, actuellement limité à la mécanique reduced,
 au problème full, en gelant exactement angle terminal, fatigue et bornes du RHO
 141 puis en exigeant une nouvelle certification ACADOS avant d'avancer.
+
+L'extension full conserve ce contrat. Le constructeur Radau réutilise le même
+modèle biomécanique, les mêmes options de force passive/contact, les mêmes
+objectifs et les bornes mobiles du RHO courant. Un nouvel audit structurel
+interdit toute injection si les clés, dimensions physiques ou bornes de l'OCP
+IPOPT diffèrent de celles de l'OCP ACADOS. Les diagnostics de recovery exportent
+maintenant `mechanical_formulation` et cet audit. Le gate `acados_hybrid`
+exécute reduced puis full sur la même machine et force un recovery au premier
+RHO; le test naturel au RHO 141 ne sera lancé qu'après ce smoke.

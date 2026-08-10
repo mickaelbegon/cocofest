@@ -418,7 +418,7 @@ jobs:
           key: numerical-stack-${{ env.NUMERICAL_STACK_CACHE_VERSION }}-${{ inputs.runner_label }}-${{ runner.arch }}-madnlp-mumps-${{ env.CASADI_MADNLP_COMMIT }}-${{ env.LIBMAD_COMMIT }}-${{ hashFiles('.github/cycling-benchmark-linux-environment.yml', '.github/scripts/install_biorbd_casadi_linux.sh', '.github/scripts/install_casadi_madnlp_linux.sh') }}
 
   acados-ipopt-hybrid:
-    name: ACADOS reduced — IPOPT/Radau-5 recovery wiring
+    name: ACADOS full/reduced — IPOPT/Radau-5 recovery wiring
     if: ${{ inputs.cycles == 'acados_hybrid' }}
     needs: [prepare-seed, prepare-acados-stack]
     runs-on: ${{ inputs.runner_label }}
@@ -494,13 +494,13 @@ jobs:
             tests/shard1/test_periodic_pulse_width.py::test_same_rho_retries_are_excluded_from_physical_solution_traces \
             tests/shard1/test_periodic_pulse_width.py::test_recovery_seed_always_receives_one_final_acados_certification_attempt
 
-      - name: Download the validated reduced seed
+      - name: Download the validated full/reduced seeds
         uses: actions/download-artifact@v8
         with:
           name: cycling-assisted-common-seed-${{ github.run_id }}
           path: benchmark-seed
 
-      - name: Run the reduced hybrid recovery gate
+      - name: Run the full/reduced hybrid recovery gates
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
@@ -563,8 +563,68 @@ jobs:
             .results[0].acados_ipopt_recovery.attempt_count >= 1 and
             .results[0].acados_ipopt_recovery.injected_count >= 1 and
             any(.results[0].acados_ipopt_recovery_summaries[];
-                .forced_for_ci == true and .seed_injected == true)
+                .forced_for_ci == true and
+                .mechanical_formulation == "reduced" and
+                .structure.compatible == true and
+                .seed_injected == true)
           ' acados-ipopt-hybrid-results/result.json
+
+          python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
+            --solvers acados \
+            --objective fatigue \
+            --ipopt-use-sx \
+            --cycles-per-window "${{ inputs.cycles_per_window }}" \
+            --stimulations-per-cycle 30 \
+            --n-windows "${{ inputs.acados_option_rhos }}" \
+            --n-threads "$BENCHMARK_THREADS" \
+            --crank-assistance "${{ inputs.crank_assistance_nm }}" \
+            --first-node-wheel-q-slack 0 \
+            --terminal-wheel-q-slack "${{ inputs.terminal_wheel_q_slack }}" \
+            --mechanical-formulation full \
+            --compact-rho-output \
+            --common-initial-solution benchmark-seed/common-full.npz \
+            --adopt-common-initial-solution-warmup-cycles \
+            --disable-acados-assisted-hot-start \
+            --acados-disable-standard-ipopt-warmup \
+            --periodic-ipopt-refinement-ode-solver collocation \
+            --periodic-ipopt-refinement-collocation-degree 5 \
+            --periodic-ipopt-refinement-collocation-method radau \
+            --periodic-ipopt-refinement-iterations "${{ inputs.solver_max_iterations }}" \
+            --warmup-ipopt-linear-solver mumps \
+            --retry-failed-rho-without-advance \
+            --max-consecutive-failing 2 \
+            --acados-integrator-type IRK \
+            --acados-sim-stages 4 \
+            --acados-sim-steps 5 \
+            --acados-wheel-qdot-fast-bound-margin 2.60 \
+            --acados-control-homotopy-release-final-radius \
+            --full-contact-position-tolerance 2e-5 \
+            --shared-transfer-contact-projection \
+            --shared-transfer-contact-projection-mode position_velocity \
+            --acados-max-iter 100 \
+            --acados-store-iterates \
+            --acados-maxiter-retries 1 \
+            --acados-maxiter-retry-iterations 20 \
+            --acados-ipopt-recovery \
+            --acados-ipopt-recovery-max-iterations "${{ inputs.solver_max_iterations }}" \
+            --acados-ipopt-recovery-collocation-degree 5 \
+            --acados-ipopt-recovery-force-first-rho \
+            --ipopt-linear-solver mumps \
+            --output-json acados-ipopt-hybrid-results/full-result.json
+          jq -e '
+            .configurations.acados.acados_ipopt_recovery == true and
+            .configurations.acados.mechanical_formulation == "full" and
+            .results[0].success == true and
+            .results[0].validated_cycles == 5 and
+            .results[0].acados_ipopt_recovery.attempt_count >= 1 and
+            .results[0].acados_ipopt_recovery.injected_count >= 1 and
+            any(.results[0].acados_ipopt_recovery_summaries[];
+                .forced_for_ci == true and
+                .mechanical_formulation == "full" and
+                .structure.compatible == true and
+                .seed_injected == true and
+                .target_solver_reset == true)
+          ' acados-ipopt-hybrid-results/full-result.json
 
       - name: Upload the hybrid gate logs and result
         if: always()

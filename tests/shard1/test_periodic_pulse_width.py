@@ -858,6 +858,39 @@ def test_acados_ipopt_recovery_compatibility_reports_pulse_width_in_us():
     assert summary["states"]["max_abs_error"] == pytest.approx(0.2)
 
 
+def test_acados_ipopt_recovery_requires_identical_full_physical_structure():
+    def entry(rows, columns=3):
+        return SimpleNamespace(
+            init=np.zeros((rows, columns)),
+            min=np.zeros((rows, 3)),
+            max=np.ones((rows, 3)),
+        )
+
+    def program(q_rows=3):
+        q = entry(q_rows)
+        qdot = entry(q_rows)
+        force = entry(1)
+        pulse_width = entry(1, columns=2)
+        nlp = SimpleNamespace(
+            x_init={"q": q, "qdot": qdot, "F_Biceps": force},
+            u_init={"last_pulse_width_Biceps": pulse_width},
+            x_bounds={"q": q, "qdot": qdot, "F_Biceps": force},
+            u_bounds={"last_pulse_width_Biceps": pulse_width},
+        )
+        return SimpleNamespace(nlp=[nlp])
+
+    summary = periodic_example.periodic_recovery_structure_summary(
+        program(), program()
+    )
+
+    assert summary["compatible"] is True
+    assert summary["state_keys"] == ["q", "qdot", "F_Biceps"]
+    with pytest.raises(ValueError, match="same physical structure"):
+        periodic_example.periodic_recovery_structure_summary(
+            program(), program(q_rows=2)
+        )
+
+
 def test_acados_ipopt_recovery_cli_is_opt_in():
     parser = periodic_example.build_argument_parser()
     args = parser.parse_args(
@@ -6456,6 +6489,10 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "ACADOS_RECOVERY_ONLY" in workflow
     assert "inputs.cycles == 'acados_lazy_recovery'" in workflow
     assert "ACADOS_LAZY_RECOVERY_ONLY" in workflow
+    assert "ACADOS full/reduced — IPOPT/Radau-5 recovery wiring" in workflow
+    assert "--common-initial-solution benchmark-seed/common-full.npz" in workflow
+    assert '.mechanical_formulation == "full"' in workflow
+    assert ".structure.compatible == true" in workflow
     assert "--acados-failed-rho-phase-one-recovery" in workflow
     assert 'if [[ "$variant" == *"phase-one-mechanical-lazy"* ]]; then' in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-history" in workflow

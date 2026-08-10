@@ -5459,8 +5459,9 @@ def build_cli() -> argparse.ArgumentParser:
         "--acados-ipopt-recovery",
         action="store_true",
         help=(
-            "After an uncertified reduced ACADOS RHO, obtain a certified "
-            "IPOPT/Radau-5 seed and retry the same ACADOS RHO without advancing."
+            "After an uncertified full or reduced ACADOS RHO, obtain a "
+            "certified IPOPT/Radau-5 seed and retry the same ACADOS RHO "
+            "without advancing."
         ),
     )
     parser.add_argument(

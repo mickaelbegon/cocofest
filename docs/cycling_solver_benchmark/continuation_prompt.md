@@ -99,6 +99,12 @@ bifurcation. Le run `31401580984` montre que le proactif échoue au même RHO
 étends plutôt le recovery IPOPT/Radau-5 au full sur le RHO gelé, puis exige un
 retry ACADOS certifié avant tout avancement.
 
+Cette extension est maintenant implémentée avec un audit des variables et des
+bornes avant injection. Lance d'abord `cycles=acados_hybrid` : le gate force le
+recovery au RHO 1 en reduced puis en full. S'il est vert, ajoute ensuite un cas
+full naturel de 150 RHO avec la fenêtre Phase I 19--35 et IPOPT recovery pour
+tester le franchissement du RHO 141.
+
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un
 échec attendu : Bioptim `4179bf07` corrige le rangement stage-wise et le smoke

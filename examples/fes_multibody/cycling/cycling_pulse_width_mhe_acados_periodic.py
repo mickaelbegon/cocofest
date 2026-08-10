@@ -2276,8 +2276,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--acados-ipopt-recovery",
         action="store_true",
         help=(
-            "For an experimental reduced-mechanics ACADOS RHO that remains "
-            "uncertified after its local retry, solve the identical window with "
+            "For a full- or reduced-mechanics ACADOS RHO that remains "
+            "uncertified after its local retry, solve the identical frozen "
+            "window with "
             "IPOPT/Radau-5 and use only a certified IPOPT primal as the seed "
             "of one final ACADOS retry. The RHO is never advanced by IPOPT."
         ),
@@ -13373,6 +13374,89 @@ def _copy_periodic_runtime_settings(source_nmpc, target_nmpc) -> None:
     target_nmpc.transfer_debug = False
 
 
+def periodic_recovery_structure_summary(
+    source_nmpc, recovery_nmpc
+) -> dict[str, object]:
+    """Require the ACADOS and IPOPT OCPs to expose the same physical variables.
+
+    The transcriptions intentionally have different internal decision vectors,
+    but their named state/control rows and physical boundary arrays must match.
+    This prevents a full-mechanics recovery from silently omitting a coordinate,
+    a Ding state, or a pulse-width control during the cross-solver transfer.
+    """
+
+    source_nlp = source_nmpc.nlp[0]
+    recovery_nlp = recovery_nmpc.nlp[0]
+    summary: dict[str, object] = {"compatible": True, "mismatches": []}
+    for category, source_init, recovery_init, source_bounds, recovery_bounds in (
+        (
+            "states",
+            source_nlp.x_init,
+            recovery_nlp.x_init,
+            source_nlp.x_bounds,
+            recovery_nlp.x_bounds,
+        ),
+        (
+            "controls",
+            source_nlp.u_init,
+            recovery_nlp.u_init,
+            source_nlp.u_bounds,
+            recovery_nlp.u_bounds,
+        ),
+    ):
+        source_keys = tuple(source_init.keys())
+        recovery_keys = tuple(recovery_init.keys())
+        if set(source_keys) != set(recovery_keys):
+            summary["mismatches"].append(
+                {
+                    "category": category,
+                    "reason": "keys",
+                    "source_only": sorted(set(source_keys) - set(recovery_keys)),
+                    "recovery_only": sorted(set(recovery_keys) - set(source_keys)),
+                }
+            )
+            continue
+        for key in source_keys:
+            source_shape = np.asarray(source_init[key].init, dtype=float).shape
+            recovery_shape = np.asarray(recovery_init[key].init, dtype=float).shape
+            if source_shape[0] != recovery_shape[0]:
+                summary["mismatches"].append(
+                    {
+                        "category": category,
+                        "key": key,
+                        "reason": "physical_rows",
+                        "source_shape": source_shape,
+                        "recovery_shape": recovery_shape,
+                    }
+                )
+            for side in ("min", "max"):
+                source_bound_shape = np.asarray(
+                    getattr(source_bounds[key], side), dtype=float
+                ).shape
+                recovery_bound_shape = np.asarray(
+                    getattr(recovery_bounds[key], side), dtype=float
+                ).shape
+                if source_bound_shape != recovery_bound_shape:
+                    summary["mismatches"].append(
+                        {
+                            "category": category,
+                            "key": key,
+                            "reason": f"bounds_{side}",
+                            "source_shape": source_bound_shape,
+                            "recovery_shape": recovery_bound_shape,
+                        }
+                    )
+    summary["compatible"] = not summary["mismatches"]
+    summary["state_keys"] = list(source_nlp.x_init.keys())
+    summary["control_keys"] = list(source_nlp.u_init.keys())
+    if not summary["compatible"]:
+        raise ValueError(
+            "ACADOS/IPOPT recovery OCPs do not expose the same physical "
+            f"structure: {summary['mismatches']}"
+        )
+    return summary
+
+
 def build_periodic_ipopt_refinement_nmpc(
     source_nmpc,
     model_path: Path,
@@ -13397,6 +13481,9 @@ def build_periodic_ipopt_refinement_nmpc(
         refinement_mhe_info,
         dict(cycling_info),
         dict(simulation_conditions),
+    )
+    refinement_nmpc._cocofest_recovery_structure = (
+        periodic_recovery_structure_summary(source_nmpc, refinement_nmpc)
     )
     _copy_periodic_runtime_settings(source_nmpc, refinement_nmpc)
     _copy_initial_guesses_and_bounds(source_nmpc, refinement_nmpc)
@@ -13582,6 +13669,7 @@ def run_periodic_ipopt_recovery(
     linear_solver: str,
     failed_target_solution,
     target_solver: str,
+    mechanical_formulation: str,
     echo: bool = False,
 ) -> tuple[object | None, dict[str, object]]:
     """Solve one frozen RHO with IPOPT and inject a certified target-solver seed.
@@ -13598,10 +13686,14 @@ def run_periodic_ipopt_recovery(
         "available": True,
         "solver": "ipopt",
         "target_solver": target_solver,
+        "mechanical_formulation": mechanical_formulation,
         "transcription": "collocation_radau",
         "max_iterations": int(max_iterations),
         "accepted": False,
         "seed_injected": False,
+        "structure": deepcopy(
+            getattr(recovery_nmpc, "_cocofest_recovery_structure", None)
+        ),
     }
     try:
         solver = configure_ipopt_solver(
@@ -14587,10 +14679,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     if args.acados_ipopt_recovery:
         if args.solver != "acados":
             raise ValueError("--acados-ipopt-recovery requires --solver acados.")
-        if args.mechanical_formulation != "reduced" or not args.experimental_reduced_acados:
+        if (
+            args.mechanical_formulation == "reduced"
+            and not args.experimental_reduced_acados
+        ):
             raise ValueError(
-                "--acados-ipopt-recovery is restricted to the experimental "
-                "reduced ACADOS formulation."
+                "Reduced --acados-ipopt-recovery requires "
+                "--experimental-reduced-acados."
             )
         if args.single_shot or not args.retry_failed_rho_without_advance:
             raise ValueError(
@@ -16776,10 +16871,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     )
     ipopt_recovery_nmpc = None
     if ipopt_recovery_enabled:
-        # Use the same physical reduced OCP as the target solver, but a Radau
-        # CasADi/IPOPT transcription for a robust restoration solve. Per-window
-        # bounds, targets and the shifted primal are copied immediately before
-        # each recovery attempt below.
+        # Use the same physical full or reduced OCP as the target solver, but
+        # a Radau CasADi/IPOPT transcription for a robust restoration solve.
+        # Per-window bounds, targets and the shifted primal are copied
+        # immediately before each recovery attempt below.
         recovery_mhe_info = {**mhe_info, "use_sx": True}
         ipopt_recovery_nmpc = build_periodic_ipopt_refinement_nmpc(
             source_nmpc=nmpc,
@@ -17094,6 +17189,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     linear_solver=args.ipopt_linear_solver,
                     failed_target_solution=solution,
                     target_solver=args.solver,
+                    mechanical_formulation=args.mechanical_formulation,
                     echo=echo,
                 )
                 recovery_summary.update(

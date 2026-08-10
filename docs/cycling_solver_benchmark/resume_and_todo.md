@@ -528,18 +528,21 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 9. [fait, run `31401580984`] La Phase I proactive échoue également au RHO 141,
    avec une trajectoire quasi identique à `19--35`. Une seconde fenêtre
    mécanique n'est pas une solution.
-10. Étendre le recovery IPOPT/Radau-5 du reduced vers le full : même RHO 141
-    gelé, mêmes bornes/targets, injection du primal certifié, reset natif puis
-    obligation d'un retry ACADOS réussi avant d'avancer.
-11. En alternative contrôlée, tester une Phase I de faisabilité qui peut
+10. [implémenté, CI à certifier] Étendre le recovery IPOPT/Radau-5 du reduced
+    vers le full : même RHO gelé, mêmes bornes/targets, audit structurel,
+    injection du primal certifié, reset natif puis obligation d'un retry
+    ACADOS réussi avant d'avancer. Le smoke force le chemin au RHO 1.
+11. Après le smoke full vert, relancer 150 RHO avec `19--35` et recovery naturel
+    pour vérifier qu'IPOPT franchit réellement le RHO 141.
+12. En alternative contrôlée, tester une Phase I de faisabilité qui peut
     déplacer les états Ding dans une trust region stricte; auditer calcium,
     force, capacités et PW avant toute acceptation.
-12. Construire ensuite un prédicteur déterministe et bon marché des projections
+13. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-13. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+14. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
-14. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+15. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19

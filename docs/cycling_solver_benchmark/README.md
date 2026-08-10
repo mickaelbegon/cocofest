@@ -1077,6 +1077,15 @@ n'est donc pas l'issue. Il faut changer de bassin avec un recovery IPOPT full
 sur le RHO gelé, ou construire une vraie Phase I de faisabilité autorisant des
 ajustements Ding strictement bornés et audités.
 
+Le recovery IPOPT/Radau-5 accepte désormais les formulations `full` et
+`reduced`. Avant de copier un primal, il exige l'identité des clés d'états et
+de contrôles, du nombre de composantes physiques et des dimensions de bornes
+entre l'OCP ACADOS et l'OCP IPOPT. IPOPT ne valide toujours jamais le RHO à la
+place d'ACADOS : le primal certifié est injecté, la mémoire SQP/QP est remise à
+zéro, puis un retry ACADOS doit satisfaire les tolérances. Le gate Linux
+`acados_hybrid` force ce chemin au premier RHO dans les deux formulations avant
+de tester l'échec naturel long.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier
