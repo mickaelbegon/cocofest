@@ -1232,8 +1232,26 @@ passe l'audit de faisabilité indépendant. Les états Radau internes sont
 rééchantillonnés sur les 31 shooting nodes ACADOS avant le shift; ils ne sont
 donc pas surpondérés dans les AUC de fatigue. Le résultat conserve le statut de
 l'appel ACADOS échoué et ajoute `certifier=ipopt_radau` ainsi que
-`fallback_advanced_count`. Ce chemin reste expérimental jusqu'à la campagne
-300 RHO avec seed épinglé.
+`fallback_advanced_count`.
+
+Le smoke hybride à 235 RHO
+[31426862847](https://github.com/mickaelbegon/cocofest/actions/runs/31426862847)
+valide ce mécanisme de bout en bout avec le seed Intel. IPOPT certifie
+exceptionnellement le RHO 234 après les deux échecs ACADOS autorisés, puis
+ACADOS reprend au RHO 235 et converge en 10 itérations. Les 235 états exécutés
+sont continus : le plus grand saut inter-RHO dans les échelles natives vaut
+`3.94e-9`, et l'audit mécanique passe avec une erreur de projection maximale
+de `2.27e-13 rad`. Le solveur ACADOS reste rapide hors recovery : médiane/P90
+solveur `0.139/0.188 s` et murale `0.153/0.203 s`.
+
+Le raccord de contrôle est toutefois beaucoup moins régulier. La transition
+ACADOS vers IPOPT change une PW jusqu'à `69.3 µs`; le retour IPOPT vers ACADOS
+change la PW biceps jusqu'à `468.6 µs`. Les PW restent dans
+`[pd0, 600 µs]`, mais cette bifurcation entre minima locaux interdit encore de
+qualifier le mode de politique de stimulation lisse. La campagne 300 RHO doit
+donc mesurer à la fois la robustesse du fallback et les sauts de PW; une
+borne de slew ou une pénalisation paramétrique de variation ne pourra être
+ajoutée qu'après cette mesure, car elle modifie l'optimum de fatigue.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,

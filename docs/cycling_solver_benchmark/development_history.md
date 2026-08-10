@@ -4884,3 +4884,22 @@ shift est calculé depuis sa solution adaptée, puis ACADOS reprend au RHO
 suivant. Ce chemin doit conserver l'audit physique complet et compter
 séparément les RHO IPOPT; il ne doit pas être présenté comme un résultat
 ACADOS pur.
+
+Le smoke hybride
+[31426862847](https://github.com/mickaelbegon/cocofest/actions/runs/31426862847)
+valide ensuite 235/235 RHO. Le RHO 234 est avancé par IPOPT/Radau après deux
+`ACADOS_MAXITER`, puis ACADOS converge de nouveau au RHO 235 en 10 itérations.
+Le compteur expose exactement un `fallback_advanced`, les audits de
+faisabilité et de mécanique passent, et les états restent continus à mieux que
+`3.94e-9` dans leurs échelles natives. Les temps chauds ACADOS médian/P90 sont
+`0.139/0.188 s` côté solveur et `0.153/0.203 s` côté mur. Le coût total vaut
+`13238.61`, dont `12813.32` pour l'objectif de fatigue exécuté; les capacités
+finales sont respectivement `0.89576`, `0.97957`, `0.99921` et `0.98113` pour
+Biceps, Delt_ant, Delt_post et Triceps.
+
+Ce succès révèle aussi une limite de régularité : le changement maximal de PW
+vaut `69.3 µs` à l'entrée du fallback et `468.6 µs` au retour vers ACADOS.
+Il n'y a ni discontinuité d'état ni violation de borne, mais les deux solveurs
+sélectionnent des branches de contrôle distinctes. La prochaine campagne doit
+donc conserver cette métrique et ne pas assimiler faisabilité hybride et
+lissage de la stimulation.
