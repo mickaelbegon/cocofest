@@ -4659,3 +4659,14 @@ explicite de Phase I et deux ablations 100 RHO : seulement le RHO 19, puis les
 RHO 19--36. Cette voie est prioritaire pour la production; l'export des champs
 natifs ACADOS/HPIPM sert à expliquer le replay isolé, mais réutiliser une même
 capsule est déjà le fonctionnement nominal du RHO.
+
+Le run Linux
+[31394895014](https://github.com/mickaelbegon/cocofest/actions/runs/31394895014)
+valide l'hypothèse de bassin, mais réfute l'hypothèse « une seule projection au
+RHO 19 suffit ». Cette variante s'arrête à nouveau au RHO 81. La séquence
+`19--36` atteint au contraire `100/100`, avec 18 Phase I acceptées : `8.479 s`
+de projection cumulée, médiane ACADOS `0.1121 s`, médiane complète `0.1121 s`
+et P90 complet `0.7168 s`. À titre apparié, la stratégie proactive `1--99`
+coûtait `48.230 s` de Phase I. La prochaine expérience doit donc bisecter la
+borne supérieure 36 tout en gardant le début fixé à 19 et la capsule native
+persistante.

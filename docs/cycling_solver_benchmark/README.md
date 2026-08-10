@@ -1024,12 +1024,21 @@ non exporté intervient encore, même lorsque `lam` et `pi` sont remis à zéro.
 
 La comparaison des trajectoires localise parallèlement la bifurcation. Baseline
 et proactive sont identiques jusqu'au cycle 17; la première différence apparaît
-au cycle 19, après la Phase I qui prépare ce RHO. Deux variantes sélectives sont
-donc en cours d'évaluation : Phase I au seul RHO 19, puis aux RHO 19--36. Elles
-testent directement si l'on peut conserver le bassin `100/100` sans payer les
-99 projections. L'export/replay natif complet des variables HPIPM reste un
-diagnostic utile, mais n'est pas requis pour la stratégie de production tant
-que la même capsule compilée est réutilisée entre RHO.
+au cycle 19, après la Phase I qui prépare ce RHO. Le
+[run 31394895014](https://github.com/mickaelbegon/cocofest/actions/runs/31394895014)
+montre qu'une seule projection au RHO 19 ne suffit pas : elle retrouve le même
+arrêt à `80/100`. En revanche, la Phase I mécanique limitée aux RHO `19--36`
+atteint `100/100`. Les 18 projections sont acceptées et coûtent `8.479 s` au
+total, contre `48.230 s` pour les 99 appels proactifs. La médiane solveur reste
+`0.1121 s`; la médiane complète reste `0.1121 s` et son P90 vaut `0.7168 s`.
+
+La solution de production plausible est donc une **homotopie mécanique
+transitoire**, appliquée pendant le changement de bassin, tout en conservant la
+même capsule ACADOS compilée. La fenêtre `19--36` est une borne supérieure
+certifiée, pas encore un optimum : une bissection de sa borne supérieure doit
+identifier la plus courte séquence robuste. L'export/replay natif complet des
+variables HPIPM reste utile pour expliquer le replay isolé, mais n'est pas
+requis pour ce chemin de production.
 
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,

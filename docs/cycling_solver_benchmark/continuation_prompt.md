@@ -84,8 +84,10 @@ maintenant faite dans le run `31393608026` : le primal exact et ses résidus
 initiaux sont identiques, mais une capsule neuve échoue avec `ACADOS_MINSTEP`
 alors que la capsule historique converge en deux itérations. Ne traite donc
 pas un `.npz` primal comme un snapshot natif ACADOS/HPIPM. Lis ensuite le run
-`31394895014`, qui teste Phase I au seul RHO 19 puis aux RHO 19--36; la première
-divergence baseline/proactive apparaît au cycle 19.
+`31394895014` : Phase I au seul RHO 19 s'arrête encore à `80/100`, tandis que
+la séquence 19--36 atteint `100/100` avec 18 projections acceptées et `8.479 s`
+de Phase I cumulée. Bisecte maintenant la borne supérieure en testant d'abord
+19--27 et 19--31, toujours dans la même capsule ACADOS persistante.
 
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un

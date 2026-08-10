@@ -512,17 +512,18 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 3. [fait] Exporter les checkpoints proactifs aux RHO 17, 35 et 80 et rejouer
    le RHO 81. Le primal exact échoue dans une capsule neuve malgré des résidus
    identiques : l'état interne ACADOS/HPIPM contribue au succès en chaîne.
-4. [en cours, run `31394895014`] Tester Phase I uniquement au RHO 19, puis aux
-   RHO 19--36; la première divergence baseline/proactive apparaît au cycle 19.
-5. Construire ensuite un prédicteur déterministe et bon marché des projections
+4. [fait, run `31394895014`] Phase I au seul RHO 19 échoue encore au RHO 81;
+   la séquence 19--36 atteint `100/100` avec 18 projections (`8.479 s`).
+5. [en cours] Bisecter la borne supérieure de la fenêtre certifiée, en testant
+   d'abord `19--27` et `19--31`, sans recréer la capsule ACADOS.
+6. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-6. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+7. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
-7. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+8. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
-La première question à trancher est donc causale : la projection qui prépare
-le RHO 19 suffit-elle à sélectionner le bassin franchissant le RHO 81, ou faut-il
-conserver toute la séquence 19--36? Le résultat fixe directement le coût minimal
-de la Phase I sélective.
+La question causale est maintenant resserrée : une seule projection au RHO 19
+ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO
+81. Il reste à déterminer la plus petite borne supérieure robuste.
