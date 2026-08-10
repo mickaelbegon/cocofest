@@ -3961,6 +3961,40 @@ def main(
             shared_transfer_contact_projection_mode
         )
         solver_args.acados_transfer_phase_one = shared_transfer_phase_one
+        # These settings are named after their original ACADOS use, but the
+        # shared Phase-I path consumes them for every NLP solver.  Assign them
+        # before cloning ``ipopt_args`` into MadNLP/FATROP configurations so a
+        # CLI request cannot silently fall back to ``all`` with no screen.
+        solver_args.acados_transfer_phase_one_mode = (
+            acados_transfer_phase_one_mode
+        )
+        solver_args.acados_transfer_phase_one_lookback_nodes = (
+            acados_transfer_phase_one_lookback_nodes
+        )
+        solver_args.acados_transfer_phase_one_screen_threshold = (
+            acados_transfer_phase_one_screen_threshold
+        )
+        solver_args.full_dynamics_phase_one_proximity_weight = (
+            acados_transfer_phase_one_proximity_weight
+        )
+        solver_args.full_dynamics_phase_one_defect_weight = (
+            acados_transfer_phase_one_defect_weight
+        )
+        solver_args.full_dynamics_phase_one_substeps = (
+            acados_transfer_phase_one_substeps
+        )
+        solver_args.full_dynamics_phase_one_max_state_change = (
+            acados_transfer_phase_one_max_state_change
+        )
+        solver_args.full_dynamics_phase_one_max_q_change = (
+            acados_transfer_phase_one_max_q_change
+        )
+        solver_args.full_dynamics_phase_one_max_qdot_change = (
+            acados_transfer_phase_one_max_qdot_change
+        )
+        solver_args.full_dynamics_phase_one_max_fes_change = (
+            acados_transfer_phase_one_max_fes_change
+        )
         solver_args.full_dynamics_phase_one = shared_initial_phase_one
         solver_args.acados_transfer_rollout_substeps = shared_transfer_rollout_substeps
         solver_args.acados_transfer_rollout_max_bound_violation = (

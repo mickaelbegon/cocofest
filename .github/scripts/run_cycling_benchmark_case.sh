@@ -271,6 +271,23 @@ then
   exit 1
 fi
 
+if [[ -f "$result" && ("$nlp_transfer_preparation" == "phase-one" || "$nlp_transfer_preparation" == "rollout-phase-one") ]]
+then
+  if ! jq -e \
+    --arg solver "$solver" \
+    --arg mode "$nlp_phase_one_mode" \
+    --argjson threshold "$nlp_phase_one_screen_threshold" '
+    .configurations[$solver] |
+    (.acados_transfer_phase_one == true) and
+    (.acados_transfer_phase_one_mode == $mode) and
+    (.acados_transfer_phase_one_screen_threshold == $threshold)
+  ' "$result" >/dev/null
+  then
+    echo "The serialized NLP Phase-I configuration differs from the requested mode or screen threshold." >&2
+    exit 1
+  fi
+fi
+
 if [[ -f "$result" && "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]
 then
   normalized_profile="${ipopt_profile//_/-}"

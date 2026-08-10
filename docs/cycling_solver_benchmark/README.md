@@ -152,6 +152,17 @@ sont projetés, sans modifier directement calcium, force ou fatigue. Le rollout
 complet n'est pas promu avant ce contrôle, car il réintègre lui aussi les états
 de Ding et risque le même changement de bassin.
 
+Le [run 30904900725](https://github.com/mickaelbegon/cocofest/actions/runs/30904900725)
+ne constitue finalement **pas** cette ablation mécanique. Malgré l'input CI,
+ses JSON sérialisent `acados_transfer_phase_one_mode="all"`, un seuil `null`
+et les blocs mutables `q/qdot/fes`; ses résultats reproduisent donc le run
+`30903350035`. La cause est un défaut de propagation dans le comparateur : le
+booléen partagé atteignait IPOPT et MadNLP, mais le mode, le seuil et les
+paramètres numériques restaient limités à la configuration ACADOS. Le runner
+vérifie désormais le contrat sérialisé avant d'accepter un artefact. Une
+campagne `mechanical` n'est scientifique que si le JSON confirme le mode, le
+seuil et l'absence de `fes` dans `mutable_blocks`.
+
 ### Reprise hybride ACADOS → IPOPT (expérimentale)
 
 Le mode `--acados-ipopt-recovery` ne compare pas le full ACADOS historique à

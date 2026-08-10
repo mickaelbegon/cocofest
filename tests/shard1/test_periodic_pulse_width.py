@@ -6639,6 +6639,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "--shared-transfer-phase-one" in benchmark_runner
     assert '--acados-transfer-phase-one-mode "$nlp_phase_one_mode"' in benchmark_runner
     assert '--acados-transfer-phase-one-screen-threshold "$nlp_phase_one_screen_threshold"' in benchmark_runner
+    assert '(.acados_transfer_phase_one_mode == $mode)' in benchmark_runner
+    assert '(.acados_transfer_phase_one_screen_threshold == $threshold)' in benchmark_runner
     assert 'trajectory_options=()' in benchmark_runner
     assert '[[ "$ipopt_profile" =~ ^scientific[-_]radau[3456]$ ]]' in benchmark_runner
     assert '--receding-horizon-solution-output' in benchmark_runner
@@ -11114,6 +11116,17 @@ def test_comparison_forwards_solver_neutral_seed_diagnostics(monkeypatch):
         n_windows=1,
         initial_guess_diagnostics=True,
         exact_initial_nlp_audit=True,
+        shared_transfer_phase_one=True,
+        acados_transfer_phase_one_mode="mechanical",
+        acados_transfer_phase_one_lookback_nodes=12,
+        acados_transfer_phase_one_screen_threshold=1e-3,
+        acados_transfer_phase_one_proximity_weight=2.0,
+        acados_transfer_phase_one_defect_weight=3.0,
+        acados_transfer_phase_one_substeps=7,
+        acados_transfer_phase_one_max_state_change=4.0,
+        acados_transfer_phase_one_max_q_change=0.1,
+        acados_transfer_phase_one_max_qdot_change=0.2,
+        acados_transfer_phase_one_max_fes_change=0.3,
     )
 
     assert captured["ipopt"].initial_guess_diagnostics is True
@@ -11121,6 +11134,19 @@ def test_comparison_forwards_solver_neutral_seed_diagnostics(monkeypatch):
     assert captured["ipopt"].exact_initial_nlp_audit is True
     assert captured["madnlp"].exact_initial_nlp_audit is True
     assert captured["madnlp"].acados_diagnostics is False
+    for solver_name in ("ipopt", "madnlp"):
+        args = captured[solver_name]
+        assert args.acados_transfer_phase_one is True
+        assert args.acados_transfer_phase_one_mode == "mechanical"
+        assert args.acados_transfer_phase_one_lookback_nodes == 12
+        assert args.acados_transfer_phase_one_screen_threshold == pytest.approx(1e-3)
+        assert args.full_dynamics_phase_one_proximity_weight == pytest.approx(2.0)
+        assert args.full_dynamics_phase_one_defect_weight == pytest.approx(3.0)
+        assert args.full_dynamics_phase_one_substeps == 7
+        assert args.full_dynamics_phase_one_max_state_change == pytest.approx(4.0)
+        assert args.full_dynamics_phase_one_max_q_change == pytest.approx(0.1)
+        assert args.full_dynamics_phase_one_max_qdot_change == pytest.approx(0.2)
+        assert args.full_dynamics_phase_one_max_fes_change == pytest.approx(0.3)
 
 
 def test_generic_initial_guess_copy_reports_incompatible_grids():
