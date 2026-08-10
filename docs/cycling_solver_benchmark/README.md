@@ -1167,6 +1167,14 @@ immédiatement après l'`exit 0` anticipé. Le workflow utilise désormais un
 `if/else` et
 atteint normalement la fin du script.
 
+Le smoke de correction
+[31422321005](https://github.com/mickaelbegon/cocofest/actions/runs/31422321005)
+est vert et valide ce `if/else`. Il reproduit aussi le comportement du run 300 :
+le RHO 5 nécessite deux recoveries IPOPT, le premier faisable mais arrêté à la
+limite (`105.1 s`), le second convergé (`20.7 s`), avant recertification ACADOS.
+Le recovery précoce est donc reproduit sur deux runners consécutifs; c'est le
+run 150 sans recovery qui constitue maintenant l'observation atypique.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier

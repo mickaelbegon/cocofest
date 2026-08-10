@@ -4834,3 +4834,11 @@ pas la cause du rouge : `jq` et `ls` réussissent dans le log, puis le step
 produit le code `1` immédiatement après l'`exit 0` anticipé. Le job est restructuré en
 `if/else` afin d'atteindre normalement la fin du script; un smoke naturel de
 cinq RHO suffit à valider ce correctif d'infrastructure.
+
+Ce smoke,
+[31422321005](https://github.com/mickaelbegon/cocofest/actions/runs/31422321005),
+est vert. Il valide le post-gate et reproduit deux recoveries au RHO 5 : une
+primale faisable après la limite d'itérations en `105.1 s`, puis une convergence
+en `20.7 s`. Le run 300 et ce smoke indépendant présentent donc le même point
+sensible précoce, tandis que le run 150 reste le seul sans recovery. L'analyse
+de reproductibilité doit prendre cette asymétrie comme point de départ.

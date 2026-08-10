@@ -553,13 +553,14 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     solve ACADOS reste sous la seconde, mais les recoveries portent le coût
     après préparation à `1.90 s/RHO`. Le gate final est encore rouge à cause
     de l'`exit 0` anticipé du shell Conda, après `jq` et `ls` réussis.
-13. [implémenté, smoke à lancer] Remplacer l'`exit 0` par une branche `if/else`
-    et laisser le shell terminer normalement. Vérifier sur cinq RHO sans
-    répéter le calcul 300 déjà certifié.
+13. [fait, run `31422321005`] Remplacer l'`exit 0` par une branche `if/else`
+    et laisser le shell terminer normalement. Le smoke est vert et reproduit
+    deux recoveries au RHO 5 (`105.1 s`, puis `20.7 s`).
 14. Comparer le préfixe 1--150 des runs `31419405169` et `31420496210` : le
-    premier n'a aucun recovery, le second échoue déjà au RHO 5. Tester la
-    reproductibilité runner/CPU et les résidus/itérés initiaux avant de relier
-    cet écart à la fatigue.
+    premier n'a aucun recovery, tandis que les runs `31420496210` et
+    `31422321005` échouent tous deux au RHO 5. Comparer runner/CPU,
+    configuration résolue, résidus et itérés initiaux avant de relier cet écart
+    à la fatigue.
 15. Réduire le coût du recovery : les sorties IPOPT faisables mais arrêtées à
     2 000 itérations coûtent à elles seules environ `280.6 s`. Tester une
     terminaison acceptable ou une Phase I de faisabilité bornée, sans relâcher
