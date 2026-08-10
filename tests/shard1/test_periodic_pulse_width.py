@@ -877,6 +877,16 @@ def test_acados_ipopt_recovery_cli_is_opt_in():
     assert args.acados_ipopt_recovery_collocation_degree == 5
     assert args.acados_ipopt_recovery_force_first_rho is True
     assert args.acados_initial_irk_rollout is True
+    assert args.acados_failed_rho_phase_one_recovery is False
+
+    lazy_args = parser.parse_args(
+        ["--acados-failed-rho-phase-one-recovery"]
+    )
+    comparison_lazy_args = comparison_example.build_cli().parse_args(
+        ["--acados-failed-rho-phase-one-recovery"]
+    )
+    assert lazy_args.acados_failed_rho_phase_one_recovery is True
+    assert comparison_lazy_args.acados_failed_rho_phase_one_recovery is True
 
 
 def test_nlp_ipopt_recovery_cli_is_opt_in():
@@ -6393,6 +6403,11 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "ACADOS_CADENCE_GUARD_ONLY" in workflow
     assert "inputs.cycles == 'acados_recovery'" in workflow
     assert "ACADOS_RECOVERY_ONLY" in workflow
+    assert "inputs.cycles == 'acados_lazy_recovery'" in workflow
+    assert "ACADOS_LAZY_RECOVERY_ONLY" in workflow
+    assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-lazy" in workflow
+    assert "--acados-failed-rho-phase-one-recovery" in workflow
+    assert 'if [[ "$variant" == *"phase-one-mechanical-lazy"* ]]; then' in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2" in workflow
@@ -8578,6 +8593,60 @@ def test_failed_rho_phase_one_rejects_a_change_to_protected_states():
 
     np.testing.assert_array_equal(nlp.x_init["q"].init, [[0.0, 0.0]])
     np.testing.assert_array_equal(nlp.x_init["F_Test"].init, [[1.0, 1.0]])
+
+
+def test_failed_rho_acados_phase_one_resets_native_solver_memory(monkeypatch):
+    class Variables(dict):
+        pass
+
+    nlp = SimpleNamespace(
+        states=Variables(
+            theta=SimpleNamespace(index=[0]),
+            omega=SimpleNamespace(index=[1]),
+            F_Test=SimpleNamespace(index=[2]),
+        ),
+        x_init={
+            "theta": SimpleNamespace(init=np.zeros((1, 2))),
+            "omega": SimpleNamespace(init=np.zeros((1, 2))),
+            "F_Test": SimpleNamespace(init=np.ones((1, 2))),
+        },
+        u_init={"u": SimpleNamespace(init=np.array([[0.2]]))},
+    )
+    nmpc = SimpleNamespace(nlp=[nlp])
+    checkpoint = periodic_example.snapshot_initial_guess(nmpc)
+    reset_calls = []
+    monkeypatch.setattr(
+        periodic_example,
+        "reset_acados_solver_memory",
+        lambda target: reset_calls.append(target) or True,
+    )
+
+    summary = (
+        periodic_example.apply_failed_rho_acados_mechanical_phase_one_recovery(
+            nmpc,
+            checkpoint,
+            proximity_weight=1.0,
+            defect_weight=10.0,
+            n_substeps=5,
+            max_state_change=None,
+            max_state_change_by_block={},
+            project_function=lambda *_args, **_kwargs: {
+                "accepted": False,
+                "scaled_defect_before": 1.0,
+                "scaled_defect_after": 1.0,
+            },
+        )
+    )
+
+    assert reset_calls == [nmpc]
+    assert summary["dual_reset"] == {
+        "solver": "acados",
+        "mode": "off",
+        "applied": True,
+        "reason": None,
+    }
+    assert summary["solver_reset"] == summary["dual_reset"]
+    assert summary["protected_max_change"] == 0.0
 
 
 def test_pulse_width_summary_preserves_ipopt_control_variation():

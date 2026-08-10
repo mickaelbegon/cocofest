@@ -2579,6 +2579,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--acados-failed-rho-phase-one-recovery",
+        action="store_true",
+        help=(
+            "After the first uncertified ACADOS solve of a physical RHO, restore "
+            "its exact prepared primal, apply mechanical-only Phase I, reset the "
+            "SQP/QP memory, and retry without advancing."
+        ),
+    )
+    parser.add_argument(
         "--codegen-tag",
         type=str,
         default=None,
@@ -10309,6 +10318,40 @@ def apply_failed_rho_mechanical_phase_one_recovery(
     }
 
 
+def apply_failed_rho_acados_mechanical_phase_one_recovery(
+    periodic_nmpc,
+    checkpoint: dict,
+    **phase_one_options,
+) -> dict:
+    """Apply the protected mechanical recovery and reset ACADOS native memory."""
+
+    def reset_acados(_nmpc, _solution, *, solver_name, mode):
+        reset_applied = bool(reset_acados_solver_memory(_nmpc))
+        return {
+            "solver": solver_name,
+            "mode": mode,
+            "applied": reset_applied,
+            "reason": None if reset_applied else "acados_solver_reset_failed",
+        }
+
+    summary = apply_failed_rho_mechanical_phase_one_recovery(
+        periodic_nmpc,
+        checkpoint,
+        solver_name="acados",
+        reset_dual_function=reset_acados,
+        **phase_one_options,
+    )
+    if not summary["dual_reset"]["applied"]:
+        raise RuntimeError(
+            "ACADOS failed-RHO Phase I could not reset the native SQP/QP memory."
+        )
+    # Keep the generic recovery payload backward-compatible while exposing
+    # the actual ACADOS operation explicitly in JSON and logs.  This is a
+    # complete native SQP/QP-memory reset, not only an NLP-dual reset.
+    summary["solver_reset"] = dict(summary["dual_reset"])
+    return summary
+
+
 def _normalized_mechanical_transfer_score(
     defects: dict,
     *,
@@ -14497,6 +14540,21 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 "--nlp-failed-rho-phase-one-recovery and --nlp-ipopt-recovery "
                 "are mutually exclusive recovery strategies."
             )
+    if getattr(args, "acados_failed_rho_phase_one_recovery", False):
+        if args.solver != "acados":
+            raise ValueError(
+                "--acados-failed-rho-phase-one-recovery requires --solver acados."
+            )
+        if args.single_shot or not args.retry_failed_rho_without_advance:
+            raise ValueError(
+                "--acados-failed-rho-phase-one-recovery requires the RHO mode and "
+                "--retry-failed-rho-without-advance."
+            )
+        if args.acados_ipopt_recovery:
+            raise ValueError(
+                "--acados-failed-rho-phase-one-recovery and "
+                "--acados-ipopt-recovery are mutually exclusive recovery strategies."
+            )
     if args.acados_initial_irk_rollout and args.solver != "acados":
         raise ValueError("--acados-initial-irk-rollout requires --solver acados.")
     if (
@@ -16653,6 +16711,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     maxiter_retry_summaries = []
     ipopt_recovery_summaries = []
     nlp_failed_rho_phase_one_summaries = []
+    acados_failed_rho_phase_one_summaries = []
     transfer_active_set_guard_summaries = []
     transfer_contact_projection_summaries = []
     transfer_bound_projection_summaries = []
@@ -16854,6 +16913,54 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                         f"{phase_one['scaled_defect_after']:.6g} "
                         f"protected_max_change="
                         f"{phase_one_recovery['protected_max_change']:.6g} "
+                        f"wall_time_s={phase_one_recovery['wall_time_s']:.6g}"
+                    )
+            elif (
+                getattr(args, "acados_failed_rho_phase_one_recovery", False)
+                and target_rho not in phase_one_recovery_attempted_target_rhos
+            ):
+                recovery_start = perf_counter()
+                phase_one_recovery_attempted_target_rhos.add(target_rho)
+                phase_one_recovery = (
+                    apply_failed_rho_acados_mechanical_phase_one_recovery(
+                        self,
+                        prepared_rho_primal_checkpoint,
+                        proximity_weight=(
+                            args.full_dynamics_phase_one_proximity_weight
+                        ),
+                        defect_weight=args.full_dynamics_phase_one_defect_weight,
+                        n_substeps=args.full_dynamics_phase_one_substeps,
+                        max_state_change=(
+                            args.full_dynamics_phase_one_max_state_change
+                        ),
+                        max_state_change_by_block=(
+                            phase_one_max_state_change_by_block
+                        ),
+                    )
+                )
+                phase_one_recovery.update(
+                    {
+                        "attempt_window": int(self.total_optimization_run) + 1,
+                        "target_rho": target_rho,
+                        "target_failed_status": int(solution.status),
+                        "target_failed_feasibility": dict(feasibility),
+                        "wall_time_s": perf_counter() - recovery_start,
+                    }
+                )
+                acados_failed_rho_phase_one_summaries.append(phase_one_recovery)
+                self._cocofest_recovery_seed_pending = True
+                if echo:
+                    phase_one = phase_one_recovery["phase_one"]
+                    print(
+                        "acados_failed_rho_phase_one_recovery: "
+                        f"target_rho={target_rho} "
+                        f"accepted={phase_one['accepted']} "
+                        f"scaled_defect={phase_one['scaled_defect_before']:.6g}->"
+                        f"{phase_one['scaled_defect_after']:.6g} "
+                        f"protected_max_change="
+                        f"{phase_one_recovery['protected_max_change']:.6g} "
+                        f"solver_reset="
+                        f"{phase_one_recovery['solver_reset']['applied']} "
                         f"wall_time_s={phase_one_recovery['wall_time_s']:.6g}"
                     )
             can_attempt_recovery = bool(
@@ -17924,7 +18031,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             _nmpc._cocofest_acados_main_window_retry_armed = bool(
                 continue_solving and retry_installed
             )
-        if continue_solving and args.solver in NLP_SOLVER_NAMES:
+        if continue_solving and (
+            args.solver in NLP_SOLVER_NAMES
+            or getattr(args, "acados_failed_rho_phase_one_recovery", False)
+        ):
             prepared_rho_primal_checkpoint = snapshot_initial_guess(_nmpc)
         return continue_solving
 
@@ -18371,6 +18481,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 recovery_requires_target_certification=(
                     ipopt_recovery_enabled
                     or getattr(args, "nlp_failed_rho_phase_one_recovery", False)
+                    or getattr(args, "acados_failed_rho_phase_one_recovery", False)
                 ),
             ),
             compact_solution_output=args.compact_rho_output,
@@ -18429,6 +18540,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         if nlp_failed_rho_phase_one_summaries:
             summary["nlp_failed_rho_phase_one_summaries"] = (
                 nlp_failed_rho_phase_one_summaries
+            )
+        if acados_failed_rho_phase_one_summaries:
+            summary["acados_failed_rho_phase_one_summaries"] = (
+                acados_failed_rho_phase_one_summaries
             )
         attach_exact_initial_nlp_audits(summary, nmpc)
         return summary
@@ -18533,6 +18648,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     if nlp_failed_rho_phase_one_summaries:
         summary["nlp_failed_rho_phase_one_summaries"] = (
             nlp_failed_rho_phase_one_summaries
+        )
+    if acados_failed_rho_phase_one_summaries:
+        summary["acados_failed_rho_phase_one_summaries"] = (
+            acados_failed_rho_phase_one_summaries
         )
     if transfer_bound_homotopy_summaries:
         summary["transfer_bound_homotopy_summaries"] = transfer_bound_homotopy_summaries

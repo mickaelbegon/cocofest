@@ -145,6 +145,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "nlp_ipopt_recovery_max_iterations",
     "nlp_ipopt_recovery_collocation_degree",
     "nlp_failed_rho_phase_one_recovery",
+    "acados_failed_rho_phase_one_recovery",
     "acados_initial_irk_rollout",
     "periodic_ipopt_refinement_ode_solver",
     "periodic_ipopt_refinement_collocation_degree",
@@ -3058,6 +3059,9 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                 "nlp_failed_rho_phase_one_summaries": (
                     result.get("nlp_failed_rho_phase_one_summaries") or []
                 ),
+                "acados_failed_rho_phase_one_summaries": (
+                    result.get("acados_failed_rho_phase_one_summaries") or []
+                ),
                 "solver_attempt_accounting": result.get(
                     "solver_attempt_accounting"
                 ),
@@ -3383,6 +3387,7 @@ def main(
     nlp_ipopt_recovery_max_iterations: int = 2000,
     nlp_ipopt_recovery_collocation_degree: int = 5,
     nlp_failed_rho_phase_one_recovery: bool = False,
+    acados_failed_rho_phase_one_recovery: bool = False,
     acados_initial_irk_rollout: bool = False,
     acados_reset_solver_before_solve: bool = False,
     acados_check_reuse_possible: bool = False,
@@ -3896,6 +3901,9 @@ def main(
     )
     acados_args.acados_ipopt_recovery_force_first_rho = (
         acados_ipopt_recovery_force_first_rho
+    )
+    acados_args.acados_failed_rho_phase_one_recovery = (
+        acados_failed_rho_phase_one_recovery
     )
     acados_args.acados_initial_irk_rollout = acados_initial_irk_rollout
     acados_args.acados_reset_solver_before_solve = acados_reset_solver_before_solve
@@ -5406,6 +5414,15 @@ def build_cli() -> argparse.ArgumentParser:
     )
     parser.add_argument("--acados-ipopt-recovery-force-first-rho", action="store_true")
     parser.add_argument(
+        "--acados-failed-rho-phase-one-recovery",
+        action="store_true",
+        help=(
+            "Retry the first failed ACADOS solve of a physical RHO from its "
+            "exact prepared primal after mechanical-only Phase I and a native "
+            "SQP/QP reset."
+        ),
+    )
+    parser.add_argument(
         "--nlp-ipopt-recovery",
         action="store_true",
         help=(
@@ -5840,6 +5857,9 @@ if __name__ == "__main__":
         ),
         acados_ipopt_recovery_force_first_rho=(
             args.acados_ipopt_recovery_force_first_rho
+        ),
+        acados_failed_rho_phase_one_recovery=(
+            args.acados_failed_rho_phase_one_recovery
         ),
         nlp_ipopt_recovery=args.nlp_ipopt_recovery,
         nlp_ipopt_recovery_max_iterations=(

@@ -10,7 +10,7 @@ on:
         default: ubuntu-24.04
         type: string
       cycles:
-        description: Number of RHO solves, or "screen", "acados", "acados_guard", "acados_recovery", "acados_homotopy", "acados_reduced_100", "acados_hybrid", "radau5_100", "radau35_comparison", "fatigue_endurance", "fatigue_endurance_radau5", or "full_horizon"
+        description: Number of RHO solves, or "screen", "acados", "acados_guard", "acados_recovery", "acados_lazy_recovery", "acados_homotopy", "acados_reduced_100", "acados_hybrid", "radau5_100", "radau35_comparison", "fatigue_endurance", "fatigue_endurance_radau5", or "full_horizon"
         required: true
         default: "100"
         type: string
@@ -786,6 +786,7 @@ jobs:
           ACADOS_HOMOTOPY_ONLY: ${{ inputs.cycles == 'acados_homotopy' }}
           ACADOS_CADENCE_GUARD_ONLY: ${{ inputs.cycles == 'acados_guard' }}
           ACADOS_RECOVERY_ONLY: ${{ inputs.cycles == 'acados_recovery' }}
+          ACADOS_LAZY_RECOVERY_ONLY: ${{ inputs.cycles == 'acados_lazy_recovery' }}
           ACADOS_REDUCED_100_ONLY: ${{ inputs.cycles == 'acados_reduced_100' }}
           ACADOS_FATIGUE_ENDURANCE_ONLY: ${{ inputs.cycles == 'fatigue_endurance' }}
           BENCHMARK_ASSISTANCE: ${{ inputs.crank_assistance_nm }}
@@ -1125,7 +1126,15 @@ jobs:
                 --acados-transfer-active-set-threshold 1e-6
               )
             fi
-            if [[ "$variant" == *"phase-one-mechanical"* ]]; then
+            if [[ "$variant" == *"phase-one-mechanical-lazy"* ]]; then
+              # Preserve the unmodified cyclic shift during every successful
+              # RHO. Only after the same physical RHO is uncertified, restore
+              # its checkpoint, project q/qdot, reset ACADOS SQP/QP memory,
+              # and retry without advancing fatigue or the crank target.
+              solver_options+=(
+                --acados-failed-rho-phase-one-recovery
+              )
+            elif [[ "$variant" == *"phase-one-mechanical"* ]]; then
               # Change only q/qdot during the proximal projection. The 20 Ding
               # states remain the exact shifted continuation from the last
               # certified RHO.
@@ -1246,6 +1255,17 @@ jobs:
             run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-phase-one-all full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-byrd-fast-guard-2p6 full "$ACADOS_SMOKE_RHOS" SQP_WITH_FEASIBLE_QP IRK 5 5
+          elif [[ "$ACADOS_LAZY_RECOVERY_ONLY" == "true" ]]; then
+            # Focused causal A/B on one runner. The baseline locates the first
+            # uncertified RHO; the lazy case pays Phase I only at such a RHO.
+            # This also reveals whether the 100/100 proactive result depended
+            # on earlier projections changing the optimizer basin.
+            printf '%s\n' \
+              sqp-irk-reference-full \
+              > acados-smoke-results/reference-cases.txt
+            run_case sqp-irk-reference full 1 SQP IRK 5 5
+            run_case sqp-irk-fast-guard-2p6-baseline full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-lazy full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
           elif [[ "$ACADOS_CADENCE_GUARD_ONLY" == "true" ]]; then
             # Focused physical A/B: preserve the common references, then test
             # only the two asymmetric fast-side cadence guards. This avoids
@@ -1450,6 +1470,7 @@ jobs:
         env:
           ACADOS_HOMOTOPY_ONLY: ${{ inputs.cycles == 'acados_homotopy' }}
           ACADOS_RECOVERY_ONLY: ${{ inputs.cycles == 'acados_recovery' }}
+          ACADOS_LAZY_RECOVERY_ONLY: ${{ inputs.cycles == 'acados_lazy_recovery' }}
           ACADOS_REDUCED_100_ONLY: ${{ inputs.cycles == 'acados_reduced_100' }}
           ACADOS_FATIGUE_ENDURANCE_ONLY: ${{ inputs.cycles == 'fatigue_endurance' }}
         run: |
@@ -1483,6 +1504,7 @@ jobs:
           if [[ "$ACADOS_FATIGUE_ENDURANCE_ONLY" == "true" ]]; then
             expected_reference_count=0
           elif [[ "$ACADOS_HOMOTOPY_ONLY" == "true" || "$ACADOS_RECOVERY_ONLY" == "true" || \
+                  "$ACADOS_LAZY_RECOVERY_ONLY" == "true" || \
                   "$ACADOS_REDUCED_100_ONLY" == "true" ]]; then
             expected_reference_count=1
           fi
@@ -1513,6 +1535,13 @@ jobs:
               )
             ' "$result"
           done
+          if [[ "$ACADOS_LAZY_RECOVERY_ONLY" == "true" ]]; then
+            result="acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-lazy-full/result.json"
+            jq -e '
+              .configurations.acados.acados_failed_rho_phase_one_recovery == true and
+              (.results[0].error == null)
+            ' "$result"
+          fi
           if [[ "$ACADOS_FATIGUE_ENDURANCE_ONLY" == "true" ]]; then
             result="acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-full/result.json"
             jq -e '
@@ -1816,7 +1845,7 @@ jobs:
 
   benchmark:
     name: ${{ matrix.case_slug }} — sequential full/reduced
-    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'full_horizon' }}
+    if: ${{ inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_lazy_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'full_horizon' }}
     needs: prepare-seed
     runs-on: ${{ inputs.runner_label }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
@@ -2707,7 +2736,7 @@ jobs:
 
   report:
     name: Aggregate Kevin benchmark
-    if: ${{ always() && inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'full_horizon' }}
+    if: ${{ always() && inputs.cycles != 'screen' && inputs.cycles != 'acados' && inputs.cycles != 'acados_guard' && inputs.cycles != 'acados_recovery' && inputs.cycles != 'acados_lazy_recovery' && inputs.cycles != 'acados_homotopy' && inputs.cycles != 'acados_reduced_100' && inputs.cycles != 'acados_hybrid' && inputs.cycles != 'radau5_100' && inputs.cycles != 'radau35_comparison' && inputs.cycles != 'fatigue_endurance' && inputs.cycles != 'fatigue_endurance_radau5' && inputs.cycles != 'full_horizon' }}
     needs: [benchmark, acados-smoke]
     runs-on: ubuntu-24.04
     permissions:
