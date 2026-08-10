@@ -889,6 +889,28 @@ def test_acados_ipopt_recovery_cli_is_opt_in():
     assert comparison_lazy_args.acados_failed_rho_phase_one_recovery is True
 
 
+def test_prepared_rho_checkpoint_cli_parses_ordered_milestones():
+    cli = [
+        "--rho-prepared-checkpoint-output-template",
+        "prepared-{completed_windows}-for-{target_rho}.npz",
+        "--rho-prepared-checkpoint-windows",
+        "17,35,80",
+    ]
+
+    periodic_args = periodic_example.build_argument_parser().parse_args(cli)
+    comparison_args = comparison_example.build_cli().parse_args(cli)
+
+    assert periodic_args.rho_prepared_checkpoint_windows == (17, 35, 80)
+    assert comparison_args.rho_prepared_checkpoint_windows == (17, 35, 80)
+    assert periodic_args.rho_prepared_checkpoint_output_template.endswith(
+        "{target_rho}.npz"
+    )
+    with pytest.raises(SystemExit):
+        periodic_example.build_argument_parser().parse_args(
+            ["--rho-prepared-checkpoint-windows", "35,17"]
+        )
+
+
 def test_nlp_ipopt_recovery_cli_is_opt_in():
     parser = comparison_example.build_cli()
     args = parser.parse_args(
@@ -6416,6 +6438,11 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-lazy" in workflow
     assert "--acados-failed-rho-phase-one-recovery" in workflow
     assert 'if [[ "$variant" == *"phase-one-mechanical-lazy"* ]]; then' in workflow
+    assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-history" in workflow
+    assert "sqp-irk-fast-guard-2p6-replay-proactive-80" in workflow
+    assert "--rho-prepared-checkpoint-output-template" in workflow
+    assert "--rho-prepared-checkpoint-windows 17,35,80" in workflow
+    assert "--common-initial-solution-recenter-first-node-bounds" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2" in workflow

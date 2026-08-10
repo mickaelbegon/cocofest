@@ -795,6 +795,28 @@ def parse_terminal_wheel_q_slacks(raw_slacks: str) -> tuple[float, ...]:
     return slacks
 
 
+def parse_positive_window_indices(raw_indices: str) -> tuple[int, ...]:
+    """Parse unique, increasing one-based RHO checkpoint indices."""
+
+    try:
+        indices = tuple(
+            int(item.strip()) for item in raw_indices.split(",") if item.strip()
+        )
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "RHO checkpoint windows must be comma-separated integers."
+        ) from exc
+    if not indices or any(index < 1 for index in indices):
+        raise argparse.ArgumentTypeError(
+            "RHO checkpoint windows must be strictly positive."
+        )
+    if tuple(sorted(set(indices))) != indices:
+        raise argparse.ArgumentTypeError(
+            "RHO checkpoint windows must be unique and strictly increasing."
+        )
+    return indices
+
+
 def parse_transfer_bound_homotopy_fractions(
     raw_fractions: str,
 ) -> tuple[float, ...]:
@@ -1256,6 +1278,24 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "strictly certified window. The final file is a direct replay seed "
             "for the first numerically failing RHO; requires "
             "--retry-failed-rho-without-advance."
+        ),
+    )
+    parser.add_argument(
+        "--rho-prepared-checkpoint-output-template",
+        type=str,
+        default=None,
+        help=(
+            "Save the fully prepared primal immediately before selected RHO "
+            "solves. The path may contain {completed_windows} and {target_rho}."
+        ),
+    )
+    parser.add_argument(
+        "--rho-prepared-checkpoint-windows",
+        type=parse_positive_window_indices,
+        default=(),
+        help=(
+            "Comma-separated certified-window counts after which to export the "
+            "prepared next-RHO primal, for example 17,35,80."
         ),
     )
     parser.add_argument(
@@ -14445,6 +14485,40 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             "--rho-replay-checkpoint-output requires "
             "--retry-failed-rho-without-advance."
         )
+    prepared_checkpoint_template = getattr(
+        args, "rho_prepared_checkpoint_output_template", None
+    )
+    prepared_checkpoint_windows = tuple(
+        getattr(args, "rho_prepared_checkpoint_windows", ()) or ()
+    )
+    if bool(prepared_checkpoint_template) != bool(prepared_checkpoint_windows):
+        raise ValueError(
+            "--rho-prepared-checkpoint-output-template and "
+            "--rho-prepared-checkpoint-windows must be provided together."
+        )
+    if prepared_checkpoint_template and args.single_shot:
+        raise ValueError(
+            "Prepared RHO checkpoints require the receding-horizon mode."
+        )
+    if len(prepared_checkpoint_windows) > 1 and not (
+        "{completed_windows}" in prepared_checkpoint_template
+        or "{target_rho}" in prepared_checkpoint_template
+    ):
+        raise ValueError(
+            "Multiple prepared checkpoints require {completed_windows} or "
+            "{target_rho} in the output template."
+        )
+    if prepared_checkpoint_template:
+        try:
+            prepared_checkpoint_template.format(
+                completed_windows=1,
+                target_rho=2,
+            )
+        except (KeyError, ValueError) as exc:
+            raise ValueError(
+                "Prepared RHO checkpoint templates may only use "
+                "{completed_windows} and {target_rho}."
+            ) from exc
     initial_guess_diagnostics_requested = bool(
         getattr(args, "initial_guess_diagnostics", False)
         or (args.solver == "acados" and args.acados_diagnostics)
@@ -16206,9 +16280,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     "preserved_wheel_q="
                     f"{terminal_contact_projection.get('preserved_wheel_q')}"
                 )
-        if args.common_initial_solution_recenter_first_node_bounds or (
-            args.solver == "acados"
-            and not args.disable_periodic_fes_warmup_projection
+        if not args.disable_periodic_fes_warmup_projection and (
+            args.common_initial_solution_recenter_first_node_bounds
+            or args.solver == "acados"
         ):
             common_projection = project_periodic_fes_initial_guess(
                 nmpc,
@@ -16738,7 +16812,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         if args.rho_replay_checkpoint_output is not None
         else None
     )
+    rho_prepared_checkpoint_output_template = prepared_checkpoint_template
+    rho_prepared_checkpoint_windows = set(prepared_checkpoint_windows)
     rho_replay_checkpoint_summary = None
+    rho_prepared_checkpoint_summaries = []
     prepared_rho_primal_checkpoint = snapshot_initial_guess(nmpc)
     phase_one_recovery_attempted_target_rhos: set[int] = set()
 
@@ -18036,6 +18113,36 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             or getattr(args, "acados_failed_rho_phase_one_recovery", False)
         ):
             prepared_rho_primal_checkpoint = snapshot_initial_guess(_nmpc)
+        if (
+            continue_solving
+            and completed_physical_rhos in rho_prepared_checkpoint_windows
+        ):
+            target_rho = completed_physical_rhos + 1
+            checkpoint_path = Path(
+                rho_prepared_checkpoint_output_template.format(
+                    completed_windows=completed_physical_rhos,
+                    target_rho=target_rho,
+                )
+            ).expanduser().resolve()
+            _save_rho_replay_checkpoint(
+                checkpoint_path,
+                _nmpc,
+                args,
+                completed_windows=completed_physical_rhos,
+            )
+            checkpoint_summary = {
+                "available": True,
+                "path": str(checkpoint_path),
+                "completed_windows": completed_physical_rhos,
+                "target_rho": target_rho,
+            }
+            rho_prepared_checkpoint_summaries.append(checkpoint_summary)
+            if echo:
+                print(
+                    "rho_prepared_checkpoint: saved "
+                    f"completed_windows={completed_physical_rhos} "
+                    f"target_rho={target_rho} ({checkpoint_path})"
+                )
         return continue_solving
 
     solver_first_iter = None
@@ -18545,6 +18652,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             summary["acados_failed_rho_phase_one_summaries"] = (
                 acados_failed_rho_phase_one_summaries
             )
+        summary["rho_replay_checkpoint"] = rho_replay_checkpoint_summary
+        summary["rho_prepared_checkpoints"] = rho_prepared_checkpoint_summaries
         attach_exact_initial_nlp_audits(summary, nmpc)
         return summary
     raw_solver_attempt_summary = None
@@ -18712,6 +18821,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     summary["initial_guess_audits"] = initial_guess_audits
     summary["integrator_map_initial_guess"] = integrator_map_initial_guess
     summary["rho_replay_checkpoint"] = rho_replay_checkpoint_summary
+    summary["rho_prepared_checkpoints"] = rho_prepared_checkpoint_summaries
     summary["initial_guess_preparation_time_s"] = initial_guess_preparation_time_s
     summary["reduced_profile_build_time_s"] = getattr(
         args, "reduced_profile_build_time_s", 0.0

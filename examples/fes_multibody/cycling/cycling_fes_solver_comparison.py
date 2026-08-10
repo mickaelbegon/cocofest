@@ -34,6 +34,7 @@ try:
         parse_control_homotopy_radii,
         parse_crank_assistance,
         parse_proximal_control_weights,
+        parse_positive_window_indices,
         parse_terminal_wheel_q_slacks,
         parse_transfer_bound_homotopy_fractions,
         solve_case,
@@ -47,6 +48,7 @@ except ImportError:
         parse_control_homotopy_radii,
         parse_crank_assistance,
         parse_proximal_control_weights,
+        parse_positive_window_indices,
         parse_terminal_wheel_q_slacks,
         parse_transfer_bound_homotopy_fractions,
         solve_case,
@@ -215,6 +217,8 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "common_initial_solution_output",
     "allow_partial_receding_horizon_solution_output",
     "rho_replay_checkpoint_output",
+    "rho_prepared_checkpoint_output_template",
+    "rho_prepared_checkpoint_windows",
     "ipopt_hsl_library",
     "ipopt_c_compile",
     "ipopt_print_level",
@@ -3047,6 +3051,9 @@ def solver_overview_rows(results: dict[str, dict]) -> list[dict]:
                     "integrator_map_initial_guess"
                 ),
                 "rho_replay_checkpoint": result.get("rho_replay_checkpoint"),
+                "rho_prepared_checkpoints": (
+                    result.get("rho_prepared_checkpoints") or []
+                ),
                 "pulse_width_cycle_variation": pulse_width_cycle_variation(
                     result, performance["validated_cycles"]
                 ),
@@ -3270,6 +3277,8 @@ def main(
     receding_horizon_solution_output: str | Path | None = None,
     allow_partial_receding_horizon_solution_output: bool = False,
     rho_replay_checkpoint_output: str | Path | None = None,
+    rho_prepared_checkpoint_output_template: str | Path | None = None,
+    rho_prepared_checkpoint_windows: tuple[int, ...] = (),
     ipopt_hsl_library: str | None = None,
     ipopt_c_compile: bool = False,
     ipopt_print_level: int = 0,
@@ -3521,6 +3530,9 @@ def main(
     )
     rho_replay_checkpoint_output = resolve_invocation_path(
         rho_replay_checkpoint_output
+    )
+    rho_prepared_checkpoint_output_template = resolve_invocation_path(
+        rho_prepared_checkpoint_output_template
     )
     reduced_cycling_profile = resolve_invocation_path(reduced_cycling_profile)
     ipopt_hsl_library = resolve_invocation_path(ipopt_hsl_library)
@@ -3833,6 +3845,15 @@ def main(
     )
     ipopt_args.rho_replay_checkpoint_output = rho_replay_checkpoint_output
     acados_args.rho_replay_checkpoint_output = rho_replay_checkpoint_output
+    for solver_args in (ipopt_args, acados_args):
+        solver_args.rho_prepared_checkpoint_output_template = (
+            None
+            if rho_prepared_checkpoint_output_template is None
+            else str(rho_prepared_checkpoint_output_template)
+        )
+        solver_args.rho_prepared_checkpoint_windows = tuple(
+            rho_prepared_checkpoint_windows
+        )
     acados_args.experimental_reduced_acados = experimental_reduced_acados
     for name, value in (
         ("ipopt_print_level", ipopt_print_level),
@@ -5634,6 +5655,21 @@ def build_cli() -> argparse.ArgumentParser:
         default=None,
         help="Optional direct replay seed saved after each certified RHO shift.",
     )
+    parser.add_argument(
+        "--rho-prepared-checkpoint-output-template",
+        type=str,
+        default=None,
+        help=(
+            "Output template for primals saved after all next-RHO transfer "
+            "preparations; accepts {completed_windows} and {target_rho}."
+        ),
+    )
+    parser.add_argument(
+        "--rho-prepared-checkpoint-windows",
+        type=parse_positive_window_indices,
+        default=(),
+        help="Comma-separated certified-window milestones to export.",
+    )
     return parser
 
 
@@ -5685,6 +5721,10 @@ if __name__ == "__main__":
             args.allow_partial_receding_horizon_solution_output
         ),
         rho_replay_checkpoint_output=args.rho_replay_checkpoint_output,
+        rho_prepared_checkpoint_output_template=(
+            args.rho_prepared_checkpoint_output_template
+        ),
+        rho_prepared_checkpoint_windows=args.rho_prepared_checkpoint_windows,
         ipopt_hsl_library=args.ipopt_hsl_library,
         ipopt_c_compile=args.ipopt_c_compile,
         ipopt_print_level=args.ipopt_print_level,

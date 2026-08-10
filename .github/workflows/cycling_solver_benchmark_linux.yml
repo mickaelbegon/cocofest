@@ -852,6 +852,19 @@ jobs:
                 --common-initial-solution-output
                 "$GITHUB_WORKSPACE/acados-smoke-results/reference-reduced-feasible-seed.npz"
               )
+            elif [[ "$variant" == "sqp-irk-fast-guard-2p6-replay-proactive-80" ]]; then
+              common_seed="$GITHUB_WORKSPACE/acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-history-full/prepared-after-80-for-81.npz"
+              if [[ ! -f "$common_seed" ]]; then
+                echo "The proactive RHO-80 replay checkpoint is missing." >&2
+                return 2
+              fi
+              # The saved file is already the fully prepared primal for RHO
+              # 81. Bind the fresh OCP's first-node state to that continuation
+              # point, but do not apply the generic FES projection again.
+              common_seed_options+=(
+                --common-initial-solution-recenter-first-node-bounds
+                --disable-periodic-fes-warmup-projection
+              )
             elif [[ "$variant" == *fast-guard* ]]; then
               if [[ "$ACADOS_FATIGUE_ENDURANCE_ONLY" != "true" ]]; then
                 common_seed="$GITHUB_WORKSPACE/acados-smoke-results/reference-${mechanics}-feasible-seed.npz"
@@ -1165,6 +1178,13 @@ jobs:
                 --acados-transfer-phase-one-mode all
               )
             fi
+            if [[ "$variant" == "sqp-irk-fast-guard-2p6-phase-one-mechanical-history" ]]; then
+              solver_options+=(
+                --rho-prepared-checkpoint-output-template
+                "$case_dir/prepared-after-{completed_windows}-for-{target_rho}.npz"
+                --rho-prepared-checkpoint-windows 17,35,80
+              )
+            fi
 
             set +e
             set -o pipefail
@@ -1266,6 +1286,8 @@ jobs:
             run_case sqp-irk-reference full 1 SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-baseline full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-lazy full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-history full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            run_case sqp-irk-fast-guard-2p6-replay-proactive-80 full 1 SQP IRK 5 5
           elif [[ "$ACADOS_CADENCE_GUARD_ONLY" == "true" ]]; then
             # Focused physical A/B: preserve the common references, then test
             # only the two asymmetric fast-side cadence guards. This avoids
