@@ -4694,3 +4694,12 @@ resserre encore la borne : `19--33` valide 87 RHO puis échoue au RHO 88;
 post-gate, qui cherchait encore le JSON de la variante lazy retirée de cette
 campagne. Le gate est corrigé pour certifier `19--35`; le dernier test est
 `19--34`.
+
+Le run vert
+[31399758587](https://github.com/mickaelbegon/cocofest/actions/runs/31399758587)
+conclut la bissection : `19--34` échoue encore au RHO 88 avec un défaut
+dynamique `6.61e-4`, alors que `19--35` atteint `100/100`. Cette dernière
+séquence utilise 17 projections (`8.349 s`), une médiane solveur `0.0961 s`,
+une médiane murale `0.1119 s` et un P90 complet `0.7184 s`. Le gate compare
+désormais les cycles validés à la longueur demandée, ce qui permet le test de
+durabilité à 300 RHO sans coder la valeur 100 en dur.

@@ -1602,7 +1602,7 @@ jobs:
               .configurations.acados.acados_transfer_phase_one_target_rhos ==
                 [19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35] and
               (.results[0].error == null) and
-              (.results[0].validated_cycles == 100)
+              (.results[0].validated_cycles == .configurations.acados.n_windows)
             ' "$result"
           fi
           if [[ "$ACADOS_FATIGUE_ENDURANCE_ONLY" == "true" ]]; then

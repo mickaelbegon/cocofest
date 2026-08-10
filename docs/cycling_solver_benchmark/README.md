@@ -1048,6 +1048,12 @@ Le run suivant
 place cette borne à `34` ou `35` : `19--33` échoue au RHO 88, tandis que
 `19--35` atteint `100/100` et reproduit l'objectif/AUC de `19--36`. Son statut
 rouge est un défaut du post-gate CI, corrigé depuis, et non un échec ACADOS.
+Le
+[run 31399758587](https://github.com/mickaelbegon/cocofest/actions/runs/31399758587)
+termine la bissection : `19--34` échoue aussi au RHO 88, tandis que `19--35`
+reste `100/100`. La fenêtre minimale certifiée est donc `19--35`, soit 17
+projections acceptées, `8.349 s` de Phase I cumulée, `0.1119 s` de temps mural
+médian par RHO et `0.7184 s` au P90 lorsque la Phase I est imputée au RHO.
 L'export/replay natif complet des variables HPIPM reste utile pour expliquer le
 replay isolé, mais n'est pas requis pour ce chemin de production.
 

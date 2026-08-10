@@ -89,7 +89,9 @@ la séquence 19--36 atteint `100/100` avec 18 projections acceptées et `8.479 s
 de Phase I cumulée. Bisecte maintenant la borne supérieure en testant d'abord
 19--27 et 19--31, toujours dans la même capsule ACADOS persistante. Le run
 `31396677025` a depuis rejeté les deux : ils s'arrêtent respectivement aux RHO
-86 et 87. La prochaine campagne légère teste 19--33 et 19--35 contre 19--36.
+86 et 87. Les runs `31398686286` et `31399758587` terminent la bissection :
+19--34 échoue au RHO 88 et 19--35 atteint 100/100. La prochaine campagne teste
+la fenêtre minimale 19--35 sur 300 RHO.
 
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un

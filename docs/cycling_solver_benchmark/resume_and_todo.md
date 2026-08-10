@@ -520,14 +520,16 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
 6. [résultat scientifique disponible, run `31398686286`] `19--33` échoue au
    RHO 88; `19--35` et `19--36` atteignent `100/100`. Le run est rouge à cause
    d'un post-gate qui cherchait encore l'ancien fichier lazy, pas du solveur.
-7. [CI préparée] Corriger ce gate et tester la dernière borne `19--34` contre
-   le témoin certifié `19--35`.
-8. Construire ensuite un prédicteur déterministe et bon marché des projections
+7. [fait, run `31399758587`] `19--34` échoue encore au RHO 88; `19--35`
+   atteint `100/100`. La fenêtre minimale certifiée contient 17 projections.
+8. [CI préparée] Tester `19--35` sur 300 RHO et exiger que le nombre validé
+   égale la longueur demandée.
+9. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-9. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+10. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
-10. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+11. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
