@@ -1310,15 +1310,20 @@ jobs:
             run_case sqp-irk-fast-guard-2p6-phase-one-all full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-byrd-fast-guard-2p6 full "$ACADOS_SMOKE_RHOS" SQP_WITH_FEASIBLE_QP IRK 5 5
           elif [[ "$ACADOS_LAZY_RECOVERY_ONLY" == "true" ]]; then
-            # Focused causal bisection on one runner. Earlier runs certified
-            # 19--36 and rejected 19--27 and 19--31, so retain only the
-            # successful control and the final upper-bound candidate.
+            # Focused causal campaign on one runner. Up to 100 RHO this
+            # bisects the first transition. Beyond 100 RHO, compare the
+            # minimal first-window schedule to proactive mechanical Phase I
+            # so a later basin transition can be located from trajectories.
             printf '%s\n' \
               sqp-irk-reference-full \
               > acados-smoke-results/reference-cases.txt
             run_case sqp-irk-reference full 1 SQP IRK 5 5
-            run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-34 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
             run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-35 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            if (( ACADOS_SMOKE_RHOS <= 100 )); then
+              run_case sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-34 full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            else
+              run_case sqp-irk-fast-guard-2p6-phase-one-mechanical full "$ACADOS_SMOKE_RHOS" SQP IRK 5 5
+            fi
           elif [[ "$ACADOS_CADENCE_GUARD_ONLY" == "true" ]]; then
             # Focused physical A/B: preserve the common references, then test
             # only the two asymmetric fast-side cadence guards. This avoids
@@ -1526,6 +1531,7 @@ jobs:
           ACADOS_LAZY_RECOVERY_ONLY: ${{ inputs.cycles == 'acados_lazy_recovery' }}
           ACADOS_REDUCED_100_ONLY: ${{ inputs.cycles == 'acados_reduced_100' }}
           ACADOS_FATIGUE_ENDURANCE_ONLY: ${{ inputs.cycles == 'fatigue_endurance' }}
+          ACADOS_SMOKE_RHOS: ${{ inputs.acados_smoke_rhos }}
         run: |
           mapfile -t expected_cases < acados-smoke-results/expected-cases.txt
           if [[ "${#expected_cases[@]}" -lt 1 ]]; then
@@ -1597,10 +1603,12 @@ jobs:
             ' "$result"
           done
           if [[ "$ACADOS_LAZY_RECOVERY_ONLY" == "true" ]]; then
-            result="acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-35-full/result.json"
+            if (( ACADOS_SMOKE_RHOS <= 100 )); then
+              result="acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-target-19-35-full/result.json"
+            else
+              result="acados-smoke-results/sqp-irk-fast-guard-2p6-phase-one-mechanical-full/result.json"
+            fi
             jq -e '
-              .configurations.acados.acados_transfer_phase_one_target_rhos ==
-                [19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35] and
               (.results[0].error == null) and
               (.results[0].validated_cycles == .configurations.acados.n_windows)
             ' "$result"

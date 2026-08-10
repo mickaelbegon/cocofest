@@ -91,7 +91,10 @@ de Phase I cumulée. Bisecte maintenant la borne supérieure en testant d'abord
 `31396677025` a depuis rejeté les deux : ils s'arrêtent respectivement aux RHO
 86 et 87. Les runs `31398686286` et `31399758587` terminent la bissection :
 19--34 échoue au RHO 88 et 19--35 atteint 100/100. La prochaine campagne teste
-la fenêtre minimale 19--35 sur 300 RHO.
+la fenêtre minimale 19--35 sur 300 RHO. Le run `31400668993` montre depuis un
+arrêt numérique au RHO 141, sans fatigue confirmée. Le workflow long compare
+maintenant `19--35` à la Phase I proactive 300 RHO pour localiser la seconde
+bifurcation.
 
 Ne rouvre pas PARDISO/MadNLP, Alpaqa, FATROP/RK4 ou un surrogate neuronal sans
 un élément nouveau. MUMPS reste le backend MadNLP. FATROP full n'est plus un

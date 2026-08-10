@@ -4703,3 +4703,12 @@ séquence utilise 17 projections (`8.349 s`), une médiane solveur `0.0961 s`,
 une médiane murale `0.1119 s` et un P90 complet `0.7184 s`. Le gate compare
 désormais les cycles validés à la longueur demandée, ce qui permet le test de
 durabilité à 300 RHO sans coder la valeur 100 en dur.
+
+Ce gate 300 RHO, run
+[31400668993](https://github.com/mickaelbegon/cocofest/actions/runs/31400668993),
+échoue de façon informative : la fenêtre `19--35` valide 140 RHO et s'arrête
+au 141 avec un défaut dynamique `1.05e-3`. La capacité minimale `0.946` et
+l'outcome `unconfirmed_endurance_stop` excluent une fatigue terminale. Le
+workflow long compare désormais cette fenêtre au témoin Phase I mécanique
+proactif sur la même machine; leurs trajectoires serviront à localiser la
+deuxième bifurcation avant de définir une deuxième fenêtre sélective.

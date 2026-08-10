@@ -522,14 +522,17 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
    d'un post-gate qui cherchait encore l'ancien fichier lazy, pas du solveur.
 7. [fait, run `31399758587`] `19--34` échoue encore au RHO 88; `19--35`
    atteint `100/100`. La fenêtre minimale certifiée contient 17 projections.
-8. [CI préparée] Tester `19--35` sur 300 RHO et exiger que le nombre validé
-   égale la longueur demandée.
-9. Construire ensuite un prédicteur déterministe et bon marché des projections
+8. [fait, run `31400668993`] `19--35` valide 140 RHO puis échoue au 141;
+   capacité minimale `0.946`, arrêt fatigue non confirmé. C'est une nouvelle
+   perte de bassin numérique.
+9. [CI préparée] Comparer sur 300 RHO `19--35` et la Phase I mécanique
+   proactive; utiliser les trajectoires pour localiser la seconde bifurcation.
+10. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
-10. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
+11. Implémenter ensuite le DOP853 remis à l'état certifié par RHO et le replay
    des mêmes PW en mécanique reduced.
-11. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
+12. En parallèle scientifique seulement, poursuivre le transfert croisé R5/R6;
    ne pas confondre cette validation de transcription avec l'ablation ACADOS.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19

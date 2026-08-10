@@ -6472,6 +6472,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "phase-one-mechanical-target-19-35" in workflow
     assert "phase-one-mechanical-target-19-36" in workflow
     assert ".results[0].validated_cycles == .configurations.acados.n_windows" in workflow
+    assert "if (( ACADOS_SMOKE_RHOS <= 100 )); then" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2" in workflow

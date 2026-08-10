@@ -1057,6 +1057,15 @@ médian par RHO et `0.7184 s` au P90 lorsque la Phase I est imputée au RHO.
 L'export/replay natif complet des variables HPIPM reste utile pour expliquer le
 replay isolé, mais n'est pas requis pour ce chemin de production.
 
+Cette fenêtre n'est toutefois pas durable à 300 RHO. Le
+[run 31400668993](https://github.com/mickaelbegon/cocofest/actions/runs/31400668993)
+valide 140 RHO puis échoue au 141 (`ACADOS_MAXITER`, défaut dynamique
+`1.05e-3`). La capacité minimale vaut encore `0.946` et le classificateur
+d'endurance retourne `unconfirmed_endurance_stop` : ce n'est pas un arrêt par
+fatigue. `19--35` est donc la meilleure fenêtre **100 RHO**, pas encore une
+politique de production longue durée. La campagne suivante compare la Phase I
+proactive sur 300 RHO afin de localiser une seconde transition de bassin.
+
 L'autre limite est scientifique. Le rollout DOP853 full actuellement publié
 enchaîne les 100 cycles sans remettre la contrainte de pédalier sur la variété,
 alors que le RHO repart d'un état certifié à chaque cycle. Avant de qualifier
