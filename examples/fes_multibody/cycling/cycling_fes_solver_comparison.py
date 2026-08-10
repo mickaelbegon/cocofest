@@ -3446,6 +3446,7 @@ def main(
     acados_transfer_bound_homotopy_min_fraction_step: float = 0.0,
     acados_transfer_bound_homotopy_max_refinements: int = 0,
     shared_initial_phase_one: bool = False,
+    disable_full_dynamics_phase_one: bool = False,
     shared_transfer_rollout_substeps: int = 5,
     shared_transfer_rollout_max_bound_violation: float = 1.0,
     acados_transfer_select_projected_candidate: bool = False,
@@ -4047,6 +4048,9 @@ def main(
             acados_transfer_phase_one_max_fes_change
         )
         solver_args.full_dynamics_phase_one = shared_initial_phase_one
+        solver_args.disable_full_dynamics_phase_one = (
+            disable_full_dynamics_phase_one
+        )
         solver_args.acados_transfer_rollout_substeps = shared_transfer_rollout_substeps
         solver_args.acados_transfer_rollout_max_bound_violation = (
             shared_transfer_rollout_max_bound_violation
@@ -4919,6 +4923,14 @@ def build_cli() -> argparse.ArgumentParser:
         help=(
             "Apply the same per-muscle Ding pulse-width compensation to IPOPT "
             "and ACADOS transfers; use with --ipopt-profile acados_like."
+        ),
+    )
+    parser.add_argument(
+        "--disable-full-dynamics-phase-one",
+        action="store_true",
+        help=(
+            "Preserve an already prepared common primal by preventing the "
+            "ACADOS assisted hot start from enabling initial Phase I."
         ),
     )
     parser.add_argument(
@@ -5992,6 +6004,7 @@ if __name__ == "__main__":
             args.acados_transfer_bound_homotopy_max_refinements
         ),
         shared_initial_phase_one=args.shared_initial_phase_one,
+        disable_full_dynamics_phase_one=args.disable_full_dynamics_phase_one,
         shared_transfer_rollout_substeps=args.shared_transfer_rollout_substeps,
         shared_transfer_rollout_max_bound_violation=(
             args.shared_transfer_rollout_max_bound_violation

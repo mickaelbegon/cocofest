@@ -691,7 +691,11 @@ def apply_assisted_hot_start_defaults(args: argparse.Namespace) -> None:
         getattr(args, "acados_assisted_hot_start", True) and args.solver == "acados"
     )
     common_target_seed = bool(getattr(args, "common_initial_solution", None))
-    if assisted_hot_start and common_target_seed:
+    if (
+        assisted_hot_start
+        and common_target_seed
+        and not getattr(args, "disable_full_dynamics_phase_one", False)
+    ):
         # The common IPOPT solution is physically relevant but its collocation
         # interior does not directly satisfy the ACADOS shooting map. Rebuild
         # the five-state periodic Ding trajectory, then reduce the remaining
@@ -2362,6 +2366,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help=(
             "Apply a bounded proximal projection of the complete dynamics before solving. "
             "This is a feasibility diagnostic, not a replacement for solver convergence."
+        ),
+    )
+    parser.add_argument(
+        "--disable-full-dynamics-phase-one",
+        action="store_true",
+        help=(
+            "Prevent the ACADOS assisted hot-start defaults from enabling the "
+            "initial complete-dynamics Phase I. This is intended for exact "
+            "replay of a primal that has already been fully prepared."
         ),
     )
     parser.add_argument(
@@ -14549,6 +14562,11 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
 
     if args.n_windows < 1:
         raise ValueError("--n-windows must be >= 1")
+    if args.full_dynamics_phase_one and args.disable_full_dynamics_phase_one:
+        raise ValueError(
+            "--full-dynamics-phase-one and --disable-full-dynamics-phase-one "
+            "cannot be combined."
+        )
     if args.n_threads < 1:
         raise ValueError("--n-threads must be >= 1")
     if args.acados_ipopt_recovery:

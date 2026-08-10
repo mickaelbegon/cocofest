@@ -911,6 +911,22 @@ def test_prepared_rho_checkpoint_cli_parses_ordered_milestones():
         )
 
 
+def test_assisted_hot_start_can_preserve_an_exact_prepared_primal():
+    args = periodic_example.build_argument_parser().parse_args(
+        [
+            "--solver",
+            "acados",
+            "--common-initial-solution",
+            "prepared-rho.npz",
+            "--disable-full-dynamics-phase-one",
+        ]
+    )
+
+    periodic_example.apply_assisted_hot_start_defaults(args)
+
+    assert args.full_dynamics_phase_one is False
+
+
 def test_nlp_ipopt_recovery_cli_is_opt_in():
     parser = comparison_example.build_cli()
     args = parser.parse_args(
@@ -6443,6 +6459,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "--rho-prepared-checkpoint-output-template" in workflow
     assert "--rho-prepared-checkpoint-windows 17,35,80" in workflow
     assert "--common-initial-solution-recenter-first-node-bounds" in workflow
+    assert "--disable-full-dynamics-phase-one" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-3" in workflow
     assert "sqp-irk-fast-guard-2p6-phase-one-mechanical-screen-1e-2" in workflow

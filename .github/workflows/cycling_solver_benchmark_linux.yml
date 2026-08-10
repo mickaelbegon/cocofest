@@ -864,6 +864,7 @@ jobs:
               common_seed_options+=(
                 --common-initial-solution-recenter-first-node-bounds
                 --disable-periodic-fes-warmup-projection
+                --disable-full-dynamics-phase-one
               )
             elif [[ "$variant" == *fast-guard* ]]; then
               if [[ "$ACADOS_FATIGUE_ENDURANCE_ONLY" != "true" ]]; then
