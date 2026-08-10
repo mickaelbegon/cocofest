@@ -6421,6 +6421,7 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert workflow.count(".solver_attempt_accounting.attempt_count // 0") >= 3
     assert "solver_options+=(--validate-integrator-maps)" in workflow
     assert '--arg recovery_only "$ACADOS_RECOVERY_ONLY"' in workflow
+    assert '--arg lazy_recovery_only "$ACADOS_LAZY_RECOVERY_ONLY"' in workflow
     assert "ipopt-radau5-reduced" in workflow
     assert "madnlp-mumps-radau5-reduced" in workflow
     assert "ipopt-radau5-full" in workflow
