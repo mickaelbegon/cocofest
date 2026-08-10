@@ -560,6 +560,7 @@ jobs:
             --experimental-reduced-acados \
             --compact-rho-output \
             --common-initial-solution benchmark-seed/common-reduced.npz \
+            --common-initial-solution-recenter-first-node-bounds \
             --adopt-common-initial-solution-warmup-cycles \
             --disable-acados-assisted-hot-start \
             --acados-disable-standard-ipopt-warmup \

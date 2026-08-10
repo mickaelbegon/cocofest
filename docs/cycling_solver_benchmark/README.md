@@ -1385,6 +1385,15 @@ intégrateur indépendant reduced avec remise sur la variété à chaque RHO. Ta
 que ce gate apparié n'est pas fait, le gain de temps ACADOS est démontré, mais
 son gain apparent de fatigue reste une hypothèse de branche optimale.
 
+La cause du désappariement historique est localisée : l'import du seed commun
+remplaçait `x_init`, mais ACADOS reduced conservait les bornes du premier nœud
+aux valeurs de repos parce que son warmup IPOPT standard était volontairement
+désactivé. Le workflow fixe désormais explicitement les bornes du premier
+nœud sur le seed importé avec
+`--common-initial-solution-recenter-first-node-bounds`. Ce changement est une
+correction du protocole expérimental; ses nouveaux coûts et temps ne doivent
+pas être mélangés avec les valeurs historiques ci-dessus avant la relance.
+
 ## 7. Reproductibilité
 
 Le workflow de benchmark est

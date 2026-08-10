@@ -440,6 +440,9 @@ invalide.
   indépendant. La comparaison historique à 145 RHO démontre le gain de temps
   ACADOS, mais son gain apparent de fatigue est confondu avec un seed initial
   moins fatigué.
+  Le workflow ACADOS recentre maintenant les bornes du premier nœud sur le
+  seed commun; il reste à certifier ce nouveau chemin en CI et à comparer les
+  trois premiers états exportés.
 
 Le critère intermédiaire est atteint : le RHO 81 est franchi sans relâcher les
 contraintes et le solveur passe `100/100` sous `1 s` projection incluse. Le
