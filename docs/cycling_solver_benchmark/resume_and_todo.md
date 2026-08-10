@@ -514,8 +514,8 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
    identiques : l'état interne ACADOS/HPIPM contribue au succès en chaîne.
 4. [fait, run `31394895014`] Phase I au seul RHO 19 échoue encore au RHO 81;
    la séquence 19--36 atteint `100/100` avec 18 projections (`8.479 s`).
-5. [en cours] Bisecter la borne supérieure de la fenêtre certifiée, en testant
-   d'abord `19--27` et `19--31`, sans recréer la capsule ACADOS.
+5. [CI préparée] Bisecter la borne supérieure de la fenêtre certifiée, en
+   testant d'abord `19--27` et `19--31`, sans recréer la capsule ACADOS.
 6. Construire ensuite un prédicteur déterministe et bon marché des projections
    utiles à partir des défauts `q/qdot`, du changement d'ensemble actif PW et
    de la distance aux bornes; mesurer faux positifs, faux négatifs et coût.
