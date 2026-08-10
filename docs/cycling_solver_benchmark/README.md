@@ -244,9 +244,12 @@ d'acceptation caché.
 
 Le gate Linux reduced prépare le seed avec un raffinement IPOPT/Radau-5 en SX,
 puis le propage une fois avec la carte IRK générée par ACADOS avant le premier
-SQP. Le gate full construit d'abord une solution ACADOS full certifiée avec le
-bridge reduced-to-full déjà validé, puis force le chemin de recovery depuis
-cette trajectoire native. Le gate reduced conserve son primal Radau préparé :
+SQP. Le gate full construit d'abord une solution ACADOS full certifiée par le
+NLP avec le bridge reduced-to-full déjà validé, puis force le chemin de
+recovery depuis la trajectoire physiquement auditée produite par l'OCP cible
+muni de la garde rapide `2.60`. Le seed natif intermédiaire n'est pas présenté
+comme résultat physique : son excursion inter-nœuds historique est justement
+la raison d'être de cette garde. Le gate reduced conserve son primal Radau préparé :
 une trajectoire IRK pourtant certifiée peut violer les contraintes de la
 transcription collocation lors de l'injection directe. Ce choix évite de
 confondre la validation du câblage
@@ -342,7 +345,7 @@ gain important, même lorsqu'elle ne réduit pas le temps de calcul.
 | Après un échec, aucun shift ni transfert du primal; deux essais sur le même RHO | L'ancien loop Bioptim avançait parfois une solution non convergée, créant un faux motif « échec puis succès » | Le préfixe d'endurance ne peut plus être artificiellement prolongé après une non-convergence | Correctif `ae42595`; une première CI a révélé un relais CLI manquant, corrigé avant la relance |
 | Arrêt endurance après deux échecs et plafond porté à 2 000 RHO | Un arrêt attendu par fatigue est un résultat expérimental, pas une panne CI; 1 000 RHO pouvait être insuffisant | Distingue `fatigue_limited_candidate`, horizon complété et arrêt numérique non confirmé | La fatigue exige aussi une baisse de `A/A_scale` et une saturation PW; la non-convergence seule ne suffit jamais |
 | ACADOS 0.5.5, IRK, rollout/projection et Phase-I | Explorer une résolution sous la seconde avec des OCP précompilés et des paramètres runtime | Premier RHO reduced autour de `0.10 s`; solve nominal très rapide | Pas encore robuste en endurance (`1/100` dans le dernier cas reduced audité); ne pas annoncer un gain exploitable avant correction du transfert |
-| Reprise hybride ACADOS full/reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, avec un OCP IPOPT strictement isomorphe à la formulation cible | Reduced : gate Linux `5/5`, ACADOS chaud médian `0.246 s`, P90 `0.683 s`; full : identité structurelle validée, seed générique rejeté car physiquement incohérent | Le gate full utilise désormais un seed ACADOS natif certifié; sa certification CI puis le test naturel au RHO 141 restent requis |
+| Reprise hybride ACADOS full/reduced → IPOPT/Radau-5 | Restaurer le **même** RHO lorsque le SQP ACADOS reste non certifié, avec un OCP IPOPT strictement isomorphe à la formulation cible | Reduced : gate Linux `5/5`, ACADOS chaud médian `0.246 s`, P90 `0.683 s`; full : identité structurelle validée, seed générique rejeté car physiquement incohérent | Le gate full utilise un bridge ACADOS natif certifié par le NLP, puis exige l'audit physique sur l'OCP cible gardé; le smoke complet puis le test naturel au RHO 141 restent requis |
 | Alpaqa retiré du benchmark actif | L'intégration testée n'a pas fourni une chaîne RHO fonctionnelle et certifiable | Évite de consommer du temps CI sur un backend non opérationnel | Le diagnostic reste documenté; aucune comparaison de performance ne serait honnête |
 
 Les premiers dispatches

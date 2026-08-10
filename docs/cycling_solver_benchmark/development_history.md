@@ -4741,7 +4741,7 @@ avait déjà `0.63 rad` d'erreur de contact et `5.28 rad/s` de résidu tangent.
 ACADOS l'a rejeté, puis IPOPT/Radau-5 a atteint 2 000 itérations avec
 `inf_pr ≈ 382` lors des deux essais. Ce n'est pas un défaut du mapping de
 recovery. Le gate corrigé fabrique d'abord, hors mesure online, une trajectoire
-full native certifiée avec le bridge reduced-to-full éprouvé. Lors de
+full native certifiée par le NLP avec le bridge reduced-to-full éprouvé. Lors de
 l'interruption artificielle, IPOPT reçoit explicitement la solution cible
 certifiée (`seed_source=certified_target_solution`), tandis qu'un échec naturel
 continue d'utiliser le primal préparé du RHO gelé.
@@ -4755,3 +4755,13 @@ strict `1e-5`, alors que le solve final valide bien `5/5` RHO. Le gate reduced
 doit donc conserver son primal Radau préparé. La provenance ACADOS native est
 réservée au smoke full, qui en a besoin pour éviter le bridge `common-full`
 non physique; aucun seuil n'a été relâché.
+
+Le run
+[31410451228](https://github.com/mickaelbegon/cocofest/actions/runs/31410451228)
+a ensuite produit correctement le seed full natif, puis l'a arrêté dans un
+post-gate trop strict : l'OCP de bridge non gardé est validé par le solveur,
+mais son audit continu retrouve l'excursion rapide inter-nœuds déjà connue
+(`0.403 rad/s`). Ce fichier n'est qu'un seed intermédiaire. Le gate distingue
+désormais explicitement la certification NLP du bridge et la certification
+physique obligatoire du vrai OCP hybride muni de la garde `2.60`; seul ce
+dernier peut contribuer au préfixe RHO validé.

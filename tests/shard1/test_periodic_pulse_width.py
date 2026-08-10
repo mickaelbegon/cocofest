@@ -6492,6 +6492,8 @@ def test_github_acados_runner_uses_reference_and_option_profiles_sequentially():
     assert "ACADOS full/reduced — IPOPT/Radau-5 recovery wiring" in workflow
     assert "full-reference/native-full-seed.npz" in workflow
     assert '.seed_source == "certified_target_solution"' in workflow
+    assert ".results[0].nlp_validated_cycles == 1" in workflow
+    assert ".results[0].mechanical_equivalence_audit.passes_physical_crank_velocity_bounds == true" in workflow
     recovery_source = Path(
         periodic_example.__file__
     ).read_text(encoding="utf-8")

@@ -572,10 +572,14 @@ jobs:
           # The generic common-full bridge is intentionally solver-neutral,
           # but its redundant q/qdot coordinates are not a feasible starting
           # point for a forced full recovery (run 31405588817: 0.63 rad
-          # contact error). First certify one native full ACADOS trajectory
+          # contact error). First obtain one solver-certified native full
+          # ACADOS trajectory
           # with the established reduced-to-full preparation, and persist it
-          # as the deterministic wiring seed. This one-time preparation is
-          # reported separately and is not an online recovery measurement.
+          # as the deterministic wiring seed. This unguarded bridge is not a
+          # physical result: the following target OCP applies the 2.60 rad/s
+          # fast-side guard and must pass the complete mechanical audit. This
+          # one-time preparation is reported separately and is not an online
+          # recovery measurement.
           mkdir -p acados-ipopt-hybrid-results/full-reference
           python examples/fes_multibody/cycling/cycling_fes_solver_comparison.py \
             --solvers acados \
@@ -623,9 +627,9 @@ jobs:
             --compact-rho-output \
             --output-json acados-ipopt-hybrid-results/full-reference/result.json
           jq -e '
-            .results[0].success == true and
-            .results[0].validated_cycles == 1 and
-            .results[0].mechanical_equivalence_audit.passes_tolerance == true
+            .results[0].solver_success == true and
+            .results[0].nlp_validated_cycles == 1 and
+            .results[0].mechanical_equivalence_audit.available == true
           ' acados-ipopt-hybrid-results/full-reference/result.json
           test -f acados-ipopt-hybrid-results/full-reference/native-full-seed.npz
 
@@ -676,6 +680,8 @@ jobs:
             .configurations.acados.mechanical_formulation == "full" and
             .results[0].success == true and
             .results[0].validated_cycles == 5 and
+            .results[0].mechanical_equivalence_audit.passes_tolerance == true and
+            .results[0].mechanical_equivalence_audit.passes_physical_crank_velocity_bounds == true and
             .results[0].acados_ipopt_recovery.attempt_count >= 1 and
             .results[0].acados_ipopt_recovery.injected_count >= 1 and
             any(.results[0].acados_ipopt_recovery_summaries[];
