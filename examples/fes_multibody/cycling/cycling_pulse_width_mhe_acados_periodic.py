@@ -10092,6 +10092,14 @@ def initialize_acados_native_solver_for_rollout(periodic_nmpc, solver):
             "Bioptim did not create the native ACADOS solver required by the "
             "initial IRK rollout."
         )
+    # The common seed may recenter first-node bounds after Bioptim has created
+    # the Python interface but before the native capsule exists.  The earlier
+    # synchronization is then necessarily a no-op and the interface retains
+    # stale path/terminal arrays.  Push every current bound into the native
+    # interface now, before either the IRK rollout or the first SQP.
+    sync_bounds = getattr(periodic_nmpc, "_sync_acados_state_bounds", None)
+    if callable(sync_bounds):
+        sync_bounds()
     return interface
 
 

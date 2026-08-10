@@ -10294,7 +10294,10 @@ def test_initial_acados_irk_rollout_initializes_native_solver_without_solving():
             return native_solver
 
     interface = FakeInterface()
-    nmpc = SimpleNamespace(ocp_solver=None)
+    nmpc = SimpleNamespace(
+        ocp_solver=None,
+        _sync_acados_state_bounds=lambda: events.append("sync_bounds"),
+    )
 
     def set_ocp_solver(solver):
         events.append(("set_ocp_solver", solver))
@@ -10309,7 +10312,11 @@ def test_initial_acados_irk_rollout_initializes_native_solver_without_solving():
 
     assert returned_interface is interface
     assert interface.ocp_solver is native_solver
-    assert events == [("set_ocp_solver", solver_options), "initialize"]
+    assert events == [
+        ("set_ocp_solver", solver_options),
+        "initialize",
+        "sync_bounds",
+    ]
 
 
 def test_projected_acados_transfer_selector_keeps_mechanically_better_rollout(

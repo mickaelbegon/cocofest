@@ -443,6 +443,11 @@ invalide.
   Le workflow ACADOS recentre maintenant les bornes du premier nœud sur le
   seed commun; il reste à certifier ce nouveau chemin en CI et à comparer les
   trois premiers états exportés.
+  Le premier essai (`31442152939`) a exposé des bornes ACADOS mises en cache
+  avant le recentrage : RHO 1 converge mais atteint `omega=-10.212 rad/s`,
+  puis RHO 2 échoue. La capsule native resynchronise désormais les bornes
+  courantes avant le rollout IRK et le premier SQP; ce correctif doit être
+  recertifié.
 
 Le critère intermédiaire est atteint : le RHO 81 est franchi sans relâcher les
 contraintes et le solveur passe `100/100` sous `1 s` projection incluse. Le
