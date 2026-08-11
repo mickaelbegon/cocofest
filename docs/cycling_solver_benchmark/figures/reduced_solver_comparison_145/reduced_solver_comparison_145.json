@@ -3,54 +3,54 @@
   "pairwise_control_differences": {
     "ACADOS + IPOPT vs IPOPT R5": {
       "Biceps": {
-        "correlation": -0.05243487325059493,
-        "mae_us": 40.140378465664135,
-        "maximum_absolute_error_us": 468.59477013343883,
-        "rmse_us": 126.80773277842162
+        "correlation": 0.019788723216803625,
+        "mae_us": 37.46037475462641,
+        "maximum_absolute_error_us": 468.5948074137282,
+        "rmse_us": 123.63734184585898
       },
       "Delt_ant": {
-        "correlation": -0.016508615724840397,
-        "mae_us": 0.6300777309462618,
-        "maximum_absolute_error_us": 94.93816416365857,
-        "rmse_us": 4.285223203591581
+        "correlation": -0.005098295470506137,
+        "mae_us": 0.360278205161883,
+        "maximum_absolute_error_us": 94.93818557012418,
+        "rmse_us": 4.015340878427271
       },
       "Delt_post": {
-        "correlation": 0.2462146613604887,
-        "mae_us": 0.009578553346885668,
-        "maximum_absolute_error_us": 0.8008229870168861,
-        "rmse_us": 0.04400356526752134
+        "correlation": 0.12048716944872645,
+        "mae_us": 0.004326477720308806,
+        "maximum_absolute_error_us": 0.09442463983603488,
+        "rmse_us": 0.012192185324580489
       },
       "Triceps": {
-        "correlation": 0.18950242651298532,
-        "mae_us": 9.620117086976906,
-        "maximum_absolute_error_us": 101.06745335612138,
-        "rmse_us": 23.499251012416327
+        "correlation": 0.03973643886750825,
+        "mae_us": 10.813487094796868,
+        "maximum_absolute_error_us": 150.96268365833666,
+        "rmse_us": 24.088979379248464
       }
     },
     "ACADOS + IPOPT vs MadNLP R5": {
       "Biceps": {
-        "correlation": -0.05274577902702262,
-        "mae_us": 40.68606197467238,
-        "maximum_absolute_error_us": 468.59500645589696,
-        "rmse_us": 128.0592615839256
+        "correlation": 0.01888247462197834,
+        "mae_us": 37.991882074870404,
+        "maximum_absolute_error_us": 468.5950072908437,
+        "rmse_us": 124.90781438879482
       },
       "Delt_ant": {
-        "correlation": -0.016718481999672206,
-        "mae_us": 0.63191208770682,
-        "maximum_absolute_error_us": 93.04978182209115,
-        "rmse_us": 4.25756812258074
+        "correlation": -0.005483956752237351,
+        "mae_us": 0.362188996560435,
+        "maximum_absolute_error_us": 93.04980385859784,
+        "rmse_us": 3.9858061460317398
       },
       "Delt_post": {
-        "correlation": 0.24584773691619474,
-        "mae_us": 0.008091181728790206,
-        "maximum_absolute_error_us": 0.8241886323420147,
-        "rmse_us": 0.04591714343536143
+        "correlation": 0.09877891442018571,
+        "mae_us": 0.0001818499093842508,
+        "maximum_absolute_error_us": 0.06397892430990737,
+        "rmse_us": 0.0019296070675708646
       },
       "Triceps": {
-        "correlation": 0.17374632683711785,
-        "mae_us": 9.866494505525539,
-        "maximum_absolute_error_us": 101.06758287387004,
-        "rmse_us": 23.83189900723602
+        "correlation": 0.025693721109732285,
+        "mae_us": 10.982497405957577,
+        "maximum_absolute_error_us": 150.96276003751998,
+        "rmse_us": 24.376427816893873
       }
     },
     "MadNLP R5 vs IPOPT R5": {
@@ -88,75 +88,75 @@
     "ACADOS + IPOPT": {
       "control_summary": {
         "Biceps": {
-          "fraction_at_lower_bound": 0.9335632183908046,
-          "fraction_at_upper_bound": 0.013793103448275862,
-          "maximum_us": 599.9998619809453,
-          "mean_us": 144.08301113084386,
-          "minimum_us": 131.4050003901399,
-          "standard_deviation_us": 62.3348848399301
+          "fraction_at_lower_bound": 0.9627586206896551,
+          "fraction_at_upper_bound": 0.0018390804597701149,
+          "maximum_us": 599.9999744413332,
+          "mean_us": 143.31599322115477,
+          "minimum_us": 131.40500002799698,
+          "standard_deviation_us": 63.47645422259082
         },
         "Delt_ant": {
-          "fraction_at_lower_bound": 0.9662068965517241,
+          "fraction_at_lower_bound": 0.9983908045977011,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 141.41790046758405,
-          "mean_us": 131.67482194541762,
-          "minimum_us": 131.4050001942438,
-          "standard_deviation_us": 1.4722199330458343
+          "maximum_us": 131.45446286363872,
+          "mean_us": 131.40508870095945,
+          "minimum_us": 131.4050000008633,
+          "standard_deviation_us": 0.0014680077837214982
         },
         "Delt_post": {
-          "fraction_at_lower_bound": 0.9363218390804597,
+          "fraction_at_lower_bound": 0.9974712643678161,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 132.22951725599748,
-          "mean_us": 131.4131386779746,
-          "minimum_us": 131.40500003169515,
-          "standard_deviation_us": 0.04523680171255447
+          "maximum_us": 131.46930532551593,
+          "mean_us": 131.4051279210438,
+          "minimum_us": 131.4050000002764,
+          "standard_deviation_us": 0.0019371522271154325
         },
         "Triceps": {
-          "fraction_at_lower_bound": 0.8648275862068966,
+          "fraction_at_lower_bound": 0.8625287356321839,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 232.4725591857891,
-          "mean_us": 136.91097936309123,
-          "minimum_us": 131.40500014254738,
-          "standard_deviation_us": 16.054725019742808
+          "maximum_us": 282.36773662240444,
+          "mean_us": 136.37889264927333,
+          "minimum_us": 131.40500000950306,
+          "standard_deviation_us": 13.454652912985368
         }
       },
       "fatigue": {
-        "executed_fatigue_objective": 4317.7847603,
-        "fatigue_auc_cycles": 9.383523841043036,
-        "min_final_capacity_ratio": 0.9188849899290068,
+        "executed_fatigue_objective": 3471.2452635781565,
+        "fatigue_auc_cycles": 10.654075551797185,
+        "min_final_capacity_ratio": 0.9318335784911017,
         "per_muscle": {
           "Biceps": {
-            "executed_fatigue_objective": 4030.976836118251,
-            "fatigue_auc_cycles": 6.858359924829058,
-            "final_capacity_ratio": 0.9188849899290068,
-            "initial_capacity_ratio": 0.99999999999999
+            "executed_fatigue_objective": 2910.5107325194126,
+            "fatigue_auc_cycles": 5.923003407318518,
+            "final_capacity_ratio": 0.9318335784911017,
+            "initial_capacity_ratio": 0.9966302918319722
           },
           "Delt_ant": {
-            "executed_fatigue_objective": 56.53073034289715,
-            "fatigue_auc_cycles": 0.8112863086021489,
-            "final_capacity_ratio": 0.9903437294109043,
-            "initial_capacity_ratio": 1.0000000000000042
+            "executed_fatigue_objective": 253.5052105644115,
+            "fatigue_auc_cycles": 1.9088677867993553,
+            "final_capacity_ratio": 0.9888610240174784,
+            "initial_capacity_ratio": 0.9846270159427429
           },
           "Delt_post": {
-            "executed_fatigue_objective": 0.04028929120778977,
-            "fatigue_auc_cycles": 0.02224931396774401,
-            "final_capacity_ratio": 0.9997760832532241,
-            "initial_capacity_ratio": 0.999999999999998
+            "executed_fatigue_objective": 111.59756475444357,
+            "fatigue_auc_cycles": 1.2627576946016639,
+            "final_capacity_ratio": 0.9930025328828377,
+            "initial_capacity_ratio": 0.9916936527760019
           },
           "Triceps": {
-            "executed_fatigue_objective": 230.2369045476441,
-            "fatigue_auc_cycles": 1.6916282936440843,
-            "final_capacity_ratio": 0.9828844753366883,
-            "initial_capacity_ratio": 0.9999999999999984
+            "executed_fatigue_objective": 195.6317557398888,
+            "fatigue_auc_cycles": 1.559446663077647,
+            "final_capacity_ratio": 0.984036406606721,
+            "initial_capacity_ratio": 0.9999228951715031
           }
         }
       },
       "hybrid_fallback": {
-        "fallback_advanced_count": 0,
-        "recovery_accepted_count": 0,
-        "recovery_attempt_count": 0,
-        "recovery_solver_total_s": 0.0,
-        "recovery_wall_total_s": 0.0
+        "fallback_advanced_count": 4,
+        "recovery_accepted_count": 8,
+        "recovery_attempt_count": 8,
+        "recovery_solver_total_s": 26.558292827,
+        "recovery_wall_total_s": 26.678663603000075
       },
       "metadata": {
         "activate_force_length_relationship": true,
@@ -164,7 +164,7 @@
         "activate_passive_force_relationship": true,
         "calcium_forcing_formulation": "exact_exponential_periodic_node",
         "constant_crank_torque": -0.0,
-        "cycles_per_window": 300,
+        "cycles_per_window": 145,
         "ding_sum_stim_truncation": 6,
         "enforce_start_constraints": false,
         "first_node_wheel_q_slack": 0.0,
@@ -183,7 +183,7 @@
         "producer_collocation_method": "radau",
         "producer_cycles_per_window": 1,
         "producer_mode": "receding_horizon_concatenation",
-        "producer_requested_cycles": 300,
+        "producer_requested_cycles": 145,
         "producer_solver": "acados",
         "producer_transcription_profile": "acados-irk-4stage-5step",
         "pulse_width_active_set": "none",
@@ -191,7 +191,7 @@
         "pulse_width_minimum_policy": "model_pd0",
         "pulse_width_scaling": 0.0025,
         "schema": "cocofest-common-periodic-initial-solution-v2",
-        "state_boundary_maximum_absolute_jump": 2.5412191462237388e-08,
+        "state_boundary_maximum_absolute_jump": 9.285940905101597e-10,
         "stimulations_per_cycle": 30,
         "terminal_wheel_q_homotopy_slacks": null,
         "terminal_wheel_q_initial_slack": 0.002,
@@ -200,20 +200,23 @@
         "torque_application": "constant",
         "warmup_cycles_consumed": 1
       },
-      "source_github_actions_run": 31428024125,
+      "source_github_actions_run": 31494271965,
       "source_result": "result.json",
       "source_trajectory": "reduced-validated-prefix.npz",
       "timing": {
-        "hot_solver_median_s": 0.132621,
-        "hot_solver_p90_s": 0.1343595,
-        "hot_wall_median_s": 0.14509621199999856,
-        "hot_wall_p90_s": 0.14692378900002154,
-        "online_solver_mean_s_per_rho": 0.13135270344827585,
-        "online_solver_total_s": 19.046142,
-        "online_wall_mean_s_per_rho": 0.1449313035655172,
-        "online_wall_total_s": 21.015039016999992,
-        "reported_full_run_cycles": 300,
-        "reported_full_run_end_to_end_s": 304.39311630299994
+        "hot_solver_median_s": 0.12384049999999999,
+        "hot_solver_p90_s": 0.3194981,
+        "hot_wall_median_s": 0.14161001899998382,
+        "hot_wall_p90_s": 0.3374469120999919,
+        "online_solver_mean_s_per_rho": 0.6249347574275862,
+        "online_solver_total_s": 90.615539827,
+        "online_wall_mean_s_per_rho": 0.6444123405655183,
+        "online_wall_total_s": 93.43978938200016,
+        "recovery_attempt_count": 8,
+        "reported_full_run_cycles": 145,
+        "reported_full_run_end_to_end_s": 258.14910711100003,
+        "rho_pipeline_wall_total_s": 107.234744597,
+        "target_solver_attempt_count": 149
       }
     },
     "IPOPT R5": {
@@ -343,8 +346,11 @@
         "online_solver_total_s": 528.87794157,
         "online_wall_mean_s_per_rho": 3.6546210836689625,
         "online_wall_total_s": 529.9200571319996,
+        "recovery_attempt_count": 0,
         "reported_full_run_cycles": 145,
-        "reported_full_run_end_to_end_s": 947.685156214
+        "reported_full_run_end_to_end_s": 947.685156214,
+        "rho_pipeline_wall_total_s": 786.418848866,
+        "target_solver_attempt_count": 145
       }
     },
     "MadNLP R5": {
@@ -474,8 +480,11 @@
         "online_solver_total_s": 219.56753880099998,
         "online_wall_mean_s_per_rho": 1.5213907774344833,
         "online_wall_total_s": 220.60166272800006,
+        "recovery_attempt_count": 0,
         "reported_full_run_cycles": 145,
-        "reported_full_run_end_to_end_s": 703.2527830260001
+        "reported_full_run_end_to_end_s": 703.2527830260001,
+        "rho_pipeline_wall_total_s": 438.94713345799994,
+        "target_solver_attempt_count": 145
       }
     }
   },

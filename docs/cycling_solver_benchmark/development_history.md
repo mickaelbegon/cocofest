@@ -5180,3 +5180,50 @@ dominant (`42.27 s`), alors que la boucle RHO coûte `0.369 s/cycle` murale. Ce
 smoke valide la formulation et autorise maintenant la comparaison appariée sur
 145 RHO; il ne suffit pas encore à conclure sur la fatigue longue ni les sauts
 de PW.
+
+Le premier run long strict,
+[`31492324017`](https://github.com/mickaelbegon/cocofest-pedalage/actions/runs/31492324017),
+certifie 24 RHO puis ACADOS plafonne au RHO 25 avec un défaut dynamique de
+`1.65e-4`. Deux solves IPOPT/Radau-5 du même RHO convergent pourtant avec une
+infaisabilité certifiée de `1.41e-8`. Réinjecter leur primal dans ACADOS
+reproduit le même résidu : la fatigue n'est pas la cause et exiger une nouvelle
+certification ACADOS perd une solution NLP valide.
+
+Le mode hybride autorise donc IPOPT à faire avancer exceptionnellement un RHO
+après les deux échecs ACADOS prévus. Le run intermédiaire
+[`31493109875`](https://github.com/mickaelbegon/cocofest-pedalage/actions/runs/31493109875)
+valide ce mécanisme au RHO 25, mais s'arrête au RHO 26. La cause était un
+compteur interne Bioptim : il voyait encore les statuts ACADOS bruts `2` et ne
+savait pas que le fallback certifié avait remis à zéro la série d'échecs
+physiques. Le budget interne possède maintenant assez de marge pour tous les
+fallbacks possibles; la règle scientifique reste contrôlée séparément et
+n'accepte que les solutions IPOPT convergées et faisables.
+
+La campagne corrigée
+[`31494271965`](https://github.com/mickaelbegon/cocofest-pedalage/actions/runs/31494271965)
+certifie finalement `145/145` RHO. IPOPT remplace seulement les RHO 25, 26, 30
+et 31; ACADOS reprend seul pour les 114 derniers cycles. La trace IRK dense
+reste dans la boîte physique : minimum `-9.2831853059 rad/s`, zéro violation
+de vitesse et erreur terminale absolue dans le slack `0.002 rad`.
+
+Après construction, la boucle RHO complète dure `107.23 s`, soit
+`0.740 s/RHO`; les appels ACADOS et IPOPT cumulés représentent `93.44 s` de
+temps mural. La médiane chaude ACADOS reste `0.142 s` et le P90 `0.337 s`.
+Les huit solves IPOPT de recovery coûtent `26.68 s` et produisent quatre
+fallbacks. La comparaison appariée donne :
+
+| méthode | pipeline RHO | appels solveur | AUC fatigue | coût exécuté | capacité finale minimale |
+|---|---:|---:|---:|---:|---:|
+| IPOPT R5 | `786.42 s` | `529.92 s` | `17.1324` | `11 523.5` | `0.86209` |
+| MadNLP R5 | `438.95 s` | `220.60 s` | `17.3066` | `11 830.6` | `0.86072` |
+| ACADOS + IPOPT | `107.23 s` | `93.44 s` | `10.6541` | `3 471.2` | `0.93183` |
+
+Les états initiaux sont maintenant identiques. Cependant, les contrôles ACADOS
+restent sur une autre branche : par rapport à IPOPT, la MAE des PW vaut
+`37.46 us` au biceps et `10.81 us` au triceps, avec des corrélations de
+seulement `0.020` et `0.040`. IPOPT et MadNLP sont beaucoup plus cohérents
+entre eux (`4.33 us`/`0.953` au biceps, `1.55 us`/`0.920` au triceps). La
+fatigue ACADOS plus faible est donc un résultat prometteur, mais pas encore la
+preuve d'un meilleur optimum du même NLP : il faut rejouer ses PW sous
+Radau-5 et raffiner le primal complet avec IPOPT avant d'attribuer l'écart au
+solveur plutôt qu'à la transcription IRK ou au bassin local.

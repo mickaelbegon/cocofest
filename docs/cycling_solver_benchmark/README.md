@@ -1313,34 +1313,34 @@ aucune assistance externe, mécanique reduced, force passive active, calcium
 `exact_exponential_periodic_node` et PW dans
 `[pd0 = 131.405 µs, 600 µs]`. IPOPT/MUMPS et MadNLP/MUMPS utilisent
 SX/Radau-5; ACADOS utilise le profil SQP-IRK `4 stages × 5 steps`. Le nom
-« ACADOS + IPOPT » désigne la chaîne de production hybride, mais aucun fallback
-n'est déclenché dans les 145 premiers RHO de ce run. Le premier fallback
-accepté se trouve au RHO 234.
+« ACADOS + IPOPT » désigne la chaîne hybride : ACADOS résout normalement le
+RHO et IPOPT/Radau-5 ne peut le remplacer qu'après deux échecs ACADOS et un
+certificat indépendant de convergence et de faisabilité.
 
 Les artefacts sources sont ceux du run apparié
 [31441917891](https://github.com/mickaelbegon/cocofest/actions/runs/31441917891)
-pour IPOPT/MadNLP et du run historique
-[31428024125](https://github.com/mickaelbegon/cocofest/actions/runs/31428024125)
-pour ACADOS + IPOPT. Les temps ci-dessous sont les sommes des champs
-`wall_time_s` des 145 fenêtres : ils excluent la construction initiale, la
-préparation du seed et le post-traitement, conformément à la question du temps
-de résolution une fois l'OCP construit.
+pour IPOPT/MadNLP et du run apparié et physiquement certifié
+[31494271965](https://github.com/mickaelbegon/cocofest-pedalage/actions/runs/31494271965)
+pour ACADOS + IPOPT. Les trois trajectoires partent du même état initial. Les
+temps excluent la construction initiale. « Appels solveur » additionne tous les
+essais, échecs et recoveries; « pipeline » mesure toute la boucle RHO, transfert
+et orchestration Bioptim compris.
 
-| Méthode | RHO certifiés | Médiane / P90 solveur chaud | Temps online cumulé | AUC fatigue | Coût fatigue exécuté | Min. capacité finale |
-|---|---:|---:|---:|---:|---:|---:|
-| IPOPT R5 | 145/145 | `2.649 / 4.130 s` | `529.92 s` | `17.1324` | `11 523.5` | `0.86209` |
-| MadNLP R5 | 145/145 | `1.433 / 1.669 s` | `220.60 s` | `17.3066` | `11 830.6` | `0.86072` |
-| ACADOS + IPOPT | 145/145 | `0.133 / 0.134 s` | `21.02 s` | `9.3835` | `4 317.8` | `0.91888` |
+| Méthode | RHO certifiés | Médiane / P90 chaud | Appels solveur | Pipeline RHO | AUC fatigue | Coût exécuté | Min. capacité finale |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| IPOPT R5 | 145/145 | `2.649 / 4.130 s` | `529.92 s` | `786.42 s` | `17.1324` | `11 523.5` | `0.86209` |
+| MadNLP R5 | 145/145 | `1.433 / 1.669 s` | `220.60 s` | `438.95 s` | `17.3066` | `11 830.6` | `0.86072` |
+| ACADOS + IPOPT | 145/145 | `0.124 / 0.319 s` | `93.44 s` | `107.23 s` | `10.6541` | `3 471.2` | `0.93183` |
 
 La fatigue finale et son accumulation ne se répartissent pas uniformément. Le
 tableau donne `capacité finale A/A_scale / AUC de fatigue` :
 
 | Muscle | IPOPT R5 | MadNLP R5 | ACADOS + IPOPT |
 |---|---:|---:|---:|
-| Biceps | `0.86209 / 10.9379` | `0.86072 / 11.0917` | `0.91888 / 6.8584` |
-| Triceps | `0.97256 / 2.5136` | `0.97245 / 2.5251` | `0.98288 / 1.6916` |
-| Deltoïde antérieur | `0.97554 / 2.4094` | `0.97548 / 2.4271` | `0.99034 / 0.8113` |
-| Deltoïde postérieur | `0.99287 / 1.2715` | `0.99300 / 1.2627` | `0.99978 / 0.0222` |
+| Biceps | `0.86209 / 10.9379` | `0.86072 / 11.0917` | `0.93183 / 5.9230` |
+| Triceps | `0.97256 / 2.5136` | `0.97245 / 2.5251` | `0.98404 / 1.5594` |
+| Deltoïde antérieur | `0.97554 / 2.4094` | `0.97548 / 2.4271` | `0.98886 / 1.9089` |
+| Deltoïde postérieur | `0.99287 / 1.2715` | `0.99300 / 1.2627` | `0.99300 / 1.2628` |
 
 Sur ce préfixe, MadNLP est `1.85×` plus rapide qu'IPOPT en médiane chaude et
 `2.40×` sur la somme online. Leurs solutions sont proches : par rapport à
@@ -1350,18 +1350,20 @@ triceps; les MAE correspondantes valent `4.33 µs` et `1.55 µs`. Elles ne sont
 cependant pas identiques : un changement isolé d'ensemble actif atteint
 `468.6 µs` au biceps.
 
-ACADOS est `25.2×` plus rapide qu'IPOPT et `10.5×` plus rapide que MadNLP sur
-la somme online de ces 145 fenêtres. Il produit aussi une AUC `45.2 %` plus
-faible qu'IPOPT et conserve une capacité biceps finale de `0.91888`, contre
-`0.86209`. Ce résultat ne permet **pas encore** d'affirmer qu'ACADOS trouve un
-meilleur optimum du même problème. Ses PW biceps sont très différentes de
-celles d'IPOPT (`MAE = 40.14 µs`, corrélation `-0.052`) et, surtout, les
-trajectoires historiques n'ont pas exactement le même état musculaire initial :
-ACADOS part de `A/A_scale = 1` pour les quatre muscles, tandis que le seed
-IPOPT/MadNLP vaut initialement `0.99663` au biceps, `0.98463` au deltoïde
-antérieur, `0.99169` au deltoïde postérieur et `0.99992` au triceps. Une partie
-de l'écart de fatigue est donc antérieure aux décisions comparées. Les
-transcriptions Radau-5 et IRK sont également différentes.
+Le pipeline hybride est `7.33×` plus rapide qu'IPOPT et `4.09×` plus rapide
+que MadNLP. Seuls les RHO 25, 26, 30 et 31 sont avancés par IPOPT; ACADOS
+reprend seul jusqu'au RHO 145. Les huit recoveries IPOPT coûtent `26.68 s`.
+L'audit IRK dense ne relève aucune violation de vitesse et l'angle terminal
+respecte le slack absolu `0.002 rad`.
+
+ACADOS produit une AUC `37.8 %` plus faible qu'IPOPT et conserve une capacité
+biceps finale de `0.93183`. Ce résultat ne permet **pas encore** d'affirmer
+qu'il trouve un meilleur optimum du même problème. Malgré l'état initial
+désormais identique, ses PW restent très différentes : contre IPOPT, la MAE et
+la corrélation valent `37.46 µs / 0.020` au biceps et
+`10.81 µs / 0.040` au triceps. Il faut encore rejouer les PW ACADOS sous
+Radau-5 puis raffiner ce primal avec IPOPT pour séparer un meilleur bassin
+local d'un écart de transcription IRK/Radau-5.
 
 ![Profils de PW aux RHO 1, 30, 100 et 145](figures/reduced_solver_comparison_145/reduced_solver_pw_profiles_145.png)
 
@@ -1378,39 +1380,14 @@ sur tous les points exportés de chaque transcription et écrit les figures ains
 que le résumé numérique
 [`reduced_solver_comparison_145.json`](figures/reduced_solver_comparison_145/reduced_solver_comparison_145.json).
 
-La campagne décisive a ensuite imposé le **même état initial numérique**, la
-même cible terminale et les mêmes bornes mobiles. Elle révèle une limite de
-warm-start plutôt qu'un résultat comparable supplémentaire. ACADOS résout
-`145/145` avec la marge nodale `3.0 rad/s`, mais l'audit inter-nœuds mesure un
-overshoot rapide de `0.4000 rad/s`; cette trajectoire est donc rejetée. Avec la
-garde conservatrice `2.55 rad/s`, le seed commun ne donne aucun RHO certifié.
-Une continuation de la borne basse de `omega` a été testée jusqu'à des pas de
-`0.01 rad/s` et 300 SQP offline : les runs
-[31448682164](https://github.com/mickaelbegon/cocofest/actions/runs/31448682164),
-[31449332788](https://github.com/mickaelbegon/cocofest/actions/runs/31449332788)
-et
-[31449892535](https://github.com/mickaelbegon/cocofest/actions/runs/31449892535)
-restent sur la branche rapide et s'arrêtent finalement entre les marges
-`2.76` et `2.75 rad/s`. Le dernier résidu de contrainte vaut `3.33e-3` après
-300 SQP. Le gain de temps ACADOS est donc démontré sur son run certifié, mais
-son gain apparent de fatigue ne peut pas être attribué au solveur avec ce
-protocole.
-
-La prochaine méthode pertinente n'est plus de réduire encore le pas. Il faut
-partir d'un contrôle ACADOS déjà certifié sous la garde `2.55`, remplacer
-seulement son état initial par l'état commun, puis résoudre une Phase I qui
-minimise les défauts mécaniques et musculaires avant l'objectif de fatigue.
-Cette primale pourra ensuite initialiser la comparaison appariée; ses PW et ses
-20 états Ding devront être audités avant toute interprétation de l'optimum.
-
-La cause du désappariement historique est localisée : l'import du seed commun
-remplaçait `x_init`, mais ACADOS reduced conservait les bornes du premier nœud
-aux valeurs de repos parce que son warmup IPOPT standard était volontairement
-désactivé. Le workflow fixe désormais explicitement les bornes du premier
-nœud sur le seed importé avec
-`--common-initial-solution-recenter-first-node-bounds`. Ce changement est une
-correction du protocole expérimental; ses nouveaux coûts et temps ne doivent
-pas être mélangés avec les valeurs historiques ci-dessus avant la relance.
+La correction qui rend cette campagne possible conserve la boîte nodale
+physique `omega in [-2*pi-3, -2*pi+3]` et impose aux 30 shooting nodes une
+garde de milieu d'intervalle
+`omega_hat = omega + dt/2*f_omega(theta, omega, F, tau_ext)`. Elle remplace la
+marge nodale artificielle `2.55 rad/s`, qui rendait la fermeture angulaire
+infaisable, tout en éliminant l'overshoot dense de `0.400 rad/s` observé avec
+les seules bornes nodales. Le prédicteur reste une approximation économique;
+l'audit dense demeure donc obligatoire.
 
 ## 7. Reproductibilité
 

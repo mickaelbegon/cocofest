@@ -19,9 +19,9 @@ import numpy as np
 MUSCLES = ("Biceps", "Triceps", "Delt_ant", "Delt_post")
 COLORS = {"IPOPT R5": "#3366cc", "MadNLP R5": "#dc3912", "ACADOS + IPOPT": "#109618"}
 DEFAULT_SOURCE_RUNS = {
-    "IPOPT R5": 31380186719,
-    "MadNLP R5": 31380186719,
-    "ACADOS + IPOPT": 31428024125,
+    "IPOPT R5": 31441917891,
+    "MadNLP R5": 31441917891,
+    "ACADOS + IPOPT": 31494271965,
 }
 PW_MIN_US = 131.405
 PW_MAX_US = 600.0
@@ -377,7 +377,12 @@ def _plot_timing(data: dict, cycles: int, output: Path) -> None:
     names = list(data)
     medians = [data[name]["timing"]["hot_solver_median_s"] for name in names]
     p90s = [data[name]["timing"]["hot_solver_p90_s"] for name in names]
-    totals = [data[name]["timing"]["online_wall_total_s"] for name in names]
+    solve_chain_totals = [
+        data[name]["timing"]["online_wall_total_s"] for name in names
+    ]
+    pipeline_totals = [
+        data[name]["timing"]["rho_pipeline_wall_total_s"] for name in names
+    ]
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.8))
     x = np.arange(len(names))
     axes[0].bar(
@@ -403,11 +408,29 @@ def _plot_timing(data: dict, cycles: int, output: Path) -> None:
     axes[0].set_title("Latence en ligne")
     axes[0].legend(frameon=False)
     axes[0].grid(axis="y", alpha=0.2)
-    bars = axes[1].bar(x, totals, color=[COLORS[n] for n in names], alpha=0.85)
+    solve_bars = axes[1].bar(
+        x - 0.18,
+        solve_chain_totals,
+        0.36,
+        color=[COLORS[n] for n in names],
+        alpha=0.85,
+        label="appels solveur",
+    )
+    pipeline_bars = axes[1].bar(
+        x + 0.18,
+        [np.nan if value is None else value for value in pipeline_totals],
+        0.36,
+        color=[COLORS[n] for n in names],
+        hatch="//",
+        alpha=0.45,
+        label="pipeline RHO complet",
+    )
     axes[1].set_xticks(x, names, rotation=15)
-    axes[1].set_ylabel("Temps mur-à-mur en ligne cumulé (s)")
-    axes[1].set_title(f"Somme des {cycles} fenêtres")
-    axes[1].bar_label(bars, fmt="%.1f s", padding=3)
+    axes[1].set_ylabel("Temps mur-à-mur cumulé (s)")
+    axes[1].set_title(f"Somme des {cycles} RHO après construction")
+    axes[1].bar_label(solve_bars, fmt="%.1f s", padding=3)
+    axes[1].bar_label(pipeline_bars, fmt="%.1f s", padding=3)
+    axes[1].legend(frameon=False)
     axes[1].grid(axis="y", alpha=0.2)
     fig.tight_layout()
     fig.savefig(output, dpi=180, bbox_inches="tight")

@@ -717,6 +717,22 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     erreur angulaire finale `0.00199996 rad`. Lancer 145 RHO depuis le même
     seed commun, conserver le préfixe certifié, puis comparer contrôles,
     fatigues finales/AUC et temps à IPOPT et MadNLP sur le préfixe commun.
+    [fait, runs `31492324017`, `31493109875`, `31494271965`] Le run strict
+    s'arrête au RHO 25 malgré deux recoveries IPOPT certifiées. Le fallback
+    initial a ensuite exposé le compteur d'échecs natifs Bioptim, qui ne se
+    réinitialisait pas après un RHO avancé par IPOPT. La correction conserve
+    les statuts ACADOS bruts pour l'audit mais confie l'arrêt au compteur
+    physique. Le run final valide `145/145`, avec quatre fallbacks aux RHO
+    25, 26, 30 et 31, puis ACADOS seul jusqu'au RHO 145. Pipeline : `107.23 s`;
+    audit dense valide; figures appariées régénérées.
+27. Rejouer les contrôles ACADOS des RHO 1, 25, 31, 100 et 145 dans le modèle
+    Radau-5, puis lancer un raffinement IPOPT depuis le primal ACADOS. Comparer
+    le coût avant/après, les défauts Ding et les PW afin de séparer bassin
+    local et erreur de transcription IRK/Radau.
+28. Tester une petite régularisation inter-RHO uniquement sur les transitions
+    d'ensemble actif des premiers 35 cycles. Exiger que les quatre AUC et le
+    coût exécuté restent dans une tolérance annoncée; ne pas borner le slew
+    globalement avant cette ablation.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO
