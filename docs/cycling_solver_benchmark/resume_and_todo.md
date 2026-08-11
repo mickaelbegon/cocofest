@@ -706,6 +706,11 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     reste `0.002 rad` et les 30 PW sont inchangées. Lancer d'abord 5 RHO; exiger
     fermeture stricte, convergence de la Phase I et audit dense, puis seulement
     étendre à 145 RHO et régénérer la comparaison appariée.
+    Le run `31490977836` a validé le câblage CI et la configuration exportée,
+    puis a échoué avant le solve : Bioptim transmet directement le
+    `ReducedFesCyclingModel` au custom constraint, sans wrapper `.bio_model`.
+    L'accès accepte maintenant les deux interfaces et possède une régression
+    ciblée; relancer le même smoke.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

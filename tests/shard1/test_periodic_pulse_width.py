@@ -214,7 +214,9 @@ def test_reduced_cadence_guard_predicts_interval_midpoint():
         SimpleNamespace(muscle_name=name) for name in ("a", "b", "c", "d")
     ]
     controller = SimpleNamespace(
-        model=SimpleNamespace(bio_model=reduced_model),
+        # Reduced custom constraints receive the StateDynamics model directly;
+        # full biorbd constraints receive a wrapper exposing ``bio_model``.
+        model=reduced_model,
         states={
             "theta": SimpleNamespace(cx=1.0),
             "omega": SimpleNamespace(cx=-6.0),

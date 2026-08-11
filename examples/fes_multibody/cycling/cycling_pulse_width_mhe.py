@@ -2065,7 +2065,7 @@ def reduced_internal_crank_velocity_constraint(
         or shooting_interval_duration <= 0
     ):
         raise ValueError("shooting_interval_duration must be finite and positive.")
-    reduced_model = controller.model.bio_model
+    reduced_model = getattr(controller.model, "bio_model", controller.model)
     if not isinstance(reduced_model, ReducedFesCyclingModel):
         raise TypeError(
             "The internal crank-velocity guard requires ReducedFesCyclingModel."
