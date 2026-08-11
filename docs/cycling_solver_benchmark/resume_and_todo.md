@@ -672,6 +672,15 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     contrainte `3.33e-3`. Ne plus réduire le pas. Construire une Phase I depuis
     les PW d'un seed ACADOS déjà certifié à `2.55`, tout en remplaçant son état
     initial par l'état commun; auditer les 20 états Ding avant comparaison.
+26. [implémenté, validation CI en attente] Construire le seed hybride depuis
+    l'état commun du run `31441917891` et le cycle 1 du préfixe ACADOS strict du
+    run `31428024125`. Le générateur préserve les 22 blocs d'état, sélectionne
+    exactement 30 PW par muscle, valide le profil physique et archive les SHA.
+    Sous la garde `2.55`, exécuter la préparation Ding puis la continuation à
+    contrôles fixes/`1e-8`/`1e-7 s`; exiger un rayon fini accepté avant le RHO.
+    Commencer par 5 RHO. Si ce smoke passe, lancer 145 RHO et régénérer la
+    comparaison appariée. S'il échoue, comparer les quatre cycles sources
+    `1`, `30`, `100` et `145` avant de modifier les tolérances ou la physique.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

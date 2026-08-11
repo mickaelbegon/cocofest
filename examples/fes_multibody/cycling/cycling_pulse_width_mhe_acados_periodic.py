@@ -16661,6 +16661,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 args.warmup_state_comparison_limit,
             )
 
+    initial_control_seed_summary = None
     if args.common_initial_solution is not None:
         common_seed_path = _resolve_standard_warmup_seed(args.common_initial_solution)
         common_seed = _load_warmup_cache(common_seed_path)
@@ -16674,6 +16675,37 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     f"({adopted_warmup_cycles})"
                 )
         _validate_common_initial_solution_metadata(common_seed, args, common_seed_path)
+        initial_control_seed = (common_seed.metadata or {}).get(
+            "initial_control_seed"
+        )
+        if initial_control_seed is not None:
+            if not isinstance(initial_control_seed, dict) or initial_control_seed.get(
+                "kind"
+            ) != "certified_acados_rho_cycle":
+                raise ValueError(
+                    "The common initial solution has an invalid "
+                    "initial_control_seed provenance block."
+                )
+            source_cycle = initial_control_seed.get("source_cycle")
+            if (
+                isinstance(source_cycle, bool)
+                or not isinstance(source_cycle, int)
+                or source_cycle < 1
+            ):
+                raise ValueError(
+                    "The common initial solution has an invalid ACADOS control "
+                    f"source_cycle={source_cycle!r}."
+                )
+            initial_control_seed_summary = dict(initial_control_seed)
+            nmpc._cocofest_initial_control_seed = initial_control_seed_summary
+            if echo:
+                print(
+                    "common_initial_control_seed: "
+                    f"kind={initial_control_seed_summary['kind']} "
+                    f"source_cycle={source_cycle} "
+                    "source_sha256="
+                    f"{initial_control_seed_summary.get('source_sha256')}"
+                )
         seed_mechanical_formulation = (common_seed.metadata or {}).get(
             "mechanical_formulation"
         )
@@ -18839,6 +18871,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     if (
         args.solver == "acados"
         and args.mechanical_formulation == "reduced"
+        and initial_control_seed_summary is None
         and _effective_wheel_qdot_bound_margins(args)[0]
         < args.wheel_qdot_bound_margin
     ):
@@ -18973,12 +19006,17 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         solver.set_nlp_solver_tol_ineq(solver.nlp_solver_tol_ineq)
         solver.set_nlp_solver_tol_comp(solver.nlp_solver_tol_comp)
         solver.set_nlp_solver_tol_stat(solver.nlp_solver_tol_stat)
+        accepted_radii = [
+            summary["radius"]
+            for summary in control_homotopy_summaries
+            if summary["accepted"] and summary["radius"] is not None
+        ]
+        if initial_control_seed_summary is not None and not accepted_radii:
+            raise RuntimeError(
+                "The certified ACADOS control seed did not produce any feasible "
+                "finite-radius Phase-I stage under the target bounds."
+            )
         if args.acados_control_homotopy_keep_final_radius:
-            accepted_radii = [
-                summary["radius"]
-                for summary in control_homotopy_summaries
-                if summary["accepted"] and summary["radius"] is not None
-            ]
             if not accepted_radii:
                 raise RuntimeError(
                     "Control homotopy did not accept any finite control radius."
@@ -19125,6 +19163,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             summary["initial_fast_velocity_bound_homotopy"] = (
                 initial_fast_velocity_bound_homotopy_summary
             )
+        if initial_control_seed_summary is not None:
+            summary["initial_control_seed"] = initial_control_seed_summary
         if args.solver == "acados":
             summary["acados_ipopt_recovery"] = {
                 "enabled": bool(args.acados_ipopt_recovery),
@@ -19223,6 +19263,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             summary["initial_fast_velocity_bound_homotopy"] = (
                 initial_fast_velocity_bound_homotopy_summary
             )
+        if initial_control_seed_summary is not None:
+            summary["initial_control_seed"] = initial_control_seed_summary
         if args.solver == "acados":
             summary["acados_ipopt_recovery"] = {
                 "enabled": bool(args.acados_ipopt_recovery),
@@ -19337,6 +19379,8 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             summary["initial_fast_velocity_bound_homotopy"] = (
                 initial_fast_velocity_bound_homotopy_summary
             )
+        if initial_control_seed_summary is not None:
+            summary["initial_control_seed"] = initial_control_seed_summary
         summary["acados_ipopt_recovery"] = {
             "enabled": bool(args.acados_ipopt_recovery),
             "forced_first_rho_for_ci": bool(

@@ -69,6 +69,16 @@ on:
         required: false
         default: ""
         type: string
+      acados_control_seed_source_run_id:
+        description: Optional successful ACADOS run id providing a certified reduced control trajectory for the initial Phase I
+        required: false
+        default: ""
+        type: string
+      acados_control_seed_cycle:
+        description: One-based cycle selected from the certified ACADOS control trajectory
+        required: true
+        default: "1"
+        type: string
       acados_option_rhos:
         description: Short RHO count for each ACADOS solver-option candidate
         required: true
@@ -496,6 +506,7 @@ jobs:
           print(f"CasADi {cas.__version__}; acados_template={acados_template.__file__}")
           PY
           python -m pytest -q \
+            tests/shard1/test_acados_control_seed.py \
             tests/shard1/test_periodic_pulse_width.py::test_acados_ipopt_recovery_compatibility_reports_pulse_width_in_us \
             tests/shard1/test_periodic_pulse_width.py::test_acados_ipopt_recovery_cli_is_opt_in \
             tests/shard1/test_periodic_pulse_width.py::test_acados_default_tolerance_falls_back_to_common_nlp_tolerance \
@@ -523,6 +534,38 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.acados_seed_source_run_id }}
 
+      - name: Download the certified ACADOS control trajectory
+        if: ${{ inputs.acados_control_seed_source_run_id != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: cycling-acados-ipopt-hybrid-${{ inputs.acados_control_seed_source_run_id }}
+          path: benchmark-acados-control-seed
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.acados_control_seed_source_run_id }}
+
+      - name: Build the common-state ACADOS-control seed
+        if: ${{ inputs.acados_control_seed_source_run_id != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mapfile -t certified_trajectories < <(
+            find benchmark-acados-control-seed -type f \
+              -name reduced-validated-prefix.npz -print
+          )
+          if [[ "${#certified_trajectories[@]}" -ne 1 ]]; then
+            echo "Expected exactly one certified reduced ACADOS trajectory." >&2
+            printf '%s\n' "${certified_trajectories[@]}" >&2
+            exit 1
+          fi
+          mkdir -p acados-ipopt-hybrid-results
+          python examples/fes_multibody/cycling/build_acados_control_seed.py \
+            --common-seed benchmark-seed/common-reduced.npz \
+            --certified-acados-trajectory "${certified_trajectories[0]}" \
+            --cycle "${{ inputs.acados_control_seed_cycle }}" \
+            --output benchmark-seed/common-reduced-acados-controls.npz \
+            --summary acados-ipopt-hybrid-results/initial-control-seed.json
+
       - name: Run the full/reduced hybrid recovery gates
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -539,6 +582,15 @@ jobs:
           printf '%s\n' "${{ inputs.acados_seed_source_run_id || github.run_id }}" \
             > acados-ipopt-hybrid-results/seed-source-run-id.txt
           reduced_rhos="${{ inputs.acados_option_rhos }}"
+          common_seed_path=benchmark-seed/common-reduced.npz
+          assisted_hot_start_options=(--disable-acados-assisted-hot-start)
+          if [[ "${{ inputs.acados_control_seed_source_run_id }}" != "" ]]; then
+            common_seed_path=benchmark-seed/common-reduced-acados-controls.npz
+            assisted_hot_start_options=(
+              --acados-assisted-hot-start
+              --acados-control-homotopy-release-final-radius
+            )
+          fi
           reduced_recovery_options=(--acados-ipopt-recovery-force-first-rho)
           if [[ "${{ inputs.cycles }}" == "acados_reduced_recovery" || "${{ inputs.cycles }}" == "acados_reduced_fallback" ]]; then
             reduced_rhos="${{ inputs.acados_smoke_rhos }}"
@@ -564,10 +616,10 @@ jobs:
             --mechanical-formulation reduced \
             --experimental-reduced-acados \
             --compact-rho-output \
-            --common-initial-solution benchmark-seed/common-reduced.npz \
+            --common-initial-solution "$common_seed_path" \
             --common-initial-solution-recenter-first-node-bounds \
             --adopt-common-initial-solution-warmup-cycles \
-            --disable-acados-assisted-hot-start \
+            "${assisted_hot_start_options[@]}" \
             --acados-disable-standard-ipopt-warmup \
             --periodic-ipopt-refinement-ode-solver collocation \
             --periodic-ipopt-refinement-collocation-degree 5 \
@@ -785,6 +837,14 @@ jobs:
                 .seed_injected == true and
                 .target_solver_reset == true)
           ' acados-ipopt-hybrid-results/full-result.json
+          fi
+          if [[ "${{ inputs.acados_control_seed_source_run_id }}" != "" ]]; then
+            jq -e --argjson cycle "${{ inputs.acados_control_seed_cycle }}" '
+              .results[0].initial_control_seed.kind == "certified_acados_rho_cycle" and
+              .results[0].initial_control_seed.source_cycle == $cycle and
+              any(.results[0].control_homotopy_summaries[];
+                  .accepted == true and .radius != null)
+            ' acados-ipopt-hybrid-results/result.json
           fi
 
       - name: Upload the hybrid gate logs and result

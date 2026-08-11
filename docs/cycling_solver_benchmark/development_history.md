@@ -5069,3 +5069,24 @@ certifié, en signalant explicitement que ce troisième artefact part d'un autre
 état musculaire initial. La prochaine Phase I devra transférer un patron de PW
 ACADOS strict déjà certifié vers l'état commun, puis restaurer les défauts avant
 d'optimiser la fatigue.
+
+Cette Phase I hybride est maintenant implémentée, mais pas encore validée
+numériquement en CI. Le générateur `build_acados_control_seed.py` conserve sans
+modification les 22 blocs d'état du seed commun et remplace seulement les
+quatre patrons de PW par un cycle choisi dans une trajectoire ACADOS déjà
+certifiée avec la garde rapide de `2.55 rad/s`. Il refuse une différence de
+modèle physique, de politique de PW ou de nombre de stimulations, vérifie
+explicitement $p_{d0} \leq PW \leq 600\,\mu\mathrm{s}$ et inscrit les deux SHA
+ainsi que le cycle source dans le fichier produit.
+
+Lorsqu'un tel seed est chargé, l'ancienne homotopie de borne
+`3.0 -> 2.55 rad/s` est volontairement ignorée : ses trois échecs indépendants
+ont montré qu'elle ne relie pas les deux branches de solution. Le problème est
+construit directement avec la garde physique stricte; la préparation complète
+des états Ding est ensuite suivie d'un solve à contrôles fixes et de rayons de
+PW `1e-8` puis `1e-7 s`. Au moins un rayon fini doit être certifié avant le
+premier RHO, sinon le job échoue. Les bornes de PW sont ensuite relâchées pour
+ne pas biaiser l'optimum de fatigue. Cette distinction est importante : les PW
+proviennent d'une trajectoire physiquement certifiée, mais elles ne sont pas a
+priori faisables avec les 20 états Ding communs; c'est précisément ce que la
+Phase I doit établir.
