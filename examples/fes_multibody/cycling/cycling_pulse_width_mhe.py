@@ -1008,6 +1008,11 @@ def prepare_nmpc(
     wheel_qdot_slow_bound_margin = simulation_conditions.get(
         "wheel_qdot_slow_bound_margin", wheel_qdot_bound_margin
     )
+    enforce_reduced_internal_crank_velocity_guard = bool(
+        simulation_conditions.get(
+            "enforce_reduced_internal_crank_velocity_guard", False
+        )
+    )
     terminal_qdot_regularization_weight = simulation_conditions.get(
         "terminal_qdot_regularization_weight", 0.0
     )
@@ -1219,6 +1224,10 @@ def prepare_nmpc(
         physical_crank_velocity_margin=wheel_qdot_bound_margin,
         physical_crank_velocity_fast_margin=wheel_qdot_fast_bound_margin,
         physical_crank_velocity_slow_margin=wheel_qdot_slow_bound_margin,
+        enforce_reduced_internal_crank_velocity_guard=(
+            enforce_reduced_internal_crank_velocity_guard
+        ),
+        shooting_interval_duration=cycle_duration / cycle_len,
         physical_crank_terminal_angle=cycling_info.get(
             "physical_crank_terminal_angle"
         ),
@@ -2036,6 +2045,48 @@ def physical_crank_velocity_constraint(
     )
 
 
+def reduced_internal_crank_velocity_constraint(
+    controller,
+    shooting_interval_duration: float,
+):
+    """Predict reduced crank velocity at the interval midpoint.
+
+    ACADOS applies path constraints at shooting nodes, not at the internal IRK
+    stages.  A first-order half-step based on the exact reduced mechanical
+    acceleration exposes the otherwise hidden fast-cadence excursion to the
+    NLP.  The post-solve dense IRK audit remains authoritative because muscle
+    forces are frozen over this inexpensive predictor.
+    """
+
+    from casadi import vertcat
+
+    if (
+        not np.isfinite(shooting_interval_duration)
+        or shooting_interval_duration <= 0
+    ):
+        raise ValueError("shooting_interval_duration must be finite and positive.")
+    reduced_model = controller.model.bio_model
+    if not isinstance(reduced_model, ReducedFesCyclingModel):
+        raise TypeError(
+            "The internal crank-velocity guard requires ReducedFesCyclingModel."
+        )
+    theta = controller.states["theta"].cx
+    omega = controller.states["omega"].cx
+    muscle_forces = vertcat(
+        *[
+            controller.states[f"F_{muscle_model.muscle_name}"].cx
+            for muscle_model in reduced_model.muscles_dynamics_model
+        ]
+    )
+    omega_dot = reduced_model.reduced_dynamics.casadi_acceleration(
+        theta,
+        omega,
+        muscle_forces,
+        reduced_model.external_crank_torque,
+    )
+    return omega + 0.5 * float(shooting_interval_duration) * omega_dot
+
+
 def physical_crank_velocity_all_collocation_points_constraint(
     controller,
     hand_marker: str = "hand",
@@ -2110,6 +2161,8 @@ def set_constraints(
     physical_crank_velocity_margin: float = 3.0,
     physical_crank_velocity_fast_margin: float | None = None,
     physical_crank_velocity_slow_margin: float | None = None,
+    enforce_reduced_internal_crank_velocity_guard: bool = False,
+    shooting_interval_duration: float | None = None,
     physical_crank_terminal_angle: float | None = None,
 ):
     constraints = ConstraintList()
@@ -2249,6 +2302,45 @@ def set_constraints(
                 min_bound=np.array([0.0, 0.0]),
                 max_bound=np.array([0.0, np.inf]),
             )
+
+    if enforce_reduced_internal_crank_velocity_guard:
+        if not is_reduced:
+            raise ValueError(
+                "The reduced internal crank-velocity guard applies only to "
+                "ReducedFesCyclingModel."
+            )
+        if shooting_interval_duration is None:
+            raise ValueError(
+                "The reduced internal crank-velocity guard requires the "
+                "shooting interval duration."
+            )
+        if physical_crank_velocity_fast_margin is None:
+            physical_crank_velocity_fast_margin = physical_crank_velocity_margin
+        if physical_crank_velocity_slow_margin is None:
+            physical_crank_velocity_slow_margin = physical_crank_velocity_margin
+        if (
+            not np.isfinite(physical_crank_velocity_fast_margin)
+            or physical_crank_velocity_fast_margin <= 0.0
+            or not np.isfinite(physical_crank_velocity_slow_margin)
+            or physical_crank_velocity_slow_margin <= 0.0
+        ):
+            raise ValueError(
+                "The reduced internal crank-velocity margins must be finite "
+                "and positive."
+            )
+        constraints.add(
+            reduced_internal_crank_velocity_constraint,
+            node=Node.ALL_SHOOTING,
+            shooting_interval_duration=float(shooting_interval_duration),
+            min_bound=(
+                physical_crank_velocity_target
+                - physical_crank_velocity_fast_margin
+            ),
+            max_bound=(
+                physical_crank_velocity_target
+                + physical_crank_velocity_slow_margin
+            ),
+        )
 
     if wheel_cycle_boundary_slack is None or n_cycles_simultaneous <= 1:
         return constraints

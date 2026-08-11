@@ -693,6 +693,19 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     indépendantes de `g(x)`/`x`; si elles confirment l'incompatibilité, remplacer
     la garde nodale proxy par une contrainte de vitesse aux points internes de
     l'intégrateur, plutôt que relâcher l'angle terminal absolu.
+    [cause confirmée, run `31487564843`] Avec `0.35 rad` de slack, IPOPT est
+    faisable (`1.96e-6`) et ACADOS résout le RHO en `0.372 s`; l'erreur finale
+    vaut précisément `0.3092 rad`. Ne pas conserver ce slack. Implémenter
+    ensuite soit des contraintes `omega` aux points internes IRK avec la boîte
+    nodale `3.0`, soit deux sous-intervalles mécaniques par PW constante, puis
+    rétablir le slack absolu `0.002 rad` et l'audit dense.
+    [implémenté, validation CI en attente] La première option utilise désormais
+    le prédicteur demi-pas
+    `omega + dt/2*f_omega(theta, omega, F, tau_ext)` aux 30 shooting nodes,
+    avec la boîte nodale et interne physique de `3.0 rad/s`. Le slack terminal
+    reste `0.002 rad` et les 30 PW sont inchangées. Lancer d'abord 5 RHO; exiger
+    fermeture stricte, convergence de la Phase I et audit dense, puis seulement
+    étendre à 145 RHO et régénérer la comparaison appariée.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

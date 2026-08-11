@@ -15846,6 +15846,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         }
     else:
         cycling_info["constant_crank_torque"] = args.constant_crank_torque
+    args.reduced_internal_crank_velocity_guard = bool(
+        args.solver == "acados" and args.mechanical_formulation == "reduced"
+    )
     simulation_conditions = {
         "n_cycles_simultaneous": args.cycles_per_window,
         "stimulation": total_stimulations,
@@ -15861,6 +15864,13 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         "wheel_qdot_bound_margin": args.wheel_qdot_bound_margin,
         "wheel_qdot_fast_bound_margin": _effective_wheel_qdot_bound_margins(args)[0],
         "wheel_qdot_slow_bound_margin": _effective_wheel_qdot_bound_margins(args)[1],
+        # ACADOS path constraints are evaluated at shooting nodes.  Add an
+        # inexpensive mechanical half-step guard in reduced IRK mode instead
+        # of shrinking every nodal velocity bound and making exact angular
+        # closure infeasible.
+        "enforce_reduced_internal_crank_velocity_guard": bool(
+            args.reduced_internal_crank_velocity_guard
+        ),
         "terminal_qdot_regularization_weight": (
             args.terminal_qdot_regularization_weight
         ),
@@ -16101,6 +16111,11 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             "wheel_qdot_internal_bound_margins_fast_slow: "
             f"{_effective_wheel_qdot_bound_margins(args)}"
         )
+        if args.mechanical_formulation == "reduced":
+            print(
+                "reduced_internal_crank_velocity_guard: "
+                f"{args.reduced_internal_crank_velocity_guard}"
+            )
         if args.solver == "acados" and args.mechanical_formulation == "full":
             fast_margin, slow_margin = _effective_wheel_qdot_bound_margins(args)
             print(

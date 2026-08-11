@@ -200,6 +200,67 @@ def test_full_cadence_constraint_covers_collocation_stages_and_terminal(
     assert captured[1][1]["max_bound"] == pytest.approx(-2.0 * np.pi + 3.0)
 
 
+def test_reduced_cadence_guard_predicts_interval_midpoint():
+    class FakeReducedDynamics:
+        @staticmethod
+        def casadi_acceleration(theta, omega, muscle_forces, external_torque):
+            del theta, muscle_forces
+            return omega + external_torque
+
+    reduced_model = object.__new__(mhe_example.ReducedFesCyclingModel)
+    reduced_model.reduced_dynamics = FakeReducedDynamics()
+    reduced_model.external_crank_torque = 2.0
+    reduced_model.muscles_dynamics_model = [
+        SimpleNamespace(muscle_name=name) for name in ("a", "b", "c", "d")
+    ]
+    controller = SimpleNamespace(
+        model=SimpleNamespace(bio_model=reduced_model),
+        states={
+            "theta": SimpleNamespace(cx=1.0),
+            "omega": SimpleNamespace(cx=-6.0),
+            **{
+                f"F_{name}": SimpleNamespace(cx=float(index + 1))
+                for index, name in enumerate(("a", "b", "c", "d"))
+            },
+        },
+    )
+
+    predicted = mhe_example.reduced_internal_crank_velocity_constraint(
+        controller, shooting_interval_duration=0.1
+    )
+
+    assert float(predicted) == pytest.approx(-6.2)
+
+
+def test_reduced_cadence_guard_is_added_at_all_shooting_nodes(monkeypatch):
+    captured = []
+
+    class FakeConstraintList:
+        def add(self, constraint, **kwargs):
+            captured.append((constraint, kwargs))
+
+    monkeypatch.setattr(mhe_example, "ConstraintList", FakeConstraintList)
+    reduced_model = object.__new__(mhe_example.ReducedFesCyclingModel)
+
+    mhe_example.set_constraints(
+        reduced_model,
+        enforce_start_constraints=False,
+        enforce_reduced_internal_crank_velocity_guard=True,
+        shooting_interval_duration=1.0 / 30.0,
+        physical_crank_velocity_target=-2.0 * np.pi,
+        physical_crank_velocity_margin=3.0,
+        physical_crank_velocity_fast_margin=3.0,
+        physical_crank_velocity_slow_margin=3.0,
+    )
+
+    assert len(captured) == 1
+    assert captured[0][0] is mhe_example.reduced_internal_crank_velocity_constraint
+    assert captured[0][1]["node"] == Node.ALL_SHOOTING
+    assert captured[0][1]["shooting_interval_duration"] == pytest.approx(1 / 30)
+    assert captured[0][1]["min_bound"] == pytest.approx(-2.0 * np.pi - 3.0)
+    assert captured[0][1]["max_bound"] == pytest.approx(-2.0 * np.pi + 3.0)
+
+
 def test_full_transfer_contact_projection_preserves_bound_crank_states():
     class Kinematics:
         @staticmethod

@@ -60,9 +60,9 @@ on:
         default: "100"
         type: string
       acados_reduced_fast_bound_margin:
-        description: Reduced ACADOS nodal fast-cadence margin in rad/s (3.0 matches the NLP physical box; 2.55 is the conservative IRK guard)
+        description: Reduced ACADOS nodal and midpoint-predictor fast-cadence margin in rad/s (3.0 is the physical box)
         required: true
-        default: "2.55"
+        default: "3.0"
         type: string
       acados_seed_source_run_id:
         description: Optional workflow run id providing a pinned common seed artifact for ACADOS reproducibility tests
@@ -835,9 +835,10 @@ jobs:
           fi
           if [[ "${{ inputs.acados_control_seed_source_run_id }}" != "" ]]; then
             jq -e '
+              .configurations.acados.reduced_internal_crank_velocity_guard == true and
+              .configurations.acados.acados_wheel_qdot_fast_bound_margin == 3.0 and
               .results[0].initial_control_seed.kind == "certified_acados_rho_cycle" and
               .results[0].initial_control_seed.source_cycle == 1 and
-              .results[0].post_phase_one_ipopt_refinement.accepted == true and
               any(.results[0].control_homotopy_summaries[];
                   .accepted == true and .radius != null)
             ' acados-ipopt-hybrid-results/result.json

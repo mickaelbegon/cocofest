@@ -5121,3 +5121,43 @@ l'état initial commun. Le prochain diagnostic exporte donc la violation
 recalculée de `g(x)`, son index, ainsi que toute violation du vecteur de
 décision; il s'arrête avant la compilation ACADOS si IPOPT ne certifie pas le
 problème strict.
+
+L'ablation terminale du run
+[`31487564843`](https://github.com/mickaelbegon/cocofest/actions/runs/31487564843)
+porte uniquement le slack angulaire à `0.35 rad` sur un RHO. IPOPT devient
+faisable (`inf_pr=1.96e-6`), les étapes ACADOS fixe/`1e-8`/`1e-7 s` convergent,
+puis le RHO termine en 6 SQP (`0.3545 s` solveur, `0.3723 s` mural). L'angle
+final est `-12.257176 rad`, soit un manque de `0.309195 rad` par rapport à
+`-4*pi`. Cette identité avec la violation stricte prouve que la contrainte
+3848 est le défaut de continuité de `theta` au dernier intervalle : avec 22
+états et Radau-5, `3848 = 29*(6*22) + 20`, et l'état 20 est `theta` après les
+20 états Ding. La petite violation de borne terminale (`2e-8`) est négligeable.
+
+Ce run n'est pas une solution scientifique : `0.35 rad` autorise environ
+`17.5 deg` d'erreur par cycle et donc un drift incompatible avec le RHO. Il
+valide seulement la cause. La correction doit revenir à la boîte nodale
+physique `3.0 rad/s` et contrôler `omega` aux points internes de l'intégrateur,
+ou raffiner le maillage mécanique tout en conservant exactement 30 décisions
+de PW. Le gate CI accepte désormais qu'un premier raffinement IPOPT soit déjà
+certifié; le second raffinement post-Phase-I reste requis seulement lorsqu'il
+est effectivement nécessaire.
+
+La correction structurelle suivante abandonne donc la garde nodale
+heuristique à `2.55 rad/s`. Les nœuds ACADOS reduced retrouvent la boîte
+physique `omega in [-2*pi-3, -2*pi+3] rad/s`. À chacun des 30 shooting nodes,
+une contrainte supplémentaire porte sur le prédicteur mécanique de milieu
+d'intervalle
+
+$$
+\widehat{\omega}_{k+1/2}
+= \omega_k + \frac{\Delta t}{2}
+f_\omega\!\left(\theta_k,\omega_k,F_k,\tau_{\mathrm{ext}}\right),
+\qquad \Delta t=\frac{1}{30}\ \mathrm{s}.
+$$
+
+La fonction $f_\omega$ est exactement l'accélération de la dynamique mécanique
+réduite, force passive et quatre forces Ding comprises. Aucun PW ni état n'est
+ajouté. Ce prédicteur fige toutefois les forces musculaires pendant le
+demi-pas : c'est une garde économique, pas une preuve continue. L'audit dense
+IRK reste donc obligatoire et décidera si une marge interne plus prudente ou
+un prédicteur d'ordre supérieur est nécessaire.

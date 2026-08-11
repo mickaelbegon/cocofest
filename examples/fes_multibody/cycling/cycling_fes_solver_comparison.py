@@ -109,6 +109,7 @@ BENCHMARK_CONFIGURATION_FIELDS = (
     "wheel_qdot_bound_margin",
     "acados_wheel_qdot_fast_bound_margin",
     "acados_wheel_qdot_slow_bound_margin",
+    "reduced_internal_crank_velocity_guard",
     "acados_wheel_q_slack",
     "acados_wheel_qdot_slack",
     "acados_terminal_wheel_q_slack",
