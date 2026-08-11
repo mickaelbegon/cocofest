@@ -687,6 +687,12 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     `0.1058`. Relancer maintenant IPOPT/Radau-5 depuis ce primal amélioré avant
     la continuation ACADOS; ne pas relâcher la garde `2.55` ni les critères de
     certification.
+    Le run `31485687969` reproduit exactement `inf_pr=0.309278139` après ce
+    second raffinement : le warm-start n'est plus l'explication dominante.
+    Exporter maintenant l'index de la contrainte finale violée et les violations
+    indépendantes de `g(x)`/`x`; si elles confirment l'incompatibilité, remplacer
+    la garde nodale proxy par une contrainte de vitesse aux points internes de
+    l'intégrateur, plutôt que relâcher l'angle terminal absolu.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

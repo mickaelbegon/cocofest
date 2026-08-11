@@ -17139,6 +17139,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 "status": refinement_candidate.status,
                 "accepted": accepted,
                 "final_inf_pr": feasibility["final_inf_pr"],
+                "feasibility": feasibility,
                 "solver_time_s": refinement_candidate.solver_time_to_optimize,
                 "wall_time_s": refinement_candidate.real_time_to_optimize,
             }
@@ -17150,6 +17151,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 "status": None,
                 "accepted": False,
                 "final_inf_pr": None,
+                "feasibility": None,
                 "solver_time_s": None,
                 "wall_time_s": None,
             }
@@ -17157,6 +17159,22 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             print(
                 "post_phase_one_ipopt_refinement_summary: "
                 f"{post_phase_one_refinement_summary}"
+            )
+        if not post_phase_one_refinement_summary["accepted"]:
+            feasibility = post_phase_one_refinement_summary["feasibility"] or {}
+            raise RuntimeError(
+                "Post-Phase-I IPOPT could not certify the strict common-state "
+                "problem: "
+                f"status={post_phase_one_refinement_summary['status']}, "
+                f"inf_pr={post_phase_one_refinement_summary['final_inf_pr']}, "
+                "constraint_violation="
+                f"{feasibility.get('constraint_bound_violation')}, "
+                "constraint_index="
+                f"{feasibility.get('constraint_bound_violation_index')}, "
+                "decision_violation="
+                f"{feasibility.get('decision_bound_violation')}, "
+                "decision_block="
+                f"{feasibility.get('decision_bound_block')}."
             )
 
     if args.solver == "acados" and args.acados_fes_state_trust_radius is not None:

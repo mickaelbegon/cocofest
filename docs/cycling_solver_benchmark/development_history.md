@@ -5109,3 +5109,15 @@ d'objectif. Cette seconde restauration n'est pas mise en cache sous la clé
 générique, car son bassin dépend du SHA de la trajectoire ACADOS externe. Son
 statut, son `inf_pr` et ses temps sont exportés séparément avant la Phase I
 ACADOS à rayons de contrôle.
+
+Le run
+[`31485687969`](https://github.com/mickaelbegon/cocofest/actions/runs/31485687969)
+montre que ce second raffinement part bien d'un primal différent, mais aboutit
+au même certificat d'infaisabilité à l'arrondi près : `status=1` et
+`inf_pr=0.3092781395`, contre `0.3092781390` avant Phase I. Les résidus ACADOS
+restent eux aussi identiques. Cette invariance écarte le simple bassin
+d'attraction et indique une incompatibilité entre les contraintes strictes et
+l'état initial commun. Le prochain diagnostic exporte donc la violation
+recalculée de `g(x)`, son index, ainsi que toute violation du vecteur de
+décision; il s'arrête avant la compilation ACADOS si IPOPT ne certifie pas le
+problème strict.
