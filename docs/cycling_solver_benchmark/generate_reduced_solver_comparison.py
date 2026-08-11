@@ -18,7 +18,11 @@ import numpy as np
 
 MUSCLES = ("Biceps", "Triceps", "Delt_ant", "Delt_post")
 COLORS = {"IPOPT R5": "#3366cc", "MadNLP R5": "#dc3912", "ACADOS + IPOPT": "#109618"}
-SOURCE_RUNS = {"IPOPT R5": 31380186719, "MadNLP R5": 31380186719, "ACADOS + IPOPT": 31428024125}
+DEFAULT_SOURCE_RUNS = {
+    "IPOPT R5": 31380186719,
+    "MadNLP R5": 31380186719,
+    "ACADOS + IPOPT": 31428024125,
+}
 PW_MIN_US = 131.405
 PW_MAX_US = 600.0
 
@@ -361,6 +365,15 @@ def main() -> None:
     parser.add_argument("--madnlp-trajectory", type=Path, required=True)
     parser.add_argument("--acados-result", type=Path, required=True)
     parser.add_argument("--acados-trajectory", type=Path, required=True)
+    parser.add_argument(
+        "--ipopt-run-id", type=int, default=DEFAULT_SOURCE_RUNS["IPOPT R5"]
+    )
+    parser.add_argument(
+        "--madnlp-run-id", type=int, default=DEFAULT_SOURCE_RUNS["MadNLP R5"]
+    )
+    parser.add_argument(
+        "--acados-run-id", type=int, default=DEFAULT_SOURCE_RUNS["ACADOS + IPOPT"]
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -369,6 +382,11 @@ def main() -> None:
         "IPOPT R5": (args.ipopt_result, args.ipopt_trajectory),
         "MadNLP R5": (args.madnlp_result, args.madnlp_trajectory),
         "ACADOS + IPOPT": (args.acados_result, args.acados_trajectory),
+    }
+    source_runs = {
+        "IPOPT R5": args.ipopt_run_id,
+        "MadNLP R5": args.madnlp_run_id,
+        "ACADOS + IPOPT": args.acados_run_id,
     }
     data = {}
     for name, (result_path, trajectory_path) in specifications.items():
@@ -387,7 +405,7 @@ def main() -> None:
             "timing": _timing_metrics(result, args.cycles),
             "metadata": metadata,
             "control_summary": _control_metrics(controls),
-            "source_github_actions_run": SOURCE_RUNS[name],
+            "source_github_actions_run": source_runs[name],
             "source_result": result_path.name,
             "source_trajectory": trajectory_path.name,
         }
