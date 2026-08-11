@@ -657,8 +657,10 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     `145/145`, mais l'audit inter-nœuds rejette un overshoot de `0.4000 rad/s`;
     le run `31445706759` à `2.55` échoue avant le premier RHO depuis le seed
     commun. Une continuation initiale automatique resserre désormais seulement
-    la borne basse reduced de `omega` selon
-    `3.00 -> 2.85 -> 2.70 -> 2.55`, sans avancer le RHO. Relancer le cas
+    la borne basse reduced de `omega`, sans avancer le RHO. Le run
+    `31448682164` accepte `3.000 -> 2.8875 -> 2.775`, puis atteint
+    `ACADOS_MINSTEP` à `2.6625`; le pas maximal est ramené de `0.15` à
+    `0.05 rad/s`. Relancer le cas
     apparié strict. S'il passe, régénérer les quatre figures et le tableau
     fatigue/temps depuis les trois artefacts. S'il échoue, conserver les deux
     ablations comme résultat négatif et ne pas présenter le run `3.0` comme

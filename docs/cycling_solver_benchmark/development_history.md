@@ -5008,8 +5008,8 @@ et non une simple tolérance à choisir : `3.0` fournit le bassin de convergence
 `2.55` fournit le certificat inter-nœuds.
 
 La formulation reduced ACADOS applique maintenant automatiquement, avant le
-premier RHO, une continuation de la seule borne basse de `omega` : marges
-`3.00, 2.85, 2.70, 2.55 rad/s`. Le premier nœud, la borne lente, les états Ding
+premier RHO, une continuation de la seule borne basse de `omega`. Le premier
+nœud, la borne lente, les états Ding
 et le RHO courant restent inchangés. Chaque palier doit être accepté par le SQP
 avant le suivant; la borne stricte est restaurée dans tous les cas et le résumé
 JSON conserve les statuts, résidus et temps de chaque palier. Cette stratégie
@@ -5039,3 +5039,12 @@ franchit ce contrôle, puis échoue parce que la configuration volontaire
 natifs ACADOS », pas une tolérance numérique. La continuation ne modifie donc
 plus les tolérances absentes; un seuil explicite de `1e-4` sert uniquement à
 l'audit de secours des résidus lorsque le statut natif n'est pas convergé.
+
+Le run
+[`31448682164`](https://github.com/mickaelbegon/cocofest/actions/runs/31448682164)
+exécute enfin réellement la continuation. ACADOS accepte les marges `3.000`,
+`2.8875` et `2.775 rad/s`, puis atteint `ACADOS_MINSTEP` au passage direct à
+`2.6625 rad/s`. Ce résultat valide le principe, mais montre que le pas effectif
+de `0.1125 rad/s` est encore trop grand près de la borne active. Le pas maximal
+est donc ramené à `0.05 rad/s`, soit dix paliers de `3.00` à `2.55`; la borne
+finale, les tolérances et le problème physique restent inchangés.

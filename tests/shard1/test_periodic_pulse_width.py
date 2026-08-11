@@ -7308,7 +7308,10 @@ def test_initial_fast_velocity_bound_schedule_reaches_strict_guard():
         target_margin=2.55,
     )
 
-    np.testing.assert_allclose(margins, (3.0, 2.85, 2.70, 2.55))
+    np.testing.assert_allclose(
+        margins,
+        (3.0, 2.95, 2.90, 2.85, 2.80, 2.75, 2.70, 2.65, 2.60, 2.55),
+    )
     assert all(next_value < value for value, next_value in zip(margins, margins[1:]))
 
 

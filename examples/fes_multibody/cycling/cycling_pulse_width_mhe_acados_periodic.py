@@ -5818,7 +5818,7 @@ def run_acados_terminal_wheel_bound_continuation(
 def resolve_initial_fast_velocity_bound_margins(
     physical_margin: float,
     target_margin: float,
-    maximum_step: float = 0.15,
+    maximum_step: float = 0.05,
 ) -> tuple[float, ...]:
     """Build a decreasing cadence-bound continuation ending at the strict guard."""
 
