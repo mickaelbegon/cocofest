@@ -143,6 +143,29 @@ def _timing_metrics(result: dict, cycles: int) -> dict:
     }
 
 
+def _hybrid_fallback_metrics(result: dict, cycles: int) -> dict:
+    """Account for IPOPT work attempted by the ACADOS hybrid chain."""
+
+    summaries = [
+        row
+        for row in result.get("acados_ipopt_recovery_summaries", [])
+        if int(row.get("target_rho") or row.get("attempt_window") or 0) <= cycles
+    ]
+    return {
+        "recovery_attempt_count": len(summaries),
+        "recovery_accepted_count": sum(bool(row.get("accepted")) for row in summaries),
+        "fallback_advanced_count": sum(
+            bool(row.get("fallback_advanced")) for row in summaries
+        ),
+        "recovery_solver_total_s": float(
+            sum(float(row.get("solver_time_s") or 0.0) for row in summaries)
+        ),
+        "recovery_wall_total_s": float(
+            sum(float(row.get("wall_time_s") or 0.0) for row in summaries)
+        ),
+    }
+
+
 def _control_metrics(controls: dict[str, np.ndarray]) -> dict:
     rows = {}
     for muscle, pw in controls.items():
@@ -403,6 +426,7 @@ def main() -> None:
             # Radau-5 and IRK are plotted on the same one-point-per-RHO grid.
             "fatigue": _fatigue_metrics(dense_capacities, args.cycles),
             "timing": _timing_metrics(result, args.cycles),
+            "hybrid_fallback": _hybrid_fallback_metrics(result, args.cycles),
             "metadata": metadata,
             "control_summary": _control_metrics(controls),
             "source_github_actions_run": source_runs[name],
