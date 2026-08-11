@@ -5030,3 +5030,12 @@ car le clone d'options était encore marqué comme ayant modifié une option
 structurelle après la compilation. Comme les autres continuations du projet,
 ce clone déclare désormais les options structurelles inchangées; seules les
 tolérances et le budget d'itérations sont synchronisés au runtime.
+
+Le run
+[`31448027314`](https://github.com/mickaelbegon/cocofest/actions/runs/31448027314)
+franchit ce contrôle, puis échoue parce que la configuration volontaire
+`acados_tolerance=None` était transmise à tort à
+`set_convergence_tolerance(None)`. `None` signifie ici « conserver les defaults
+natifs ACADOS », pas une tolérance numérique. La continuation ne modifie donc
+plus les tolérances absentes; un seuil explicite de `1e-4` sert uniquement à
+l'audit de secours des résidus lorsque le statut natif n'est pas convergé.

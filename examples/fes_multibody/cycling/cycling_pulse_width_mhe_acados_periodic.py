@@ -5849,8 +5849,8 @@ def run_acados_initial_fast_velocity_bound_continuation(
     periodic_nmpc,
     solver,
     margins: tuple[float, ...],
-    convergence_tolerance: float,
-    stationarity_tolerance: float,
+    convergence_tolerance: float | None,
+    stationarity_tolerance: float | None,
     stage_iterations: int = 100,
     echo: bool = True,
     solve_stage=None,
@@ -5888,8 +5888,10 @@ def run_acados_initial_fast_velocity_bound_continuation(
     velocity_center = velocity_centers[:, :1]
 
     stage_solver = deepcopy(solver)
-    stage_solver.set_convergence_tolerance(convergence_tolerance)
-    stage_solver.set_nlp_solver_tol_stat(stationarity_tolerance)
+    if convergence_tolerance is not None:
+        stage_solver.set_convergence_tolerance(convergence_tolerance)
+    if stationarity_tolerance is not None:
+        stage_solver.set_nlp_solver_tol_stat(stationarity_tolerance)
     stage_solver.set_maximum_iterations(stage_iterations)
     acados_interface = getattr(periodic_nmpc, "ocp_solver", None)
     if getattr(acados_interface, "ocp_solver", None) is not None:
@@ -5910,6 +5912,14 @@ def run_acados_initial_fast_velocity_bound_continuation(
     accepted_controls = snapshot_container(periodic_nmpc.nlp[0].u_init)
     summaries = []
     accepted_margin = None
+    audit_convergence_tolerance = (
+        1e-4 if convergence_tolerance is None else convergence_tolerance
+    )
+    audit_stationarity_tolerance = (
+        audit_convergence_tolerance
+        if stationarity_tolerance is None
+        else stationarity_tolerance
+    )
     start_time = perf_counter()
     try:
         for stage_index, margin in enumerate(margins):
@@ -5922,8 +5932,8 @@ def run_acados_initial_fast_velocity_bound_continuation(
                 solution.status
             ) or acados_diagnostics_meet_tolerances(
                 diagnostics,
-                convergence_tolerance=convergence_tolerance,
-                stationarity_tolerance=stationarity_tolerance,
+                convergence_tolerance=audit_convergence_tolerance,
+                stationarity_tolerance=audit_stationarity_tolerance,
             )
             residuals = diagnostics.get("residuals")
             summary = {
@@ -5979,6 +5989,10 @@ def run_acados_initial_fast_velocity_bound_continuation(
         "margins_rad_s": margins,
         "accepted_margin_rad_s": accepted_margin,
         "strict_margin_rad_s": strict_margin,
+        "solver_convergence_tolerance": convergence_tolerance,
+        "solver_stationarity_tolerance": stationarity_tolerance,
+        "audit_convergence_tolerance": audit_convergence_tolerance,
+        "audit_stationarity_tolerance": audit_stationarity_tolerance,
         "stages": summaries,
         "solver_time_s": float(sum(item["solver_time_s"] for item in summaries)),
         "wall_time_s": perf_counter() - start_time,
