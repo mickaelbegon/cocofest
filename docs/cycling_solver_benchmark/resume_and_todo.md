@@ -653,8 +653,16 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     dominante est la borne de position absolue `theta` restée dans l'ancien
     cycle (`5.090 rad` au nœud 29). Le nouveau correctif translate uniquement
     les bornes `q/theta`, fixe le premier état commun et préserve exactement la
-    boîte physique `qdot/omega`. Relancer d'abord ce cas à `3.0`, puis remettre
-    `2.55` seulement si le rollout/audit inter-nœuds l'exige.
+    boîte physique `qdot/omega`. Le run `31445243270` à `3.0` résout bien
+    `145/145`, mais l'audit inter-nœuds rejette un overshoot de `0.4000 rad/s`;
+    le run `31445706759` à `2.55` échoue avant le premier RHO depuis le seed
+    commun. Une continuation initiale automatique resserre désormais seulement
+    la borne basse reduced de `omega` selon
+    `3.00 -> 2.85 -> 2.70 -> 2.55`, sans avancer le RHO. Relancer le cas
+    apparié strict. S'il passe, régénérer les quatre figures et le tableau
+    fatigue/temps depuis les trois artefacts. S'il échoue, conserver les deux
+    ablations comme résultat négatif et ne pas présenter le run `3.0` comme
+    physiquement certifié.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

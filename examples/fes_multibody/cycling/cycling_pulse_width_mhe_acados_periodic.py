@@ -5815,6 +5815,169 @@ def run_acados_terminal_wheel_bound_continuation(
     return summaries
 
 
+def resolve_initial_fast_velocity_bound_margins(
+    physical_margin: float,
+    target_margin: float,
+    maximum_step: float = 0.15,
+) -> tuple[float, ...]:
+    """Build a decreasing cadence-bound continuation ending at the strict guard."""
+
+    physical_margin = float(physical_margin)
+    target_margin = float(target_margin)
+    maximum_step = float(maximum_step)
+    if not (
+        np.isfinite(physical_margin)
+        and np.isfinite(target_margin)
+        and np.isfinite(maximum_step)
+        and physical_margin > 0.0
+        and target_margin > 0.0
+        and maximum_step > 0.0
+    ):
+        raise ValueError(
+            "Cadence-bound continuation margins must be finite and positive."
+        )
+    if target_margin > physical_margin:
+        raise ValueError("The target cadence margin cannot exceed the physical margin.")
+    if np.isclose(target_margin, physical_margin):
+        return (target_margin,)
+
+    stage_count = int(np.ceil((physical_margin - target_margin) / maximum_step))
+    return tuple(np.linspace(physical_margin, target_margin, stage_count + 1))
+
+
+def run_acados_initial_fast_velocity_bound_continuation(
+    periodic_nmpc,
+    solver,
+    margins: tuple[float, ...],
+    convergence_tolerance: float,
+    stationarity_tolerance: float,
+    stage_iterations: int = 100,
+    echo: bool = True,
+    solve_stage=None,
+) -> dict:
+    """Tighten the reduced ACADOS fast-cadence bound before the first RHO.
+
+    This continuation changes only the path and terminal lower bounds of the
+    reduced ``omega`` state. The first-node equality and the slow/upper bound
+    remain untouched. No RHO is advanced until the strict final margin has
+    been accepted.
+    """
+
+    margins = tuple(float(value) for value in margins)
+    if not margins or any(
+        not np.isfinite(value) or value <= 0.0 for value in margins
+    ):
+        raise ValueError("Initial cadence-bound margins must be finite and positive.")
+    if any(next_value >= value for value, next_value in zip(margins, margins[1:])):
+        raise ValueError("Initial cadence-bound margins must be strictly decreasing.")
+    if "omega" not in periodic_nmpc.nlp[0].x_bounds:
+        raise ValueError(
+            "Initial cadence-bound continuation requires reduced omega mechanics."
+        )
+
+    omega_bounds = periodic_nmpc.nlp[0].x_bounds["omega"]
+    original_lower = np.asarray(omega_bounds.min, dtype=float).copy()
+    if original_lower.shape[1] < 3:
+        raise ValueError("Omega bounds require first, path and terminal columns.")
+    strict_margin = margins[-1]
+    velocity_centers = original_lower[:, 1:] + strict_margin
+    if not np.allclose(velocity_centers, velocity_centers[:, :1]):
+        raise ValueError(
+            "The reduced omega path and terminal bounds do not share one cadence center."
+        )
+    velocity_center = velocity_centers[:, :1]
+
+    stage_solver = deepcopy(solver)
+    stage_solver.set_convergence_tolerance(convergence_tolerance)
+    stage_solver.set_nlp_solver_tol_stat(stationarity_tolerance)
+    stage_solver.set_maximum_iterations(stage_iterations)
+    if solve_stage is None:
+
+        def solve_stage():
+            return super(RecedingHorizonOptimization, periodic_nmpc).solve(
+                solver=stage_solver,
+                warm_start=None,
+            )
+
+    accepted_states = snapshot_container(periodic_nmpc.nlp[0].x_init)
+    accepted_controls = snapshot_container(periodic_nmpc.nlp[0].u_init)
+    summaries = []
+    accepted_margin = None
+    start_time = perf_counter()
+    try:
+        for stage_index, margin in enumerate(margins):
+            omega_bounds.min[:, 1:] = velocity_center - margin
+            periodic_nmpc._sync_acados_state_bounds()
+            set_acados_runtime_max_iterations(periodic_nmpc, stage_iterations)
+            solution = solve_stage()
+            diagnostics = snapshot_acados_diagnostics(solution)
+            accepted = _status_is_success(
+                solution.status
+            ) or acados_diagnostics_meet_tolerances(
+                diagnostics,
+                convergence_tolerance=convergence_tolerance,
+                stationarity_tolerance=stationarity_tolerance,
+            )
+            residuals = diagnostics.get("residuals")
+            summary = {
+                "stage": stage_index,
+                "margin_rad_s": margin,
+                "lower_bound_rad_s": float(velocity_center[0, 0] - margin),
+                "status": solution.status,
+                "accepted": accepted,
+                "residuals": (
+                    None
+                    if residuals is None
+                    else np.asarray(residuals, dtype=float).copy()
+                ),
+                "solver_time_s": solution.solver_time_to_optimize,
+                "wall_time_s": solution.real_time_to_optimize,
+            }
+            summaries.append(summary)
+            if echo:
+                print(
+                    "acados_initial_fast_velocity_bound_homotopy: "
+                    f"stage={stage_index} margin={margin:.6g} "
+                    f"lower={summary['lower_bound_rad_s']:.6g} "
+                    f"status={solution.status} accepted={accepted} "
+                    f"residuals={_format_array(summary['residuals'])}"
+                )
+            if not accepted:
+                summary["solver_reset"] = reset_acados_solver_memory(periodic_nmpc)
+                break
+            apply_solution_directly_to_periodic_nmpc_initial_guess(
+                periodic_nmpc, solution
+            )
+            accepted_states = snapshot_container(periodic_nmpc.nlp[0].x_init)
+            accepted_controls = snapshot_container(periodic_nmpc.nlp[0].u_init)
+            accepted_margin = margin
+    finally:
+        for key, values in accepted_states.items():
+            periodic_nmpc.nlp[0].x_init[key].init[:, :] = values
+        for key, values in accepted_controls.items():
+            periodic_nmpc.nlp[0].u_init[key].init[:, :] = values
+        omega_bounds.min[:, :] = original_lower
+        periodic_nmpc._sync_acados_state_bounds()
+        nominal_iterations = getattr(solver, "nlp_solver_max_iter", None)
+        if nominal_iterations is not None:
+            set_acados_runtime_max_iterations(periodic_nmpc, int(nominal_iterations))
+
+    completed = bool(
+        accepted_margin is not None and np.isclose(accepted_margin, strict_margin)
+    )
+    if completed:
+        periodic_nmpc._cocofest_dual_warm_start_mode = "preserve"
+    return {
+        "completed": completed,
+        "margins_rad_s": margins,
+        "accepted_margin_rad_s": accepted_margin,
+        "strict_margin_rad_s": strict_margin,
+        "stages": summaries,
+        "solver_time_s": float(sum(item["solver_time_s"] for item in summaries)),
+        "wall_time_s": perf_counter() - start_time,
+    }
+
+
 def terminal_wheel_bound_continuation_reached_target(
     summaries: list[dict], slacks: tuple[float, ...]
 ) -> bool:
@@ -8126,6 +8289,20 @@ def diagnose_wheel_trace(
     finite = bool(np.all(np.isfinite(trace)))
     final_angle = float(trace[-1]) if trace.size else float("nan")
     max_abs_angle = float(np.max(np.abs(trace))) if trace.size else float("nan")
+    # ``theta`` is intentionally unwrapped, so a valid continuation can start
+    # hundreds of radians away from zero after many completed cycles.  The
+    # safety envelope must therefore measure excursion from the absolute
+    # reference of this window, not the absolute coordinate itself.
+    angle_reference = (
+        float(absolute_cycle_reference)
+        if absolute_cycle_reference is not None
+        else (float(trace[0]) if trace.size else 0.0)
+    )
+    max_reference_relative_angle = (
+        float(np.max(np.abs(trace - angle_reference)))
+        if trace.size
+        else float("nan")
+    )
     max_step = float(np.max(np.abs(np.diff(trace)))) if trace.size > 1 else 0.0
     expected_scale = max(2 * np.pi * max(requested_windows, 1), 1.0)
     angle_limit = 10.0 * expected_scale
@@ -8133,7 +8310,7 @@ def diagnose_wheel_trace(
     issues = []
     if not finite:
         issues.append("non_finite_wheel_trace")
-    if finite and max_abs_angle > angle_limit:
+    if finite and max_reference_relative_angle > angle_limit:
         issues.append("wheel_angle_out_of_bounds")
     if finite and max_step > jump_limit:
         issues.append("wheel_angle_jump_out_of_bounds")
@@ -8171,6 +8348,8 @@ def diagnose_wheel_trace(
         "issues": issues,
         "final_angle": final_angle,
         "max_abs_angle": max_abs_angle,
+        "angle_reference": angle_reference,
+        "max_reference_relative_angle": max_reference_relative_angle,
         "max_step": max_step,
         "angle_limit": angle_limit,
         "jump_limit": jump_limit,
@@ -17035,6 +17214,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
     control_homotopy_summaries = []
     proximal_control_summaries = []
     terminal_wheel_bound_summaries = []
+    initial_fast_velocity_bound_homotopy_summary = None
     inter_window_terminal_wheel_bound_summaries = []
     inter_window_proximal_control_summaries = []
     transfer_failure_window = None
@@ -18632,6 +18812,36 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 f"{initial_acados_irk_rollout_summary['max_bound_violation']:.6g}"
             )
 
+    if (
+        args.solver == "acados"
+        and args.mechanical_formulation == "reduced"
+        and _effective_wheel_qdot_bound_margins(args)[0]
+        < args.wheel_qdot_bound_margin
+    ):
+        fast_margin = _effective_wheel_qdot_bound_margins(args)[0]
+        initial_fast_velocity_bound_homotopy_summary = (
+            run_acados_initial_fast_velocity_bound_continuation(
+                nmpc,
+                solver,
+                margins=resolve_initial_fast_velocity_bound_margins(
+                    args.wheel_qdot_bound_margin,
+                    fast_margin,
+                ),
+                convergence_tolerance=args.acados_tolerance,
+                stationarity_tolerance=args.acados_stationarity_tolerance,
+                stage_iterations=args.max_acados_iterations,
+                echo=echo,
+            )
+        )
+        if echo:
+            print(
+                "acados_initial_fast_velocity_bound_homotopy_summary: "
+                f"completed={initial_fast_velocity_bound_homotopy_summary['completed']} "
+                "accepted_margin="
+                f"{initial_fast_velocity_bound_homotopy_summary['accepted_margin_rad_s']} "
+                f"wall_time_s={initial_fast_velocity_bound_homotopy_summary['wall_time_s']:.6g}"
+            )
+
     control_homotopy_completed_for_seed = False
     if args.solver == "acados" and cycle_boundary_homotopy_schedule is not None:
         seam_initial_control_radius = None
@@ -18885,6 +19095,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         summary["compiled_nlp_reuse"] = compiled_nlp_tracker.summary()
         if initial_acados_irk_rollout_summary is not None:
             summary["initial_acados_irk_rollout"] = initial_acados_irk_rollout_summary
+        if initial_fast_velocity_bound_homotopy_summary is not None:
+            summary["initial_fast_velocity_bound_homotopy"] = (
+                initial_fast_velocity_bound_homotopy_summary
+            )
         if args.solver == "acados":
             summary["acados_ipopt_recovery"] = {
                 "enabled": bool(args.acados_ipopt_recovery),
@@ -18979,6 +19193,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         summary["compiled_nlp_reuse"] = compiled_nlp_tracker.summary()
         if initial_acados_irk_rollout_summary is not None:
             summary["initial_acados_irk_rollout"] = initial_acados_irk_rollout_summary
+        if initial_fast_velocity_bound_homotopy_summary is not None:
+            summary["initial_fast_velocity_bound_homotopy"] = (
+                initial_fast_velocity_bound_homotopy_summary
+            )
         if args.solver == "acados":
             summary["acados_ipopt_recovery"] = {
                 "enabled": bool(args.acados_ipopt_recovery),
@@ -19089,6 +19307,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         )
         if initial_acados_irk_rollout_summary is not None:
             summary["initial_acados_irk_rollout"] = initial_acados_irk_rollout_summary
+        if initial_fast_velocity_bound_homotopy_summary is not None:
+            summary["initial_fast_velocity_bound_homotopy"] = (
+                initial_fast_velocity_bound_homotopy_summary
+            )
         summary["acados_ipopt_recovery"] = {
             "enabled": bool(args.acados_ipopt_recovery),
             "forced_first_rho_for_ci": bool(

@@ -4938,6 +4938,25 @@ def test_wheel_trace_diagnostic_uses_distinct_absolute_tolerance():
     assert diagnostics["maximum_cycle_progress_error"] == pytest.approx(0.004)
 
 
+def test_wheel_trace_diagnostic_accepts_large_unwrapped_cycle_offset():
+    reference = -79.0 * 2.0 * np.pi
+    trace = np.linspace(reference, reference - 2.0 * np.pi, 31)
+
+    diagnostics = periodic_example.diagnose_wheel_trace(
+        trace,
+        requested_windows=1,
+        expected_cycle_shift=-2.0 * np.pi,
+        cycle_progress_tolerance=1e-9,
+        absolute_cycle_reference=reference,
+        absolute_cycle_tolerance=1e-9,
+    )
+
+    assert diagnostics["is_physical"] is True
+    assert "wheel_angle_out_of_bounds" not in diagnostics["issues"]
+    assert diagnostics["max_abs_angle"] > diagnostics["angle_limit"]
+    assert diagnostics["max_reference_relative_angle"] == pytest.approx(2.0 * np.pi)
+
+
 def test_wheel_cycle_diagnostic_tolerances_keep_absolute_slack():
     args = SimpleNamespace(
         solver="madnlp",
@@ -7281,6 +7300,102 @@ def test_acados_internal_wheel_speed_guard_keeps_physical_audit_margin_separate(
     )
     assert comparison_args.acados_wheel_qdot_fast_bound_margin == 2.55
     assert comparison_args.acados_wheel_qdot_slow_bound_margin is None
+
+
+def test_initial_fast_velocity_bound_schedule_reaches_strict_guard():
+    margins = periodic_example.resolve_initial_fast_velocity_bound_margins(
+        physical_margin=3.0,
+        target_margin=2.55,
+    )
+
+    np.testing.assert_allclose(margins, (3.0, 2.85, 2.70, 2.55))
+    assert all(next_value < value for value, next_value in zip(margins, margins[1:]))
+
+
+def test_initial_fast_velocity_bound_continuation_preserves_first_node(monkeypatch):
+    class Entry:
+        def __init__(self, values):
+            self.init = np.asarray(values, dtype=float)
+
+    class BoundEntry:
+        def __init__(self):
+            self.min = np.array(
+                [[-2.0 * np.pi, -2.0 * np.pi - 2.55, -2.0 * np.pi - 2.55]]
+            )
+            self.max = np.array(
+                [[-2.0 * np.pi, -2.0 * np.pi + 3.0, -2.0 * np.pi + 3.0]]
+            )
+
+    omega_bounds = BoundEntry()
+    nmpc = SimpleNamespace(
+        nlp=[
+            SimpleNamespace(
+                x_bounds={"omega": omega_bounds},
+                x_init={"omega": Entry([[-2.0 * np.pi] * 3])},
+                u_init={"pulse_apparition_time": Entry([[1.4e-4, 1.4e-4]])},
+            )
+        ],
+        _sync_acados_state_bounds=lambda: None,
+    )
+
+    class Solver:
+        nlp_solver_max_iter = 100
+
+        def set_convergence_tolerance(self, _value):
+            pass
+
+        def set_nlp_solver_tol_stat(self, _value):
+            pass
+
+        def set_maximum_iterations(self, _value):
+            pass
+
+    observed = []
+
+    def solve_stage():
+        observed.append(omega_bounds.min.copy())
+        return SimpleNamespace(
+            status=0,
+            solver_time_to_optimize=0.01,
+            real_time_to_optimize=0.02,
+        )
+
+    monkeypatch.setattr(
+        periodic_example,
+        "snapshot_acados_diagnostics",
+        lambda _solution: {"residuals": np.zeros(4)},
+    )
+    monkeypatch.setattr(
+        periodic_example,
+        "apply_solution_directly_to_periodic_nmpc_initial_guess",
+        lambda _nmpc, _solution: None,
+    )
+    monkeypatch.setattr(
+        periodic_example,
+        "set_acados_runtime_max_iterations",
+        lambda _nmpc, _iterations: None,
+    )
+
+    first_node_lower = float(omega_bounds.min[0, 0])
+    strict_lower = omega_bounds.min.copy()
+    summary = periodic_example.run_acados_initial_fast_velocity_bound_continuation(
+        nmpc,
+        Solver(),
+        margins=(3.0, 2.85, 2.70, 2.55),
+        convergence_tolerance=1e-4,
+        stationarity_tolerance=1e-3,
+        solve_stage=solve_stage,
+        echo=False,
+    )
+
+    assert summary["completed"] is True
+    assert summary["accepted_margin_rad_s"] == 2.55
+    np.testing.assert_allclose(
+        [bounds[0, 1] for bounds in observed],
+        -2.0 * np.pi - np.array([3.0, 2.85, 2.70, 2.55]),
+    )
+    assert all(bounds[0, 0] == first_node_lower for bounds in observed)
+    np.testing.assert_allclose(omega_bounds.min, strict_lower)
 
 
 def test_reduced_wheel_speed_bounds_support_an_asymmetric_fast_guard(monkeypatch):

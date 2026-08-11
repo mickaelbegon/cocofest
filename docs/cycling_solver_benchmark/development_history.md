@@ -4987,3 +4987,31 @@ toute la cinématique pour un bridge mécanique, translater seulement les bornes
 de position `q/theta` pour une nouvelle phase absolue, et fixer tous les états
 du premier nœud pour l'appariement. Les bornes de vitesse `qdot/omega` restent
 inchangées dans ce dernier cas.
+
+Les deux runs suivants ferment l'analyse de la garde de cadence. Avec la borne
+nodale symétrique de `3.0 rad/s`, le run
+[`31445243270`](https://github.com/mickaelbegon/cocofest/actions/runs/31445243270)
+résout numériquement `145/145` RHO en `18.77 s` online (`0.105 s` de médiane
+murale chaude), avec un recovery IPOPT de `7.70 s`. Il est néanmoins rejeté
+physiquement : la vitesse moyenne reconstruite sur le premier intervalle
+atteint `-9.6832 rad/s`, soit `0.4000 rad/s` au-delà de la limite rapide
+`-9.2832 rad/s`. Ce résultat ne doit donc pas alimenter une comparaison de
+fatigue certifiée.
+
+À l'inverse, le run
+[`31445706759`](https://github.com/mickaelbegon/cocofest/actions/runs/31445706759)
+impose directement la garde conservatrice de `2.55 rad/s`, mais échoue avant
+le premier RHO : le rollout IRK initial descend à `-11.5316 rad/s`, soit
+`2.698 rad/s` sous la borne nodale, et les deux recoveries IPOPT restent à
+`inf_pr=0.309278`. Les deux ablations montrent donc deux problèmes distincts,
+et non une simple tolérance à choisir : `3.0` fournit le bassin de convergence;
+`2.55` fournit le certificat inter-nœuds.
+
+La formulation reduced ACADOS applique maintenant automatiquement, avant le
+premier RHO, une continuation de la seule borne basse de `omega` : marges
+`3.00, 2.85, 2.70, 2.55 rad/s`. Le premier nœud, la borne lente, les états Ding
+et le RHO courant restent inchangés. Chaque palier doit être accepté par le SQP
+avant le suivant; la borne stricte est restaurée dans tous les cas et le résumé
+JSON conserve les statuts, résidus et temps de chaque palier. Cette stratégie
+combine le bassin observé à `3.0` avec le domaine physiquement sûr à `2.55`,
+sans certifier ni avancer une fenêtre relaxée.
