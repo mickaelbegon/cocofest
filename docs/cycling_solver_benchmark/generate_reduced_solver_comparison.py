@@ -124,11 +124,39 @@ def _fatigue_metrics(capacities: dict[str, np.ndarray], cycles: int) -> dict:
 
 
 def _timing_metrics(result: dict, cycles: int) -> dict:
-    windows = result["windows"][:cycles]
-    solver = np.asarray([float(row["solver_time_s"]) for row in windows])
-    wall = np.asarray([float(row["wall_time_s"]) for row in windows])
+    attempts = result.get("solver_attempt_accounting", {}).get("attempts", [])
+    if attempts:
+        selected_attempts = [
+            row for row in attempts if int(row.get("target_rho") or 0) <= cycles
+        ]
+    else:
+        selected_attempts = [
+            {**row, "target_rho": index}
+            for index, row in enumerate(result["windows"][:cycles], start=1)
+        ]
+
+    # A hybrid RHO includes every failed ACADOS attempt and every IPOPT
+    # recovery performed before that physical cycle is allowed to advance.
+    # Summing only ``windows`` under-reports precisely the expensive cases.
+    selected_recoveries = [
+        row
+        for row in result.get("acados_ipopt_recovery_summaries", [])
+        if int(row.get("target_rho") or row.get("attempt_window") or 0) <= cycles
+    ]
+    solver_by_rho = np.zeros(cycles, dtype=float)
+    wall_by_rho = np.zeros(cycles, dtype=float)
+    for row in (*selected_attempts, *selected_recoveries):
+        rho = int(row.get("target_rho") or row.get("attempt_window") or 0)
+        if 1 <= rho <= cycles:
+            solver_by_rho[rho - 1] += float(row.get("solver_time_s") or 0.0)
+            wall_by_rho[rho - 1] += float(row.get("wall_time_s") or 0.0)
+
+    solver = solver_by_rho
+    wall = wall_by_rho
     hot_solver = solver[1:] if solver.size > 1 else solver
     hot_wall = wall[1:] if wall.size > 1 else wall
+    execution_timing = result.get("execution_timing", {})
+    complete_prefix = cycles == int(result.get("validated_cycles") or 0)
     return {
         "online_solver_total_s": float(np.sum(solver)),
         "online_wall_total_s": float(np.sum(wall)),
@@ -138,6 +166,13 @@ def _timing_metrics(result: dict, cycles: int) -> dict:
         "hot_solver_p90_s": float(np.percentile(hot_solver, 90)),
         "hot_wall_median_s": float(np.median(hot_wall)),
         "hot_wall_p90_s": float(np.percentile(hot_wall, 90)),
+        "target_solver_attempt_count": len(selected_attempts),
+        "recovery_attempt_count": len(selected_recoveries),
+        "rho_pipeline_wall_total_s": (
+            float(execution_timing["rho_solve_loop_wall_time_s"])
+            if complete_prefix and "rho_solve_loop_wall_time_s" in execution_timing
+            else None
+        ),
         "reported_full_run_end_to_end_s": float(result["end_to_end_wall_time_s"]),
         "reported_full_run_cycles": int(result.get("validated_cycles") or len(result["windows"])),
     }
