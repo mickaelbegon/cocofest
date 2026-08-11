@@ -5022,3 +5022,11 @@ s'est arrêté avant tout palier : `BoundsList.__contains__` ne teste pas les
 noms d'état comme un dictionnaire Python. La détection de `omega` utilise
 désormais explicitement `x_bounds.keys()`; une régression reproduit ce contrat
 du conteneur Bioptim.
+
+Le run suivant,
+[`31447494045`](https://github.com/mickaelbegon/cocofest/actions/runs/31447494045),
+atteint la capsule native, mais ACADOS refuse le premier solve de continuation
+car le clone d'options était encore marqué comme ayant modifié une option
+structurelle après la compilation. Comme les autres continuations du projet,
+ce clone déclare désormais les options structurelles inchangées; seules les
+tolérances et le budget d'itérations sont synchronisés au runtime.

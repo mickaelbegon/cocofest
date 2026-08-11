@@ -5891,6 +5891,13 @@ def run_acados_initial_fast_velocity_bound_continuation(
     stage_solver.set_convergence_tolerance(convergence_tolerance)
     stage_solver.set_nlp_solver_tol_stat(stationarity_tolerance)
     stage_solver.set_maximum_iterations(stage_iterations)
+    acados_interface = getattr(periodic_nmpc, "ocp_solver", None)
+    if getattr(acados_interface, "ocp_solver", None) is not None:
+        mark_options_unchanged = getattr(
+            stage_solver, "set_only_first_options_has_changed", None
+        )
+        if mark_options_unchanged is not None:
+            mark_options_unchanged(False)
     if solve_stage is None:
 
         def solve_stage():

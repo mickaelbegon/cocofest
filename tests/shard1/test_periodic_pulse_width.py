@@ -7341,10 +7341,14 @@ def test_initial_fast_velocity_bound_continuation_preserves_first_node(monkeypat
             )
         ],
         _sync_acados_state_bounds=lambda: None,
+        ocp_solver=SimpleNamespace(ocp_solver=object()),
     )
 
     class Solver:
         nlp_solver_max_iter = 100
+
+        def __init__(self):
+            self.only_first_options_has_changed = True
 
         def set_convergence_tolerance(self, _value):
             pass
@@ -7354,6 +7358,9 @@ def test_initial_fast_velocity_bound_continuation_preserves_first_node(monkeypat
 
         def set_maximum_iterations(self, _value):
             pass
+
+        def set_only_first_options_has_changed(self, value):
+            self.only_first_options_has_changed = value
 
     observed = []
 
