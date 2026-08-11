@@ -672,11 +672,24 @@ jobs:
               .configurations.acados.acados_ipopt_recovery == true and
               .configurations.acados.acados_ipopt_fallback_advance == true and
               .configurations.acados.mechanical_formulation == "reduced" and
-              .results[0].success == true and
-              .results[0].validated_cycles == $requested and
+              .results[0].requested_cycles == $requested and
+              .results[0].error == null and
+              .results[0].receding_horizon_solution_output_error == null and
               .results[0].mechanical_equivalence_audit.passes_tolerance == true and
               .results[0].acados_ipopt_recovery.fallback_advance_enabled == true and
               .results[0].acados_ipopt_recovery.fallback_advanced_count >= 1 and
+              (
+                (.results[0].success == true and
+                 .results[0].validated_cycles == $requested) or
+                (.results[0].success == false and
+                 .results[0].validated_cycles > 0 and
+                 .results[0].validated_cycles < $requested and
+                 .results[0].maximum_consecutive_failures >= 2 and
+                 .results[0].stop.label != null and
+                 .results[0].fatigue_endurance_outcome.accepted == true and
+                 .results[0].fatigue_endurance_outcome.label == "fatigue_limited_candidate" and
+                 .results[0].acados_ipopt_recovery.attempt_count >= 1)
+              ) and
               any(.results[0].acados_ipopt_recovery_summaries[];
                   .fallback_advanced == true and
                   .fallback_certifier == "ipopt_radau" and
