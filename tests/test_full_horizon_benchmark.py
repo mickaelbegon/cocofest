@@ -50,6 +50,136 @@ def test_horizon_sweep_requires_the_two_rho_bootstrap_cycles():
         full_horizon.horizon_sweep_targets(1)
 
 
+def test_adaptive_target_uses_three_cycles_and_clips_the_tail():
+    assert full_horizon.adaptive_continuation_target(2, 20, 3) == 5
+    assert full_horizon.adaptive_continuation_target(20, 22, 3) == 22
+
+
+def test_jump_objective_gate_rejects_excessive_degradation():
+    accepted = full_horizon.objective_gate(100.4, 100.0, 0.005)
+    rejected = full_horizon.objective_gate(100.6, 100.0, 0.005)
+
+    assert accepted["passes"]
+    assert accepted["relative_degradation"] == pytest.approx(0.004)
+    assert not rejected["passes"]
+
+
+def test_jump_objective_gate_marks_missing_measurement_incomparable():
+    gate = full_horizon.objective_gate(None, 100.0, 0.005)
+
+    assert not gate["comparable"]
+
+
+def test_adaptive_continuation_falls_back_to_one_then_retries_jump(
+    tmp_path, monkeypatch
+):
+    objectives = tmp_path / "objectives"
+    objectives.mkdir()
+
+    def result(name, objective):
+        path = objectives / f"{name}.json"
+        path.write_text(
+            json.dumps({"results": [{"window_objective_sum": objective}]}),
+            encoding="utf-8",
+        )
+        return path
+
+    bootstrap_solution = tmp_path / "fho-2.npz"
+    bootstrap_solution.touch()
+    bootstrap_result = result("fho-2", 2.0)
+    report = {
+        "full_horizon_attempts": [
+            {
+                "cycles": 2,
+                "success": True,
+                "accepted_for_continuation": True,
+                "result_path": str(bootstrap_result),
+                "solution_path": str(bootstrap_solution),
+            }
+        ],
+        "extension_rho_attempts": [],
+        "adaptive_fallback_events": [],
+        "largest_successful_cycles": 2,
+        "homotopy_constructed_cycles": 2,
+    }
+    args = SimpleNamespace(
+        output_dir=tmp_path / "output",
+        continuation_step_cycles=3,
+        jump_objective_relative_tolerance=0.005,
+        max_cycles=5,
+    )
+    extension_number = 0
+
+    def fake_extension(call_args, **kwargs):
+        nonlocal extension_number
+        extension_number += 1
+        solution = tmp_path / f"rho-{extension_number}.npz"
+        solution.touch()
+        return {
+            "success": True,
+            "infrastructure_error": False,
+            "failure_kind": None,
+            "solution_path": str(solution),
+            "result_path": str(result(f"rho-{extension_number}", 1.0)),
+        }
+
+    horizon_targets = []
+
+    def fake_horizon(call_args, **kwargs):
+        cycles = kwargs["cycles"]
+        horizon_targets.append(cycles)
+        objective = 10.0 if horizon_targets == [5] else float(cycles)
+        solution = tmp_path / f"fho-{cycles}-{len(horizon_targets)}.npz"
+        solution.touch()
+        return {
+            "cycles": cycles,
+            "success": True,
+            "infrastructure_error": False,
+            "failure_kind": None,
+            "solution_path": str(solution),
+            "result_path": str(
+                result(f"fho-{cycles}-{len(horizon_targets)}", objective)
+            ),
+        }
+
+    monkeypatch.setattr(full_horizon, "_run_extension_rho", fake_extension)
+    monkeypatch.setattr(full_horizon, "_run_horizon_attempt", fake_horizon)
+    monkeypatch.setattr(
+        full_horizon,
+        "append_rho_extension_cycle",
+        lambda source, extension, output: (
+            output.parent.mkdir(parents=True, exist_ok=True), output.touch()
+        ),
+    )
+    monkeypatch.setattr(full_horizon, "_write_report", lambda *args: None)
+    monkeypatch.setattr(full_horizon, "_write_markdown", lambda *args: None)
+
+    return_code = full_horizon._continue_adaptively(
+        args,
+        report=report,
+        report_path=tmp_path / "report.json",
+        markdown_path=tmp_path / "report.md",
+        rho_seed_path=tmp_path / "rho-reference.npz",
+        effective_max_cycles=5,
+        current_cycles=2,
+        current_full_solution=bootstrap_solution,
+        rss_limit_bytes=1024,
+    )
+
+    assert return_code == 0
+    assert horizon_targets == [5, 3, 5]
+    assert report["largest_successful_cycles"] == 5
+    assert report["adaptive_fallback_events"] == [
+        {
+            "from_cycles": 2,
+            "rejected_target_cycles": 5,
+            "rejected_step_cycles": 3,
+            "reason": "jump_objective_degradation",
+            "fallback_step_cycles": 1,
+        }
+    ]
+
+
 def test_refinement_fills_only_the_last_coarse_interval():
     assert full_horizon.refinement_targets(60, 70) == list(range(61, 70))
     assert full_horizon.refinement_targets(12, 13) == []
@@ -550,6 +680,8 @@ def test_workflow_has_an_isolated_mx_mumps_full_horizon_mode():
         encoding="utf-8"
     )
     assert "--memory-limit-gib" in full_job
+    assert "--continuation-step-cycles 3" in full_job
+    assert "--jump-objective-relative-tolerance 0.005" in full_job
     assert "full_horizon_max_cycles" in workflow
     assert "cycling-full-horizon-${{ github.run_id }}" in full_job
 

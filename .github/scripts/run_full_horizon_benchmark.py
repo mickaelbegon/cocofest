@@ -2,10 +2,10 @@
 """Run an RSS-bounded RHO-to-full-horizon continuation with MadNLP.
 
 Two consecutive reduced RHO cycles first initialize FHO_2.  Every subsequent
-problem is then built from the last certified full-horizon solution: its
-terminal state initializes one new reduced RHO cycle, and the concatenation
-``FHO_N + RHO_(N+1)`` initializes FHO_(N+1).  The horizon therefore grows by
-exactly one cycle and never reuses an unrelated tail from the original RHO.
+problem is built from the last certified full-horizon solution.  By default the
+horizon grows by one cycle.  An adaptive step can instead append several
+terminal-state-homotoped RHO cycles before solving the next FHO; a rejected
+multi-cycle jump automatically falls back to the certified one-cycle ladder.
 """
 
 from __future__ import annotations
@@ -36,6 +36,51 @@ def horizon_sweep_targets(max_cycles: int) -> list[int]:
     if max_cycles < 2:
         raise ValueError("max_cycles must be at least two.")
     return list(range(2, max_cycles + 1))
+
+
+def adaptive_continuation_target(
+    current_cycles: int, max_cycles: int, step_cycles: int
+) -> int:
+    """Return the next bounded continuation target."""
+
+    if current_cycles < 2 or max_cycles < current_cycles:
+        raise ValueError("The continuation interval is inconsistent.")
+    if step_cycles < 1:
+        raise ValueError("step_cycles must be strictly positive.")
+    return min(max_cycles, current_cycles + step_cycles)
+
+
+def objective_gate(
+    candidate_objective: float | None,
+    additive_seed_objective: float | None,
+    relative_tolerance: float,
+) -> dict:
+    """Check that a jump did not worsen its concatenated feasible seed."""
+
+    if relative_tolerance < 0 or not math.isfinite(relative_tolerance):
+        raise ValueError("relative_tolerance must be finite and non-negative.")
+    comparable = bool(
+        candidate_objective is not None
+        and additive_seed_objective is not None
+        and math.isfinite(candidate_objective)
+        and math.isfinite(additive_seed_objective)
+    )
+    relative_degradation = None
+    passes = True
+    if comparable:
+        scale = max(abs(additive_seed_objective), 1e-12)
+        relative_degradation = (
+            candidate_objective - additive_seed_objective
+        ) / scale
+        passes = relative_degradation <= relative_tolerance
+    return {
+        "comparable": comparable,
+        "candidate": candidate_objective,
+        "additive_seed_reference": additive_seed_objective,
+        "relative_degradation": relative_degradation,
+        "relative_tolerance": relative_tolerance,
+        "passes": passes,
+    }
 
 
 def refinement_targets(last_success: int, first_failure: int) -> list[int]:
@@ -195,6 +240,7 @@ def run_monitored(
     cwd: Path,
     log_path: Path,
     rss_limit_bytes: int,
+    heartbeat_label: str = "solver",
     poll_interval_s: float = 0.5,
     timeout_s: float | None = None,
 ) -> MonitoredRun:
@@ -218,6 +264,11 @@ def run_monitored(
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+        )
+        print(
+            f"full-horizon start: stage={heartbeat_label} pid={process.pid} "
+            f"timeout={timeout_s if timeout_s is not None else 'none'}s",
+            flush=True,
         )
         next_heartbeat = start + 30.0
         while process.poll() is None:
@@ -244,8 +295,17 @@ def run_monitored(
                 _terminate_process_group(process)
                 break
             if now >= next_heartbeat:
+                elapsed_s = now - start
+                timeout_remaining_s = (
+                    None
+                    if timeout_s is None
+                    else max(0.0, timeout_s - elapsed_s)
+                )
                 print(
-                    f"full-horizon heartbeat: pid={process.pid} "
+                    f"full-horizon heartbeat: stage={heartbeat_label} "
+                    f"pid={process.pid} elapsed={elapsed_s:.1f}s "
+                    f"timeout_remaining="
+                    f"{timeout_remaining_s if timeout_remaining_s is not None else 'none'}s "
                     f"rss={rss / GIB:.3f} GiB peak={peak_rss / GIB:.3f} GiB",
                     flush=True,
                 )
@@ -564,13 +624,7 @@ def append_rho_extension_cycle(
     extension_path: Path,
     output_path: Path,
 ) -> dict:
-    """Append one terminal-state RHO to the reduced seed behind FHO_N.
-
-    The old reduced prefix is only a shape carrier: FHO_N will overwrite it.
-    Its last state node is replaced with the extension's initial state so the
-    boundary inspected before that overlay already represents the true
-    FHO_N-to-RHO_(N+1) seam.
-    """
+    """Append one terminal-state RHO directly to the certified FHO_N solution."""
 
     with np.load(prefix_path, allow_pickle=False) as prefix_data, np.load(
         extension_path, allow_pickle=False
@@ -688,6 +742,19 @@ def _benchmark_payload_is_readable(result_path: Path) -> bool:
         return isinstance(result, dict) and result.get("error") is None
     except (OSError, ValueError, KeyError, IndexError, TypeError):
         return False
+
+
+def _benchmark_window_objective(result_path: Path | None) -> float | None:
+    """Read the additive objective reported by one benchmark result."""
+
+    if result_path is None:
+        return None
+    try:
+        payload = json.loads(Path(result_path).read_text(encoding="utf-8"))
+        value = float(payload["results"][0]["window_objective_sum"])
+        return value if math.isfinite(value) else None
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
 
 
 def _rho_extension_success(result_path: Path) -> bool:
@@ -1034,6 +1101,15 @@ def _write_markdown(path: Path, report: dict) -> None:
         f"- Limite RSS : `{report['rss_limit_gib']:.3f} GiB`",
         f"- Plafond demandé : `{report['max_cycles']} cycles`",
         f"- RHO de référence disponibles : `{report['rho_available_cycles']} cycles`",
+        (
+            "- Pas adaptatif demandé : "
+            f"`+{report.get('continuation_step_cycles', 1)} cycles`"
+        ),
+        (
+            "- Tolérance objective des sauts : "
+            f"`{100 * report.get('jump_objective_relative_tolerance', 0.0):.3f} %`"
+        ),
+        f"- Replis +1 : `{len(report.get('adaptive_fallback_events', []))}`",
         f"- Chaîne RHO/FHO construite : `{report.get('homotopy_constructed_cycles', 0)} cycles`",
         f"- Plus grand full horizon validé : `{report['largest_successful_cycles']}`",
         f"- Trous de convergence : `{report.get('solver_gap_cycles', [])}`",
@@ -1056,14 +1132,18 @@ def _write_markdown(path: Path, report: dict) -> None:
     if extension_attempts:
         lines.extend(
             [
-                "| Après FHO | RHO cible | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
-                "|---:|---:|:---:|:---|---:|---:|",
+                "| Source | RHO cible | Saut FHO | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
+                "|:---|---:|---:|:---:|:---|---:|---:|",
             ]
         )
         for extension in extension_attempts:
+            source_label = extension.get("source_label") or (
+                f"FHO_{extension['after_full_horizon_cycles']}"
+            )
             lines.append(
-                f"| {extension['after_full_horizon_cycles']} | "
+                f"| {source_label} | "
                 f"{extension['target_cycle']} | "
+                f"+{extension.get('adaptive_step_cycles', 1)} | "
                 f"{'oui' if extension['success'] else 'non'} | "
                 f"{extension.get('failure_kind') or '—'} | "
                 f"{extension['peak_rss_gib']:.3f} | "
@@ -1076,16 +1156,27 @@ def _write_markdown(path: Path, report: dict) -> None:
         [
             "## Sweep FHO reduced/MX",
             "",
-            "| Cycles | Phase | Chance | Seed | Succès | Échec | Pic RSS (GiB) | Temps (s) |",
-            "|---:|:---|---:|:---|:---:|:---|---:|---:|",
+            "| Passage | Phase | Seed | Convergé | Promu | Δ objectif/seed | Échec | Pic RSS (GiB) | Temps (s) |",
+            "|:---|:---|:---|:---:|:---:|---:|:---|---:|---:|",
         ]
     )
     for attempt in report["full_horizon_attempts"]:
+        objective_degradation = (attempt.get("objective_gate") or {}).get(
+            "relative_degradation"
+        )
+        objective_cell = (
+            "—"
+            if objective_degradation is None
+            else f"{100 * objective_degradation:.3f} %"
+        )
         lines.append(
-            f"| {attempt['cycles']} | {attempt['phase']} | "
-            f"{attempt.get('chance', 1)} | "
+            f"| {attempt.get('adaptive_source_cycles', 0)}→{attempt['cycles']} "
+            f"(+{attempt.get('adaptive_step_cycles', attempt['cycles'])}) | "
+            f"{attempt['phase']} | "
             f"{attempt.get('seed_origin', 'rho_prefix')} | "
             f"{'oui' if attempt['success'] else 'non'} | "
+            f"{'oui' if attempt.get('accepted_for_continuation', attempt['success']) else 'non'} | "
+            f"{objective_cell} | "
             f"{attempt.get('failure_kind') or '—'} | "
             f"{attempt['peak_rss_gib']:.3f} | {attempt['elapsed_s']:.1f} |"
         )
@@ -1111,9 +1202,35 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--max-cycles", type=int, required=True)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume the adaptive continuation from the largest certified FHO in "
+            "--output-dir, reusing its RHO seed and solution artifacts."
+        ),
+    )
     parser.add_argument("--memory-limit-gib", default="auto")
     parser.add_argument("--n-threads", type=int, required=True)
     parser.add_argument("--max-iterations", type=int, default=2000)
+    parser.add_argument(
+        "--continuation-step-cycles",
+        type=int,
+        default=1,
+        help=(
+            "Preferred number of RHO cycles appended before the next FHO. "
+            "A failed multi-cycle jump is retried with one cycle."
+        ),
+    )
+    parser.add_argument(
+        "--jump-objective-relative-tolerance",
+        type=float,
+        default=0.005,
+        help=(
+            "Maximum relative objective degradation of a multi-cycle FHO "
+            "against its additive FHO+RHO seed before falling back to +1."
+        ),
+    )
     parser.add_argument(
         "--full-horizon-solver",
         choices=("madnlp", "ipopt"),
@@ -1133,6 +1250,90 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _resume_run(
+    args: argparse.Namespace,
+    *,
+    report_path: Path,
+    markdown_path: Path,
+    total_memory: int,
+    rss_limit_gib: float,
+    rss_limit_bytes: int,
+) -> int:
+    """Continue an interrupted sweep without rebuilding its certified prefix."""
+
+    if not report_path.is_file():
+        raise FileNotFoundError(f"Cannot resume without {report_path}.")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if report.get("schema") != "cocofest-full-horizon-sweep-v2":
+        raise ValueError("The existing report has an unsupported schema.")
+    if report.get("full_horizon_solver") != args.full_horizon_solver:
+        raise ValueError(
+            "The resumed --full-horizon-solver must match the existing report."
+        )
+
+    rho = report.get("rho") or {}
+    rho_seed_path = Path(str(rho.get("seed_path", "")))
+    rho_available_cycles = int(report.get("rho_available_cycles") or 0)
+    if not rho_seed_path.is_file() or _seed_cycle_count(rho_seed_path) != rho_available_cycles:
+        raise ValueError("The certified concatenated RHO seed is unavailable or inconsistent.")
+
+    largest_successful_cycles = int(report.get("largest_successful_cycles") or 0)
+    if largest_successful_cycles < 2:
+        raise ValueError("Resume requires a certified FHO with at least two cycles.")
+    successful_attempts = [
+        attempt
+        for attempt in report.get("full_horizon_attempts", [])
+        if attempt.get("success")
+        and attempt.get("accepted_for_continuation", True)
+        and int(attempt.get("cycles") or 0) == largest_successful_cycles
+    ]
+    if not successful_attempts:
+        raise ValueError("The report does not identify the last certified FHO solution.")
+    current_full_solution = Path(successful_attempts[-1]["solution_path"])
+    if not current_full_solution.is_file():
+        raise FileNotFoundError(f"Missing certified FHO solution: {current_full_solution}")
+
+    effective_max_cycles = min(args.max_cycles, rho_available_cycles)
+    if effective_max_cycles < largest_successful_cycles:
+        raise ValueError("--max-cycles cannot be below the certified resume point.")
+    previous_stop_reason = report.get("stop_reason")
+    report.update(
+        {
+            "max_cycles": args.max_cycles,
+            "effective_max_cycles": effective_max_cycles,
+            "total_memory_bytes": total_memory,
+            "total_memory_gib": total_memory / GIB,
+            "rss_limit_bytes": rss_limit_bytes,
+            "rss_limit_gib": rss_limit_gib,
+            "continuation_step_cycles": args.continuation_step_cycles,
+            "jump_objective_relative_tolerance": (
+                args.jump_objective_relative_tolerance
+            ),
+            "stop_reason": "running",
+        }
+    )
+    report.setdefault("adaptive_fallback_events", [])
+    report.setdefault("resume_events", []).append(
+        {
+            "from_cycles": largest_successful_cycles,
+            "previous_stop_reason": previous_stop_reason,
+        }
+    )
+    _write_report(report_path, report)
+
+    return _continue_adaptively(
+        args,
+        report=report,
+        report_path=report_path,
+        markdown_path=markdown_path,
+        rho_seed_path=rho_seed_path,
+        effective_max_cycles=effective_max_cycles,
+        current_cycles=largest_successful_cycles,
+        current_full_solution=current_full_solution,
+        rss_limit_bytes=rss_limit_bytes,
+    )
+
+
 def _run_horizon_attempt(
     args: argparse.Namespace,
     *,
@@ -1143,6 +1344,7 @@ def _run_horizon_attempt(
     rss_limit_bytes: int,
     mechanical_formulation: str = "reduced",
     prefix_solution_path: Path | None = None,
+    heartbeat_seed_label: str | None = None,
 ) -> dict:
     if chance < 1:
         raise ValueError("chance must be strictly positive.")
@@ -1167,6 +1369,10 @@ def _run_horizon_attempt(
         cwd=args.workspace,
         log_path=case_dir / "solver.log",
         rss_limit_bytes=rss_limit_bytes,
+        heartbeat_label=(
+            f"FHO_{cycles} solver={getattr(args, 'full_horizon_solver', 'madnlp')} "
+            f"seed={heartbeat_seed_label or f'FHO_{cycles - 1}+RHO_{cycles}'}"
+        ),
         poll_interval_s=args.poll_interval_s,
         timeout_s=args.attempt_timeout_s,
     )
@@ -1189,6 +1395,7 @@ def _run_extension_rho(
     reference_rho_seed: Path,
     after_cycles: int,
     rss_limit_bytes: int,
+    source_label: str | None = None,
 ) -> dict:
     """Homotope RHO_(N+1) from its RHO reference to the FHO_N terminal state."""
 
@@ -1240,6 +1447,11 @@ def _run_extension_rho(
             cwd=args.workspace,
             log_path=stage_dir / "solver.log",
             rss_limit_bytes=rss_limit_bytes,
+            heartbeat_label=(
+                f"RHO_{after_cycles + 1} homotopy={fraction:.6f} "
+                f"attempt={attempt_number} "
+                f"source={source_label or f'FHO_{after_cycles}'}"
+            ),
             poll_interval_s=args.poll_interval_s,
             timeout_s=args.attempt_timeout_s,
         )
@@ -1332,6 +1544,7 @@ def _run_extension_rho(
     return {
         "after_full_horizon_cycles": after_cycles,
         "target_cycle": after_cycles + 1,
+        "source_label": source_label or f"FHO_{after_cycles}",
         "success": success,
         "failure_kind": failure_kind,
         "certificate_valid": success,
@@ -1360,6 +1573,212 @@ def _run_extension_rho(
     }
 
 
+def _certified_fho_objective(report: dict, cycles: int) -> float | None:
+    for attempt in reversed(report.get("full_horizon_attempts", [])):
+        if (
+            attempt.get("success")
+            and attempt.get("accepted_for_continuation", True)
+            and int(attempt.get("cycles") or 0) == cycles
+        ):
+            return _benchmark_window_objective(Path(attempt["result_path"]))
+    return None
+
+
+def _continue_adaptively(
+    args: argparse.Namespace,
+    *,
+    report: dict,
+    report_path: Path,
+    markdown_path: Path,
+    rho_seed_path: Path,
+    effective_max_cycles: int,
+    current_cycles: int,
+    current_full_solution: Path,
+    rss_limit_bytes: int,
+) -> int:
+    """Advance by the preferred jump, with a certified +1 fallback."""
+
+    solver_gap_cycles: list[int] = []
+    report.setdefault("adaptive_fallback_events", [])
+    while current_cycles < effective_max_cycles:
+        preferred_target = adaptive_continuation_target(
+            current_cycles, effective_max_cycles, args.continuation_step_cycles
+        )
+        step_sizes = [preferred_target - current_cycles]
+        if step_sizes[0] > 1:
+            step_sizes.append(1)
+
+        accepted = False
+        for step_cycles in step_sizes:
+            target_cycles = current_cycles + step_cycles
+            attempt_args = argparse.Namespace(**vars(args))
+            if step_cycles > 1:
+                attempt_args.output_dir = (
+                    args.output_dir
+                    / "adaptive-attempts"
+                    / f"from-{current_cycles:04d}-to-{target_cycles:04d}"
+                )
+
+            carrier_solution = current_full_solution
+            concatenated_seed = current_full_solution
+            extension_objectives: list[float] = []
+            step_failure: str | None = None
+            infrastructure_error = False
+            for extension_cycle in range(current_cycles + 1, target_cycles + 1):
+                extension_attempt = _run_extension_rho(
+                    attempt_args,
+                    source_full_solution=carrier_solution,
+                    reference_rho_seed=rho_seed_path,
+                    after_cycles=extension_cycle - 1,
+                    rss_limit_bytes=rss_limit_bytes,
+                    source_label=(
+                        f"FHO_{current_cycles}"
+                        if extension_cycle == current_cycles + 1
+                        else f"RHO_{extension_cycle - 1}"
+                    ),
+                )
+                extension_attempt.update(
+                    {
+                        "adaptive_source_cycles": current_cycles,
+                        "adaptive_target_cycles": target_cycles,
+                        "adaptive_step_cycles": step_cycles,
+                    }
+                )
+                report["extension_rho_attempts"].append(extension_attempt)
+                _write_report(report_path, report)
+                if extension_attempt["infrastructure_error"]:
+                    infrastructure_error = True
+                    step_failure = "rho_extension_infrastructure_error"
+                    break
+                if not extension_attempt["success"]:
+                    step_failure = "rho_extension_" + str(
+                        extension_attempt["failure_kind"]
+                    )
+                    break
+
+                extension_objective = _benchmark_window_objective(
+                    Path(extension_attempt["result_path"])
+                )
+                if extension_objective is not None:
+                    extension_objectives.append(extension_objective)
+                next_seed = (
+                    attempt_args.output_dir
+                    / "homotopy-seeds"
+                    / (
+                        f"fho-{current_cycles:04d}-plus-rho-through-"
+                        f"{extension_cycle:04d}.npz"
+                    )
+                )
+                append_rho_extension_cycle(
+                    concatenated_seed,
+                    Path(extension_attempt["solution_path"]),
+                    next_seed,
+                )
+                concatenated_seed = next_seed
+                carrier_solution = Path(extension_attempt["solution_path"])
+
+            if step_failure is None:
+                attempt = _run_horizon_attempt(
+                    attempt_args,
+                    rho_seed=concatenated_seed,
+                    cycles=target_cycles,
+                    phase="adaptive_continuation",
+                    chance=1,
+                    rss_limit_bytes=rss_limit_bytes,
+                    prefix_solution_path=current_full_solution,
+                    heartbeat_seed_label=(
+                        f"FHO_{current_cycles}+RHO_"
+                        f"{current_cycles + 1}..RHO_{target_cycles}"
+                    ),
+                )
+                baseline_objective = _certified_fho_objective(report, current_cycles)
+                additive_reference = (
+                    baseline_objective + sum(extension_objectives)
+                    if baseline_objective is not None
+                    and len(extension_objectives) == step_cycles
+                    else None
+                )
+                gate = objective_gate(
+                    _benchmark_window_objective(Path(attempt["result_path"])),
+                    additive_reference,
+                    args.jump_objective_relative_tolerance,
+                )
+                jump_gate_passes = bool(
+                    step_cycles == 1 or (gate["comparable"] and gate["passes"])
+                )
+                attempt.update(
+                    {
+                        "chance": 1,
+                        "adaptive_source_cycles": current_cycles,
+                        "adaptive_step_cycles": step_cycles,
+                        "objective_gate": gate,
+                        "accepted_for_continuation": bool(
+                            attempt["success"] and jump_gate_passes
+                        ),
+                    }
+                )
+                report["full_horizon_attempts"].append(attempt)
+                _write_report(report_path, report)
+                infrastructure_error = bool(attempt["infrastructure_error"])
+                if infrastructure_error:
+                    step_failure = "infrastructure_error"
+                elif not attempt["success"]:
+                    step_failure = str(attempt["failure_kind"])
+                elif not jump_gate_passes:
+                    step_failure = (
+                        "jump_objective_unavailable"
+                        if not gate["comparable"]
+                        else "jump_objective_degradation"
+                    )
+                else:
+                    current_cycles = target_cycles
+                    current_full_solution = Path(attempt["solution_path"])
+                    report["homotopy_constructed_cycles"] = current_cycles
+                    report["largest_successful_cycles"] = current_cycles
+                    report["stop_reason"] = (
+                        "requested_ceiling_reached"
+                        if current_cycles == args.max_cycles
+                        else (
+                            "rho_prefix_ceiling_reached"
+                            if current_cycles == effective_max_cycles
+                            else "running"
+                        )
+                    )
+                    _write_report(report_path, report)
+                    accepted = True
+                    break
+
+            if infrastructure_error:
+                report["stop_reason"] = step_failure
+                _write_report(report_path, report)
+                _write_markdown(markdown_path, report)
+                return 3
+            if step_cycles > 1:
+                report["adaptive_fallback_events"].append(
+                    {
+                        "from_cycles": current_cycles,
+                        "rejected_target_cycles": target_cycles,
+                        "rejected_step_cycles": step_cycles,
+                        "reason": step_failure,
+                        "fallback_step_cycles": 1,
+                    }
+                )
+                _write_report(report_path, report)
+                continue
+
+            solver_gap_cycles.append(target_cycles)
+            report["stop_reason"] = step_failure
+            break
+
+        if not accepted:
+            break
+
+    report["solver_gap_cycles"] = solver_gap_cycles
+    _write_markdown(markdown_path, report)
+    _write_report(report_path, report)
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     args.workspace = args.workspace.resolve()
     args.seed_dir = args.seed_dir.resolve()
@@ -1368,6 +1787,15 @@ def run(args: argparse.Namespace) -> int:
         raise ValueError("--max-cycles must be at least two.")
     if args.n_threads < 1:
         raise ValueError("--n-threads must be strictly positive.")
+    if args.continuation_step_cycles < 1:
+        raise ValueError("--continuation-step-cycles must be strictly positive.")
+    if (
+        args.jump_objective_relative_tolerance < 0
+        or not math.isfinite(args.jump_objective_relative_tolerance)
+    ):
+        raise ValueError(
+            "--jump-objective-relative-tolerance must be finite and non-negative."
+        )
     if args.poll_interval_s <= 0:
         raise ValueError("--poll-interval-s must be strictly positive.")
     if args.attempt_timeout_s <= 0:
@@ -1379,6 +1807,15 @@ def run(args: argparse.Namespace) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.output_dir / "full-horizon-report.json"
     markdown_path = args.output_dir / "full-horizon-report.md"
+    if args.resume:
+        return _resume_run(
+            args,
+            report_path=report_path,
+            markdown_path=markdown_path,
+            total_memory=total_memory,
+            rss_limit_gib=rss_limit_gib,
+            rss_limit_bytes=rss_limit_bytes,
+        )
     report = {
         "schema": "cocofest-full-horizon-sweep-v2",
         "max_cycles": args.max_cycles,
@@ -1393,6 +1830,11 @@ def run(args: argparse.Namespace) -> int:
         "full_horizon_solver": args.full_horizon_solver,
         "linear_solver": "mumps",
         "initialization": "rho_reference_to_fho_terminal_state_homotopy",
+        "continuation_step_cycles": args.continuation_step_cycles,
+        "jump_objective_relative_tolerance": (
+            args.jump_objective_relative_tolerance
+        ),
+        "adaptive_fallback_events": [],
         "rho": None,
         "paired_reduced_control_attempts": [],
         "extension_rho_attempts": [],
@@ -1413,6 +1855,7 @@ def run(args: argparse.Namespace) -> int:
         cwd=args.workspace,
         log_path=rho_dir / "solver.log",
         rss_limit_bytes=rss_limit_bytes,
+        heartbeat_label=f"RHO_reference cycles=1..{args.max_cycles}",
         poll_interval_s=args.poll_interval_s,
         timeout_s=args.attempt_timeout_s,
     )
@@ -1477,91 +1920,63 @@ def run(args: argparse.Namespace) -> int:
         _write_markdown(markdown_path, report)
         return 3 if rho_infrastructure_error else 2
 
-    solver_gap_cycles: list[int] = []
     effective_max_cycles = min(args.max_cycles, rho_available_cycles)
     report["effective_max_cycles"] = effective_max_cycles
     current_seed_path = args.output_dir / "homotopy-seeds" / "rho-prefix-0002.npz"
     write_rho_seed_prefix(rho_seed_path, current_seed_path, 2)
     report["homotopy_constructed_cycles"] = 2
-    current_full_solution: Path | None = None
-
-    for cycles in horizon_sweep_targets(effective_max_cycles):
-        if cycles > 2:
-            if current_full_solution is None:
-                raise RuntimeError(
-                    "A certified FHO prefix is required for continuation."
-                )
-            extension_attempt = _run_extension_rho(
-                args,
-                source_full_solution=current_full_solution,
-                reference_rho_seed=rho_seed_path,
-                after_cycles=cycles - 1,
-                rss_limit_bytes=rss_limit_bytes,
-            )
-            report["extension_rho_attempts"].append(extension_attempt)
-            _write_report(report_path, report)
-            if extension_attempt["infrastructure_error"]:
-                report["stop_reason"] = "rho_extension_infrastructure_error"
-                _write_report(report_path, report)
-                _write_markdown(markdown_path, report)
-                return 3
-            if not extension_attempt["success"]:
-                report["stop_reason"] = "rho_extension_" + str(
-                    extension_attempt["failure_kind"]
-                )
-                break
-
-            next_seed_path = (
-                args.output_dir
-                / "homotopy-seeds"
-                / f"fho-{cycles - 1:04d}-plus-rho-{cycles:04d}.npz"
-            )
-            append_rho_extension_cycle(
-                current_seed_path,
-                Path(extension_attempt["solution_path"]),
-                next_seed_path,
-            )
-            current_seed_path = next_seed_path
-            report["homotopy_constructed_cycles"] = cycles
-
-        attempt = _run_horizon_attempt(
-            args,
-            rho_seed=current_seed_path,
-            cycles=cycles,
-            phase="continuation",
-            chance=1,
-            rss_limit_bytes=rss_limit_bytes,
-            prefix_solution_path=current_full_solution,
-        )
-        attempt["chance"] = 1
-        report["full_horizon_attempts"].append(attempt)
-        _write_report(report_path, report)
-        if attempt["infrastructure_error"]:
-            report["stop_reason"] = "infrastructure_error"
-            _write_report(report_path, report)
-            _write_markdown(markdown_path, report)
-            return 3
-        if not attempt["success"]:
-            solver_gap_cycles.append(cycles)
-            report["stop_reason"] = attempt["failure_kind"]
-            break
-
-        current_full_solution = Path(attempt["solution_path"])
-        report["largest_successful_cycles"] = cycles
-        report["stop_reason"] = (
-            "requested_ceiling_reached"
-            if cycles == args.max_cycles
-            else (
-                "rho_prefix_ceiling_reached"
-                if cycles == effective_max_cycles
-                else "running"
-            )
-        )
-
-    report["solver_gap_cycles"] = solver_gap_cycles
-    _write_markdown(markdown_path, report)
+    attempt = _run_horizon_attempt(
+        args,
+        rho_seed=current_seed_path,
+        cycles=2,
+        phase="bootstrap",
+        chance=1,
+        rss_limit_bytes=rss_limit_bytes,
+    )
+    attempt.update(
+        {
+            "chance": 1,
+            "adaptive_source_cycles": 0,
+            "adaptive_step_cycles": 2,
+            "accepted_for_continuation": bool(attempt["success"]),
+        }
+    )
+    report["full_horizon_attempts"].append(attempt)
     _write_report(report_path, report)
-    return 0
+    if attempt["infrastructure_error"]:
+        report["stop_reason"] = "infrastructure_error"
+        _write_report(report_path, report)
+        _write_markdown(markdown_path, report)
+        return 3
+    if not attempt["success"]:
+        report["solver_gap_cycles"] = [2]
+        report["stop_reason"] = attempt["failure_kind"]
+        _write_report(report_path, report)
+        _write_markdown(markdown_path, report)
+        return 0
+
+    current_full_solution = Path(attempt["solution_path"])
+    report["largest_successful_cycles"] = 2
+    report["stop_reason"] = (
+        "requested_ceiling_reached"
+        if args.max_cycles == 2
+        else (
+            "rho_prefix_ceiling_reached"
+            if effective_max_cycles == 2
+            else "running"
+        )
+    )
+    return _continue_adaptively(
+        args,
+        report=report,
+        report_path=report_path,
+        markdown_path=markdown_path,
+        rho_seed_path=rho_seed_path,
+        effective_max_cycles=effective_max_cycles,
+        current_cycles=2,
+        current_full_solution=current_full_solution,
+        rss_limit_bytes=rss_limit_bytes,
+    )
 
 
 def main(argv: Iterable[str] | None = None) -> int:

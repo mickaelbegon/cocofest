@@ -3037,6 +3037,8 @@ jobs:
             --memory-limit-gib "$FULL_HORIZON_MEMORY_LIMIT_GIB" \
             --n-threads "$BENCHMARK_THREADS" \
             --max-iterations "${{ inputs.solver_max_iterations }}" \
+            --continuation-step-cycles 3 \
+            --jump-objective-relative-tolerance 0.005 \
             --crank-assistance "${{ inputs.crank_assistance_nm }}" \
             --terminal-wheel-q-slack "${{ inputs.terminal_wheel_q_slack }}"
 

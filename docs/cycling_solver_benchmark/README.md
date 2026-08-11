@@ -994,12 +994,95 @@ soient pas rejetés alors qu'un palier intermédiaire plus fin reste résoluble.
 Avant l'interpolation, `theta` est ramené au winding équivalent le plus proche
 de l'état terminal FHO. Sans cet alignement, deux angles séparés exactement de
 `2π` créaient artificiellement des phases intermédiaires non équivalentes.
+Comme `theta` reste déroulé sur tout l'horizon, sa garde de sécurité est
+évaluée relativement à la référence absolue du window. Une borne appliquée à
+`abs(theta)` rejetait à tort le cycle 80 (`theta ≈ -503 rad`) avec une limite
+locale de dix tours, alors que l'excursion réelle du window était un seul tour.
 Un RHO d'extension est certifié dès que son unique fenêtre IPOPT converge et
 est physiquement validée; le verdict d'endurance global n'est pas utilisé pour
 rejeter ce seed, car une baisse de capacité de Ding attendue ne rend pas le
 cycle invalide.
 Le pic RSS de tout l'arbre de processus est mesuré et le job s'arrête à
 `12.5 GiB` sur une allocation de 16 GiB ou `97.5 GiB` sur 128 GiB.
+
+Une campagne interrompue peut reprendre depuis son dernier FHO certifié avec
+`--resume`. Par exemple, pour repartir directement de `FHO_79` et construire
+`FHO_80` sans recalculer les horizons précédents :
+
+```bash
+python .github/scripts/run_full_horizon_benchmark.py \
+  --workspace "$PWD" \
+  --seed-dir /private/tmp/cocofest-fho-seeds-30873302850 \
+  --output-dir ../full_horizon_ipopt_ram_300 \
+  --max-cycles 80 \
+  --memory-limit-gib 12.5 \
+  --n-threads 4 \
+  --max-iterations 2000 \
+  --crank-assistance 0 \
+  --terminal-wheel-q-slack 0.002 \
+  --full-horizon-solver ipopt \
+  --attempt-timeout-s 21600 \
+  --resume
+```
+
+Après correction de la garde angulaire, cette reprise a certifié l'extension
+RHO 80 en `23.7 s`, puis `FHO_80` en `815.8 s` (`602.7 s` dans IPOPT), avec
+les 80 cycles validés. La mesure RSS de cette relance effectuée depuis le
+sandbox macOS n'est pas exploitable; les campagnes lancées dans le terminal ou
+sur Linux conservent la mesure de l'arbre de processus.
+
+Les heartbeats récents identifient explicitement l'étape, par exemple :
+
+```text
+full-horizon heartbeat: stage=FHO_86 solver=ipopt seed=FHO_85+RHO_86 \
+pid=26820 elapsed=900.0s timeout_remaining=20700.0s \
+rss=2.592 GiB peak=2.777 GiB
+```
+
+Les itérations IPOPT ne sont disponibles qu'après la résolution dans
+`nlp_solver_stats[*].iter_count`; le processus enfant ne les transmet pas au
+runner pendant que sa sortie est bufferisée.
+
+Le script `run_full_horizon_jump_comparison.py` compare une continuation de
+trois pas unitaires à `FHO_i + RHO_(i+1) + RHO_(i+2) + RHO_(i+3) → FHO_(i+3)`.
+Il doit utiliser un dossier de sortie séparé et être lancé sans autre benchmark
+CPU concurrent, sinon la comparaison de temps n'est pas interprétable. Exemple
+pour comparer `82→83→84→85` au saut direct `82→85` :
+
+```bash
+python .github/scripts/run_full_horizon_jump_comparison.py \
+  --workspace "$PWD" \
+  --seed-dir /private/tmp/cocofest-fho-seeds-30873302850 \
+  --source-output-dir ../full_horizon_ipopt_ram_300 \
+  --output-dir ../full_horizon_jump_82_to_85 \
+  --baseline-cycles 82 \
+  --jump-cycles 3 \
+  --memory-limit-gib 12.5 \
+  --n-threads 4 \
+  --full-horizon-solver ipopt
+```
+
+Le premier test mesuré compare `103→104→105→106` au saut direct `103→106`.
+Les trois pas séquentiels ont pris `2824.3 s` (`47.07 min`). Le saut a pris
+`1641.2 s` (`27.35 min`), dont `72.1 s` pour les trois extensions RHO et
+`1569.1 s` pour le FHO monolithique. Le gain vaut donc `1.72×` (`41.9 %` de
+temps économisé). Le saut converge en 187 itérations, contre 191 pour le
+`FHO_106` séquentiel, mais atteint un minimum local légèrement moins bon :
+objectif `404.385` contre `402.489` (`+0.471 %`). Les 106 cycles et les audits
+physiques sont validés dans les deux cas.
+
+Le runner principal peut maintenant reproduire ce gain avec
+`--continuation-step-cycles 3`. Depuis chaque `FHO_i` certifié, il résout
+successivement les trois extensions reduced
+`RHO_(i+1), RHO_(i+2), RHO_(i+3)`, les concatène, puis tente directement
+`FHO_(i+3)`. Le saut est conservé seulement si le certificat solveur/physique
+est complet et si son objectif ne dépasse pas celui de la graine additive
+`FHO_i + ΣRHO` de plus que
+`--jump-objective-relative-tolerance` (0,5 % en CI). Un échec, une objective
+non mesurable ou une dégradation excessive déclenche automatiquement le pas
+`FHO_i→FHO_(i+1)`. Les essais +3 vivent sous `adaptive-attempts/`; ils
+n'écrasent donc jamais le dernier checkpoint certifié et `--resume` repart du
+dernier FHO accepté.
 
 Le test local IPOPT/MUMPS du 10 août 2026 a certifié la chaîne complète de
 `FHO_2` à `FHO_20`. `FHO_20` a pris `96.7 s` et culminé à `1.01 GiB` de RSS sur
