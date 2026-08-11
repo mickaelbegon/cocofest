@@ -510,7 +510,8 @@ jobs:
             tests/shard1/test_periodic_pulse_width.py::test_same_rho_retries_are_excluded_from_physical_solution_traces \
             tests/shard1/test_periodic_pulse_width.py::test_ipopt_fallback_replaces_failed_acados_trace_without_hiding_attempt \
             tests/shard1/test_periodic_pulse_width.py::test_ipopt_fallback_adapter_uses_acados_shooting_grid \
-            tests/shard1/test_periodic_pulse_width.py::test_recovery_seed_always_receives_one_final_acados_certification_attempt
+            tests/shard1/test_periodic_pulse_width.py::test_recovery_seed_always_receives_one_final_acados_certification_attempt \
+            tests/shard1/test_periodic_pulse_width.py::test_backend_failure_budget_does_not_stop_certified_hybrid_fallbacks
 
       - name: Download the validated full/reduced seeds
         if: ${{ inputs.acados_seed_source_run_id == '' }}

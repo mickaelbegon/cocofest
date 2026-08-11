@@ -4832,6 +4832,8 @@ def receding_horizon_solver_failure_budget(
     *,
     retry_without_advance: bool,
     recovery_requires_target_certification: bool,
+    fallback_advances_physical_rho: bool = False,
+    requested_physical_rhos: int = 0,
 ) -> int:
     """Reserve the backend loop slot needed to certify a prepared recovery seed.
 
@@ -4842,8 +4844,27 @@ def receding_horizon_solver_failure_budget(
     ``configured_failures`` in ``should_continue_same_rho_retry``.
     """
 
-    return int(configured_failures) + int(
+    ordinary_budget = int(configured_failures) + int(
         retry_without_advance and recovery_requires_target_certification
+    )
+    if not fallback_advances_physical_rho:
+        return ordinary_budget
+
+    # Bioptim counts the native status of every target-solver call.  An IPOPT
+    # fallback advances a certified physical RHO, but the corresponding raw
+    # ACADOS solution deliberately keeps status=2 for honest accounting.  The
+    # backend counter therefore cannot observe that the physical failure
+    # streak was reset.  Give that implementation counter enough headroom for
+    # the worst case (every requested RHO needs ``configured_failures`` native
+    # attempts); ``should_continue_same_rho_retry`` remains the authoritative
+    # physical stopping rule.
+    if requested_physical_rhos < 1:
+        raise ValueError(
+            "requested_physical_rhos must be positive when a fallback may advance"
+        )
+    return max(
+        ordinary_budget,
+        int(configured_failures) * int(requested_physical_rhos) + 1,
     )
 
 
@@ -19329,6 +19350,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                     or getattr(args, "nlp_failed_rho_phase_one_recovery", False)
                     or getattr(args, "acados_failed_rho_phase_one_recovery", False)
                 ),
+                fallback_advances_physical_rho=bool(
+                    args.acados_ipopt_fallback_advance
+                ),
+                requested_physical_rhos=requested_window_solves,
             ),
             compact_solution_output=args.compact_rho_output,
         )

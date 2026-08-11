@@ -6197,6 +6197,25 @@ def test_backend_failure_budget_reserves_one_recovery_certification_solve():
     ) == 2
 
 
+def test_backend_failure_budget_does_not_stop_certified_hybrid_fallbacks():
+    budget = periodic_example.receding_horizon_solver_failure_budget
+
+    assert budget(
+        2,
+        retry_without_advance=True,
+        recovery_requires_target_certification=True,
+        fallback_advances_physical_rho=True,
+        requested_physical_rhos=145,
+    ) == 291
+    with pytest.raises(ValueError, match="requested_physical_rhos"):
+        budget(
+            2,
+            retry_without_advance=True,
+            recovery_requires_target_certification=True,
+            fallback_advances_physical_rho=True,
+        )
+
+
 def test_failed_rho_checkpoints_preserve_neighboring_pw_active_sets():
     lower = 131.405e-6
     upper = 600e-6
