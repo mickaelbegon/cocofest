@@ -3,80 +3,80 @@
   "pairwise_control_differences": {
     "ACADOS + IPOPT vs IPOPT R5": {
       "Biceps": {
-        "correlation": -0.052437381436467013,
-        "mae_us": 40.14150050173819,
-        "maximum_absolute_error_us": 468.59477013343906,
-        "rmse_us": 126.80736537803148
+        "correlation": -0.05243487325059493,
+        "mae_us": 40.140378465664135,
+        "maximum_absolute_error_us": 468.59477013343883,
+        "rmse_us": 126.80773277842162
       },
       "Delt_ant": {
-        "correlation": -0.01642336554818132,
-        "mae_us": 0.6259825913656057,
-        "maximum_absolute_error_us": 95.68456291565565,
-        "rmse_us": 4.261605731673702
+        "correlation": -0.016508615724840397,
+        "mae_us": 0.6300777309462618,
+        "maximum_absolute_error_us": 94.93816416365857,
+        "rmse_us": 4.285223203591581
       },
       "Delt_post": {
-        "correlation": 0.24490951562868707,
-        "mae_us": 0.00960603651287285,
-        "maximum_absolute_error_us": 0.8008229870164598,
-        "rmse_us": 0.04401657616943218
+        "correlation": 0.2462146613604887,
+        "mae_us": 0.009578553346885668,
+        "maximum_absolute_error_us": 0.8008229870168861,
+        "rmse_us": 0.04400356526752134
       },
       "Triceps": {
-        "correlation": 0.18953870112164753,
-        "mae_us": 9.62055352110423,
+        "correlation": 0.18950242651298532,
+        "mae_us": 9.620117086976906,
         "maximum_absolute_error_us": 101.06745335612138,
-        "rmse_us": 23.49847009896774
+        "rmse_us": 23.499251012416327
       }
     },
     "ACADOS + IPOPT vs MadNLP R5": {
       "Biceps": {
-        "correlation": -0.0527457764862347,
-        "mae_us": 40.686028353193485,
-        "maximum_absolute_error_us": 468.5950064558609,
-        "rmse_us": 128.05911446310316
+        "correlation": -0.05274577902702262,
+        "mae_us": 40.68606197467238,
+        "maximum_absolute_error_us": 468.59500645589696,
+        "rmse_us": 128.0592615839256
       },
       "Delt_ant": {
-        "correlation": -0.016720545068162274,
-        "mae_us": 0.6319571573768026,
-        "maximum_absolute_error_us": 93.04928694455867,
-        "rmse_us": 4.257574020578834
+        "correlation": -0.016718481999672206,
+        "mae_us": 0.63191208770682,
+        "maximum_absolute_error_us": 93.04978182209115,
+        "rmse_us": 4.25756812258074
       },
       "Delt_post": {
-        "correlation": 0.2443135459239676,
-        "mae_us": 0.008091443941867385,
-        "maximum_absolute_error_us": 0.8241886318212437,
-        "rmse_us": 0.045917543113906015
+        "correlation": 0.24584773691619474,
+        "mae_us": 0.008091181728790206,
+        "maximum_absolute_error_us": 0.8241886323420147,
+        "rmse_us": 0.04591714343536143
       },
       "Triceps": {
-        "correlation": 0.17375138207236804,
-        "mae_us": 9.86648925023516,
+        "correlation": 0.17374632683711785,
+        "mae_us": 9.866494505525539,
         "maximum_absolute_error_us": 101.06758287387004,
-        "rmse_us": 23.831844698236882
+        "rmse_us": 23.83189900723602
       }
     },
     "MadNLP R5 vs IPOPT R5": {
       "Biceps": {
-        "correlation": 0.9526703966677443,
-        "mae_us": 4.347547434201945,
-        "maximum_absolute_error_us": 468.5935198907513,
-        "rmse_us": 32.91468420844529
+        "correlation": 0.9533643152278151,
+        "mae_us": 4.32923192695427,
+        "maximum_absolute_error_us": 468.5935199265733,
+        "rmse_us": 32.673116075446906
       },
       "Delt_ant": {
-        "correlation": 0.4340886895909947,
-        "mae_us": 0.28531274605023454,
-        "maximum_absolute_error_us": 84.41893212381262,
-        "rmse_us": 4.225448374400173
+        "correlation": 0.34765981165236837,
+        "mae_us": 0.40897745336465624,
+        "maximum_absolute_error_us": 81.17554888035028,
+        "rmse_us": 4.550960750149784
       },
       "Delt_post": {
-        "correlation": 0.8434910109038986,
-        "mae_us": 0.004403547219222528,
-        "maximum_absolute_error_us": 0.09399766370151497,
-        "rmse_us": 0.012267489585886008
+        "correlation": 0.8259362583965071,
+        "mae_us": 0.004363177015094569,
+        "maximum_absolute_error_us": 0.0939491299840256,
+        "rmse_us": 0.012166589080112507
       },
       "Triceps": {
-        "correlation": 0.9220888279456048,
-        "mae_us": 1.4525756221071904,
-        "maximum_absolute_error_us": 76.15191310675326,
-        "rmse_us": 8.023055561255566
+        "correlation": 0.9204892098813996,
+        "mae_us": 1.55206699961694,
+        "maximum_absolute_error_us": 76.12868875904925,
+        "rmse_us": 8.10502412127592
       }
     }
   },
@@ -122,7 +122,7 @@
       },
       "fatigue": {
         "executed_fatigue_objective": 4317.7847603,
-        "fatigue_auc_cycles": 9.383523841043035,
+        "fatigue_auc_cycles": 9.383523841043036,
         "min_final_capacity_ratio": 0.9188849899290068,
         "per_muscle": {
           "Biceps": {
@@ -150,6 +150,13 @@
             "initial_capacity_ratio": 0.9999999999999984
           }
         }
+      },
+      "hybrid_fallback": {
+        "fallback_advanced_count": 0,
+        "recovery_accepted_count": 0,
+        "recovery_attempt_count": 0,
+        "recovery_solver_total_s": 0.0,
+        "recovery_wall_total_s": 0.0
       },
       "metadata": {
         "activate_force_length_relationship": true,
@@ -212,68 +219,75 @@
     "IPOPT R5": {
       "control_summary": {
         "Biceps": {
-          "fraction_at_lower_bound": 0.9094252873563219,
-          "fraction_at_upper_bound": 0.02666666666666667,
-          "maximum_us": 599.9982588275633,
-          "mean_us": 158.96672922448593,
-          "minimum_us": 131.40498631830818,
-          "standard_deviation_us": 106.20108590495063
+          "fraction_at_lower_bound": 0.9085057471264368,
+          "fraction_at_upper_bound": 0.026436781609195402,
+          "maximum_us": 599.99828809732,
+          "mean_us": 158.96560705776625,
+          "minimum_us": 131.40498619916377,
+          "standard_deviation_us": 106.20181573794929
         },
         "Delt_ant": {
-          "fraction_at_lower_bound": 0.9324137931034483,
+          "fraction_at_lower_bound": 0.9335632183908046,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 227.08958462627928,
-          "mean_us": 131.761243548287,
-          "minimum_us": 131.4050023336614,
-          "standard_deviation_us": 3.974191837296903
+          "maximum_us": 226.34318569111701,
+          "mean_us": 131.76533851568152,
+          "minimum_us": 131.40500249825703,
+          "standard_deviation_us": 3.999139960552659
         },
         "Delt_post": {
-          "fraction_at_lower_bound": 0.9071264367816092,
+          "fraction_at_lower_bound": 0.9080459770114943,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 131.4994859754873,
-          "mean_us": 131.4094532013763,
-          "minimum_us": 131.40499037807473,
-          "standard_deviation_us": 0.011579472818882833
+          "maximum_us": 131.49943744121487,
+          "mean_us": 131.40941313819803,
+          "minimum_us": 131.40499039589002,
+          "standard_deviation_us": 0.011484544804690114
         },
         "Triceps": {
           "fraction_at_lower_bound": 0.784367816091954,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 218.13613574331956,
-          "mean_us": 139.6942459430299,
-          "minimum_us": 131.40497968753786,
-          "standard_deviation_us": 20.24581496426125
+          "maximum_us": 218.13613596813158,
+          "mean_us": 139.69449957480248,
+          "minimum_us": 131.40497971696502,
+          "standard_deviation_us": 20.246155235640433
         }
       },
       "fatigue": {
-        "executed_fatigue_objective": 11522.467771659452,
-        "fatigue_auc_cycles": 17.132304381786586,
-        "min_final_capacity_ratio": 0.8620703299745746,
+        "executed_fatigue_objective": 11523.508935815476,
+        "fatigue_auc_cycles": 17.13238464731755,
+        "min_final_capacity_ratio": 0.86209363677019,
         "per_muscle": {
           "Biceps": {
-            "executed_fatigue_objective": 10472.270386673228,
-            "fatigue_auc_cycles": 10.93734654802029,
-            "final_capacity_ratio": 0.8620703299745746,
+            "executed_fatigue_objective": 10473.400043317426,
+            "fatigue_auc_cycles": 10.937863384385533,
+            "final_capacity_ratio": 0.86209363677019,
             "initial_capacity_ratio": 0.9966302918319722
           },
           "Delt_ant": {
-            "executed_fatigue_objective": 417.01998184480493,
-            "fatigue_auc_cycles": 2.409865800255767,
-            "final_capacity_ratio": 0.975701644018606,
+            "executed_fatigue_objective": 416.91074038669984,
+            "fatigue_auc_cycles": 2.4094414263898516,
+            "final_capacity_ratio": 0.9755407608108162,
             "initial_capacity_ratio": 0.9846270159427429
           },
           "Delt_post": {
-            "executed_fatigue_objective": 113.02871931022233,
-            "fatigue_auc_cycles": 1.2715910806472086,
-            "final_capacity_ratio": 0.9928737424664208,
+            "executed_fatigue_objective": 113.01738923594316,
+            "fatigue_auc_cycles": 1.2715181356977823,
+            "final_capacity_ratio": 0.9928749487458073,
             "initial_capacity_ratio": 0.9916936527760019
           },
           "Triceps": {
-            "executed_fatigue_objective": 520.1486838311965,
-            "fatigue_auc_cycles": 2.513500952863321,
-            "final_capacity_ratio": 0.9725577989120165,
+            "executed_fatigue_objective": 520.1807628754065,
+            "fatigue_auc_cycles": 2.513561700844384,
+            "final_capacity_ratio": 0.9725565556759047,
             "initial_capacity_ratio": 0.9999228951715031
           }
         }
+      },
+      "hybrid_fallback": {
+        "fallback_advanced_count": 0,
+        "recovery_accepted_count": 0,
+        "recovery_attempt_count": 0,
+        "recovery_solver_total_s": 0.0,
+        "recovery_wall_total_s": 0.0
       },
       "metadata": {
         "activate_force_length_relationship": true,
@@ -317,20 +331,20 @@
         "torque_application": "constant",
         "warmup_cycles_consumed": 1
       },
-      "source_github_actions_run": 31380186719,
+      "source_github_actions_run": 31441917891,
       "source_result": "result.json",
       "source_trajectory": "validated-rho-trajectory.npz",
       "timing": {
-        "hot_solver_median_s": 2.6472737449999997,
-        "hot_solver_p90_s": 3.8727441272000003,
-        "hot_wall_median_s": 2.6531139979999807,
-        "hot_wall_p90_s": 3.878995698000023,
-        "online_solver_mean_s_per_rho": 3.652161027613793,
-        "online_solver_total_s": 529.563349004,
-        "online_wall_mean_s_per_rho": 3.6583685113793103,
-        "online_wall_total_s": 530.46343415,
+        "hot_solver_median_s": 2.649446,
+        "hot_solver_p90_s": 4.1299792936,
+        "hot_wall_median_s": 2.6564917974999958,
+        "hot_wall_p90_s": 4.137801398200009,
+        "online_solver_mean_s_per_rho": 3.6474340797931033,
+        "online_solver_total_s": 528.87794157,
+        "online_wall_mean_s_per_rho": 3.6546210836689625,
+        "online_wall_total_s": 529.9200571319996,
         "reported_full_run_cycles": 145,
-        "reported_full_run_end_to_end_s": 1012.2026322999999
+        "reported_full_run_end_to_end_s": 947.685156214
       }
     },
     "MadNLP R5": {
@@ -338,66 +352,73 @@
         "Biceps": {
           "fraction_at_lower_bound": 0.9289655172413793,
           "fraction_at_upper_bound": 0.044137931034482755,
-          "maximum_us": 600.0000078308964,
-          "mean_us": 159.51331178100716,
-          "minimum_us": 131.40497511035875,
-          "standard_deviation_us": 107.55529838381402
+          "maximum_us": 600.0000078309324,
+          "mean_us": 159.5134371554403,
+          "minimum_us": 131.40497511035807,
+          "standard_deviation_us": 107.55545074817874
         },
         "Delt_ant": {
           "fraction_at_lower_bound": 0.9836781609195402,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 224.4543095682728,
-          "mean_us": 131.76712487793185,
-          "minimum_us": 131.40497526757372,
-          "standard_deviation_us": 3.9693279889968243
+          "maximum_us": 224.45480444580528,
+          "mean_us": 131.7670798178802,
+          "minimum_us": 131.4049752675937,
+          "standard_deviation_us": 3.96932576137608
         },
         "Delt_post": {
           "fraction_at_lower_bound": 1.0,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 131.40634448075176,
-          "mean_us": 131.40504965415704,
-          "minimum_us": 131.40497514944218,
-          "standard_deviation_us": 0.00015397619497307862
+          "maximum_us": 131.40634447911225,
+          "mean_us": 131.4050499611829,
+          "minimum_us": 131.4049751494655,
+          "standard_deviation_us": 0.00015444873739151814
         },
         "Triceps": {
           "fraction_at_lower_bound": 0.8216091954022988,
           "fraction_at_upper_bound": 0.0,
-          "maximum_us": 224.2618990085899,
-          "mean_us": 139.73748554515186,
-          "minimum_us": 131.40497504589462,
-          "standard_deviation_us": 20.396204690231677
+          "maximum_us": 224.26108982091014,
+          "mean_us": 139.73748008423166,
+          "minimum_us": 131.40497504589803,
+          "standard_deviation_us": 20.396185058894496
         }
       },
       "fatigue": {
-        "executed_fatigue_objective": 11830.478970259152,
-        "fatigue_auc_cycles": 17.30653965665931,
-        "min_final_capacity_ratio": 0.8607210877166427,
+        "executed_fatigue_objective": 11830.608369722328,
+        "fatigue_auc_cycles": 17.306607017382152,
+        "min_final_capacity_ratio": 0.8607202540514269,
         "per_muscle": {
           "Biceps": {
-            "executed_fatigue_objective": 10769.523921714359,
-            "fatigue_auc_cycles": 11.091597689946774,
-            "final_capacity_ratio": 0.8607210877166427,
+            "executed_fatigue_objective": 10769.660488895148,
+            "fatigue_auc_cycles": 11.091677312246837,
+            "final_capacity_ratio": 0.8607202540514269,
             "initial_capacity_ratio": 0.9966302918319722
           },
           "Delt_ant": {
-            "executed_fatigue_objective": 423.67458309696,
-            "fatigue_auc_cycles": 2.427129423785381,
-            "final_capacity_ratio": 0.9754770262070678,
+            "executed_fatigue_objective": 423.6661111490455,
+            "fatigue_auc_cycles": 2.4271127396704655,
+            "final_capacity_ratio": 0.9754789663072083,
             "initial_capacity_ratio": 0.9846270159427429
           },
           "Delt_post": {
-            "executed_fatigue_objective": 111.58672873102043,
-            "fatigue_auc_cycles": 1.2626837949001746,
-            "final_capacity_ratio": 0.9930028430755431,
+            "executed_fatigue_objective": 111.58691585864798,
+            "fatigue_auc_cycles": 1.2626848942262447,
+            "final_capacity_ratio": 0.9930028354651532,
             "initial_capacity_ratio": 0.9916936527760019
           },
           "Triceps": {
-            "executed_fatigue_objective": 525.6937367168127,
-            "fatigue_auc_cycles": 2.5251287480269804,
-            "final_capacity_ratio": 0.9724475072237058,
+            "executed_fatigue_objective": 525.694853819487,
+            "fatigue_auc_cycles": 2.5251320712386054,
+            "final_capacity_ratio": 0.9724475782233963,
             "initial_capacity_ratio": 0.9999228951715031
           }
         }
+      },
+      "hybrid_fallback": {
+        "fallback_advanced_count": 0,
+        "recovery_accepted_count": 0,
+        "recovery_attempt_count": 0,
+        "recovery_solver_total_s": 0.0,
+        "recovery_wall_total_s": 0.0
       },
       "metadata": {
         "activate_force_length_relationship": true,
@@ -441,20 +462,20 @@
         "torque_application": "constant",
         "warmup_cycles_consumed": 1
       },
-      "source_github_actions_run": 31380186719,
+      "source_github_actions_run": 31441917891,
       "source_result": "result.json",
       "source_trajectory": "validated-rho-trajectory.npz",
       "timing": {
-        "hot_solver_median_s": 1.497882155,
-        "hot_solver_p90_s": 1.7384196222000003,
-        "hot_wall_median_s": 1.5049191009999845,
-        "hot_wall_p90_s": 1.7455363910000306,
-        "online_solver_mean_s_per_rho": 1.5496294731655174,
-        "online_solver_total_s": 224.696273609,
-        "online_wall_mean_s_per_rho": 1.5565144837034468,
-        "online_wall_total_s": 225.69460013699978,
+        "hot_solver_median_s": 1.4333579855,
+        "hot_solver_p90_s": 1.6692883152,
+        "hot_wall_median_s": 1.4405071410000119,
+        "hot_wall_p90_s": 1.677120061300002,
+        "online_solver_mean_s_per_rho": 1.5142588882827586,
+        "online_solver_total_s": 219.56753880099998,
+        "online_wall_mean_s_per_rho": 1.5213907774344833,
+        "online_wall_total_s": 220.60166272800006,
         "reported_full_run_cycles": 145,
-        "reported_full_run_end_to_end_s": 745.9926783779999
+        "reported_full_run_end_to_end_s": 703.2527830260001
       }
     }
   },

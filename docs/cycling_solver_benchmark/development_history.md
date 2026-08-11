@@ -5057,3 +5057,15 @@ du seuil est donc confirmée. Une dernière ablation porte le pas à
 `0.01 rad/s` et réserve jusqu'à 300 SQP à cette préparation offline; le budget
 online des RHO reste inchangé. Si ce pont échoue au même voisinage, la branche
 du seed commun sera considérée inaccessible par simple continuation de borne.
+
+Cette dernière ablation échoue effectivement au run
+[`31449892535`](https://github.com/mickaelbegon/cocofest/actions/runs/31449892535).
+Les paliers de `3.00` à `2.76 rad/s` convergent; `2.75 rad/s` plafonne après
+300 SQP avec un résidu de contrainte `3.33e-3`. Réduire le pas a déplacé le
+dernier palier accepté de `2.775` à `2.76`, sans atteindre la garde physique
+`2.55`. La simple homotopie de borne est donc close comme voie de correction.
+La comparaison publiée conserve IPOPT/MadNLP appariés et l'ACADOS historique
+certifié, en signalant explicitement que ce troisième artefact part d'un autre
+état musculaire initial. La prochaine Phase I devra transférer un patron de PW
+ACADOS strict déjà certifié vers l'état commun, puis restaurer les défauts avant
+d'optimiser la fatigue.

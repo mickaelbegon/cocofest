@@ -1317,9 +1317,9 @@ SX/Radau-5; ACADOS utilise le profil SQP-IRK `4 stages × 5 steps`. Le nom
 n'est déclenché dans les 145 premiers RHO de ce run. Le premier fallback
 accepté se trouve au RHO 234.
 
-Les artefacts sources sont ceux des runs
-[31380186719](https://github.com/mickaelbegon/cocofest/actions/runs/31380186719)
-pour IPOPT/MadNLP et
+Les artefacts sources sont ceux du run apparié
+[31441917891](https://github.com/mickaelbegon/cocofest/actions/runs/31441917891)
+pour IPOPT/MadNLP et du run historique
 [31428024125](https://github.com/mickaelbegon/cocofest/actions/runs/31428024125)
 pour ACADOS + IPOPT. Les temps ci-dessous sont les sommes des champs
 `wall_time_s` des 145 fenêtres : ils excluent la construction initiale, la
@@ -1328,8 +1328,8 @@ de résolution une fois l'OCP construit.
 
 | Méthode | RHO certifiés | Médiane / P90 solveur chaud | Temps online cumulé | AUC fatigue | Coût fatigue exécuté | Min. capacité finale |
 |---|---:|---:|---:|---:|---:|---:|
-| IPOPT R5 | 145/145 | `2.647 / 3.873 s` | `530.46 s` | `17.1323` | `11 522.5` | `0.86207` |
-| MadNLP R5 | 145/145 | `1.498 / 1.738 s` | `225.69 s` | `17.3065` | `11 830.5` | `0.86072` |
+| IPOPT R5 | 145/145 | `2.649 / 4.130 s` | `529.92 s` | `17.1324` | `11 523.5` | `0.86209` |
+| MadNLP R5 | 145/145 | `1.433 / 1.669 s` | `220.60 s` | `17.3066` | `11 830.6` | `0.86072` |
 | ACADOS + IPOPT | 145/145 | `0.133 / 0.134 s` | `21.02 s` | `9.3835` | `4 317.8` | `0.91888` |
 
 La fatigue finale et son accumulation ne se répartissent pas uniformément. Le
@@ -1337,23 +1337,23 @@ tableau donne `capacité finale A/A_scale / AUC de fatigue` :
 
 | Muscle | IPOPT R5 | MadNLP R5 | ACADOS + IPOPT |
 |---|---:|---:|---:|
-| Biceps | `0.86207 / 10.9373` | `0.86072 / 11.0916` | `0.91888 / 6.8584` |
-| Triceps | `0.97256 / 2.5135` | `0.97245 / 2.5251` | `0.98288 / 1.6916` |
-| Deltoïde antérieur | `0.97570 / 2.4099` | `0.97548 / 2.4271` | `0.99034 / 0.8113` |
-| Deltoïde postérieur | `0.99287 / 1.2716` | `0.99300 / 1.2627` | `0.99978 / 0.0222` |
+| Biceps | `0.86209 / 10.9379` | `0.86072 / 11.0917` | `0.91888 / 6.8584` |
+| Triceps | `0.97256 / 2.5136` | `0.97245 / 2.5251` | `0.98288 / 1.6916` |
+| Deltoïde antérieur | `0.97554 / 2.4094` | `0.97548 / 2.4271` | `0.99034 / 0.8113` |
+| Deltoïde postérieur | `0.99287 / 1.2715` | `0.99300 / 1.2627` | `0.99978 / 0.0222` |
 
-Sur ce préfixe, MadNLP est `1.77×` plus rapide qu'IPOPT en médiane chaude et
-`2.35×` sur la somme online. Leurs solutions sont proches : par rapport à
+Sur ce préfixe, MadNLP est `1.85×` plus rapide qu'IPOPT en médiane chaude et
+`2.40×` sur la somme online. Leurs solutions sont proches : par rapport à
 IPOPT, MadNLP augmente l'AUC de `1.02 %` et le coût exécuté de `2.67 %`.
-Les PW ont une corrélation de `0.953` pour le biceps et `0.922` pour le
-triceps; les MAE correspondantes valent `4.35 µs` et `1.45 µs`. Elles ne sont
+Les PW ont une corrélation de `0.953` pour le biceps et `0.920` pour le
+triceps; les MAE correspondantes valent `4.33 µs` et `1.55 µs`. Elles ne sont
 cependant pas identiques : un changement isolé d'ensemble actif atteint
 `468.6 µs` au biceps.
 
-ACADOS est `25.2×` plus rapide qu'IPOPT et `10.7×` plus rapide que MadNLP sur
+ACADOS est `25.2×` plus rapide qu'IPOPT et `10.5×` plus rapide que MadNLP sur
 la somme online de ces 145 fenêtres. Il produit aussi une AUC `45.2 %` plus
 faible qu'IPOPT et conserve une capacité biceps finale de `0.91888`, contre
-`0.86207`. Ce résultat ne permet **pas encore** d'affirmer qu'ACADOS trouve un
+`0.86209`. Ce résultat ne permet **pas encore** d'affirmer qu'ACADOS trouve un
 meilleur optimum du même problème. Ses PW biceps sont très différentes de
 celles d'IPOPT (`MAE = 40.14 µs`, corrélation `-0.052`) et, surtout, les
 trajectoires historiques n'ont pas exactement le même état musculaire initial :
@@ -1378,12 +1378,30 @@ sur tous les points exportés de chaque transcription et écrit les figures ains
 que le résumé numérique
 [`reduced_solver_comparison_145.json`](figures/reduced_solver_comparison_145/reduced_solver_comparison_145.json).
 
-La prochaine campagne décisive doit imposer le **même état initial numérique**
-aux trois solveurs, vérifier que la cible terminale et toutes les bornes
-mobiles sérialisées sont identiques, puis rejouer les PW par le même
-intégrateur indépendant reduced avec remise sur la variété à chaque RHO. Tant
-que ce gate apparié n'est pas fait, le gain de temps ACADOS est démontré, mais
-son gain apparent de fatigue reste une hypothèse de branche optimale.
+La campagne décisive a ensuite imposé le **même état initial numérique**, la
+même cible terminale et les mêmes bornes mobiles. Elle révèle une limite de
+warm-start plutôt qu'un résultat comparable supplémentaire. ACADOS résout
+`145/145` avec la marge nodale `3.0 rad/s`, mais l'audit inter-nœuds mesure un
+overshoot rapide de `0.4000 rad/s`; cette trajectoire est donc rejetée. Avec la
+garde conservatrice `2.55 rad/s`, le seed commun ne donne aucun RHO certifié.
+Une continuation de la borne basse de `omega` a été testée jusqu'à des pas de
+`0.01 rad/s` et 300 SQP offline : les runs
+[31448682164](https://github.com/mickaelbegon/cocofest/actions/runs/31448682164),
+[31449332788](https://github.com/mickaelbegon/cocofest/actions/runs/31449332788)
+et
+[31449892535](https://github.com/mickaelbegon/cocofest/actions/runs/31449892535)
+restent sur la branche rapide et s'arrêtent finalement entre les marges
+`2.76` et `2.75 rad/s`. Le dernier résidu de contrainte vaut `3.33e-3` après
+300 SQP. Le gain de temps ACADOS est donc démontré sur son run certifié, mais
+son gain apparent de fatigue ne peut pas être attribué au solveur avec ce
+protocole.
+
+La prochaine méthode pertinente n'est plus de réduire encore le pas. Il faut
+partir d'un contrôle ACADOS déjà certifié sous la garde `2.55`, remplacer
+seulement son état initial par l'état commun, puis résoudre une Phase I qui
+minimise les défauts mécaniques et musculaires avant l'objectif de fatigue.
+Cette primale pourra ensuite initialiser la comparaison appariée; ses PW et ses
+20 états Ding devront être audités avant toute interprétation de l'optimum.
 
 La cause du désappariement historique est localisée : l'import du seed commun
 remplaçait `x_init`, mais ACADOS reduced conservait les bornes du premier nœud

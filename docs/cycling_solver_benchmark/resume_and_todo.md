@@ -667,6 +667,11 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     fatigue/temps depuis les trois artefacts. S'il échoue, conserver les deux
     ablations comme résultat négatif et ne pas présenter le run `3.0` comme
     physiquement certifié.
+    [clos négativement, run `31449892535`] Les pas de `0.01 rad/s` et 300 SQP
+    offline atteignent `2.76`, puis échouent à `2.75` avec un résidu de
+    contrainte `3.33e-3`. Ne plus réduire le pas. Construire une Phase I depuis
+    les PW d'un seed ACADOS déjà certifié à `2.55`, tout en remplaçant son état
+    initial par l'état commun; auditer les 20 états Ding avant comparaison.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO
