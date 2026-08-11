@@ -59,6 +59,11 @@ on:
         required: true
         default: "100"
         type: string
+      acados_reduced_fast_bound_margin:
+        description: Reduced ACADOS nodal fast-cadence margin in rad/s (3.0 matches the NLP physical box; 2.55 is the conservative IRK guard)
+        required: true
+        default: "2.55"
+        type: string
       acados_seed_source_run_id:
         description: Optional workflow run id providing a pinned common seed artifact for ACADOS reproducibility tests
         required: false
@@ -574,7 +579,7 @@ jobs:
             --acados-integrator-type IRK \
             --acados-sim-stages 4 \
             --acados-sim-steps 5 \
-            --acados-wheel-qdot-fast-bound-margin 2.55 \
+            --acados-wheel-qdot-fast-bound-margin "${{ inputs.acados_reduced_fast_bound_margin }}" \
             --acados-initial-irk-rollout \
             --acados-max-iter 100 \
             --acados-store-iterates \

@@ -6528,7 +6528,7 @@ def test_github_acados_hybrid_gate_guards_inter_node_cadence():
         "  prepare-acados-stack:", maxsplit=1
     )[0]
 
-    assert "--acados-wheel-qdot-fast-bound-margin 2.55" in hybrid_job
+    assert "--acados-wheel-qdot-fast-bound-margin \"${{ inputs.acados_reduced_fast_bound_margin }}\"" in hybrid_job
     assert (
         ".mechanical_equivalence_audit.passes_physical_crank_velocity_bounds == true"
         in hybrid_job

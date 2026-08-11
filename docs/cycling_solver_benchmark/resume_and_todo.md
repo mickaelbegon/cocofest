@@ -642,6 +642,13 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     valeurs du seed. Le correctif sépare ces opérations et possède une
     régression locale. Relancer ACADOS avec le même artefact, puis régénérer les
     figures, les quatre fatigues finales/AUC et les temps sur le préfixe commun.
+    Le run `31443831558` confirme que le recalage cinématique est désormais
+    désactivé, mais le seed NLP a été produit avec la boîte physique symétrique
+    de `3.0 rad/s`, alors que le cas ACADOS imposait une garde nodale rapide de
+    `2.55 rad/s`. Le seed est alors tronqué et le raffinement reste à
+    `inf_pr=4.281`. Le workflow expose maintenant cette marge : tester d'abord
+    `3.0` pour une comparaison à domaine physique identique et conserver
+    l'audit dense; la garde conservatrice `2.55` restera une ablation séparée.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO
