@@ -5818,7 +5818,7 @@ def run_acados_terminal_wheel_bound_continuation(
 def resolve_initial_fast_velocity_bound_margins(
     physical_margin: float,
     target_margin: float,
-    maximum_step: float = 0.05,
+    maximum_step: float = 0.01,
 ) -> tuple[float, ...]:
     """Build a decreasing cadence-bound continuation ending at the strict guard."""
 
@@ -5841,7 +5841,10 @@ def resolve_initial_fast_velocity_bound_margins(
     if np.isclose(target_margin, physical_margin):
         return (target_margin,)
 
-    stage_count = int(np.ceil((physical_margin - target_margin) / maximum_step))
+    # Remove roundoff at exact multiples (e.g. 0.45 / 0.01 can evaluate a
+    # few ulps above 45 and create an unintended extra stage).
+    stage_ratio = (physical_margin - target_margin) / maximum_step
+    stage_count = int(np.ceil(stage_ratio - 1e-12))
     return tuple(np.linspace(physical_margin, target_margin, stage_count + 1))
 
 
@@ -18850,7 +18853,9 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 ),
                 convergence_tolerance=args.acados_tolerance,
                 stationarity_tolerance=args.acados_stationarity_tolerance,
-                stage_iterations=args.max_acados_iterations,
+                # This is an offline, once-per-run bridge. Give it a larger
+                # budget than the online RHO without changing online latency.
+                stage_iterations=max(args.max_acados_iterations, 300),
                 echo=echo,
             )
         )

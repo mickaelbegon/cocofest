@@ -659,8 +659,10 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     commun. Une continuation initiale automatique resserre désormais seulement
     la borne basse reduced de `omega`, sans avancer le RHO. Le run
     `31448682164` accepte `3.000 -> 2.8875 -> 2.775`, puis atteint
-    `ACADOS_MINSTEP` à `2.6625`; le pas maximal est ramené de `0.15` à
-    `0.05 rad/s`. Relancer le cas
+    `ACADOS_MINSTEP` à `2.6625`. Le run `31449332788` avec un pas effectif de
+    `0.045` échoue encore à `2.730` après 100 SQP. La dernière ablation ramène
+    le pas à `0.01 rad/s` et porte uniquement le budget offline de continuation
+    à 300 SQP. Relancer le cas
     apparié strict. S'il passe, régénérer les quatre figures et le tableau
     fatigue/temps depuis les trois artefacts. S'il échoue, conserver les deux
     ablations comme résultat négatif et ne pas présenter le run `3.0` comme

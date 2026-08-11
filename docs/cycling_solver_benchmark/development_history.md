@@ -5048,3 +5048,12 @@ exécute enfin réellement la continuation. ACADOS accepte les marges `3.000`,
 de `0.1125 rad/s` est encore trop grand près de la borne active. Le pas maximal
 est donc ramené à `0.05 rad/s`, soit dix paliers de `3.00` à `2.55`; la borne
 finale, les tolérances et le problème physique restent inchangés.
+
+Le run
+[`31449332788`](https://github.com/mickaelbegon/cocofest/actions/runs/31449332788)
+accepte encore tous les paliers jusqu'à `2.775 rad/s`, mais plafonne à 100 SQP
+dès `2.730 rad/s` (`status=2`, violation de contrainte `1.46e-2`). La proximité
+du seuil est donc confirmée. Une dernière ablation porte le pas à
+`0.01 rad/s` et réserve jusqu'à 300 SQP à cette préparation offline; le budget
+online des RHO reste inchangé. Si ce pont échoue au même voisinage, la branche
+du seed commun sera considérée inaccessible par simple continuation de borne.
