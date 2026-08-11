@@ -74,11 +74,6 @@ on:
         required: false
         default: ""
         type: string
-      acados_control_seed_cycle:
-        description: One-based cycle selected from the certified ACADOS control trajectory
-        required: true
-        default: "1"
-        type: string
       acados_option_rhos:
         description: Short RHO count for each ACADOS solver-option candidate
         required: true
@@ -562,7 +557,7 @@ jobs:
           python examples/fes_multibody/cycling/build_acados_control_seed.py \
             --common-seed benchmark-seed/common-reduced.npz \
             --certified-acados-trajectory "${certified_trajectories[0]}" \
-            --cycle "${{ inputs.acados_control_seed_cycle }}" \
+            --cycle 1 \
             --output benchmark-seed/common-reduced-acados-controls.npz \
             --summary acados-ipopt-hybrid-results/initial-control-seed.json
 
@@ -839,9 +834,9 @@ jobs:
           ' acados-ipopt-hybrid-results/full-result.json
           fi
           if [[ "${{ inputs.acados_control_seed_source_run_id }}" != "" ]]; then
-            jq -e --argjson cycle "${{ inputs.acados_control_seed_cycle }}" '
+            jq -e '
               .results[0].initial_control_seed.kind == "certified_acados_rho_cycle" and
-              .results[0].initial_control_seed.source_cycle == $cycle and
+              .results[0].initial_control_seed.source_cycle == 1 and
               any(.results[0].control_homotopy_summaries[];
                   .accepted == true and .radius != null)
             ' acados-ipopt-hybrid-results/result.json
