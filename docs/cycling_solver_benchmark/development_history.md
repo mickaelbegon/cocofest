@@ -4974,3 +4974,16 @@ utile, mais son résultat identique a permis d'écarter une donnée ACADOS
 obsolète. Les deux modes sont maintenant séparés : une comparaison reduced à
 formulation identique ne recale que le premier nœud; l'adaptation de toutes les
 bornes cinématiques est réservée au véritable bridge full/reduced.
+
+L'ablation suivante,
+[`31444656648`](https://github.com/mickaelbegon/cocofest/actions/runs/31444656648),
+porte la marge rapide à `3.0 rad/s` comme dans les NLP, mais reproduit l'échec
+du premier RHO. Son rollout IRK localise cette fois la violation dominante sur
+`theta` : `5.090 rad` au nœud 29, pour une borne inférieure restée à
+`-8.324 rad` alors que la trajectoire commune atteint `-13.414 rad`. Le seed
+change donc la référence angulaire absolue sans que les bornes de chemin aient
+été translatées. La préparation distingue désormais trois opérations : recaler
+toute la cinématique pour un bridge mécanique, translater seulement les bornes
+de position `q/theta` pour une nouvelle phase absolue, et fixer tous les états
+du premier nœud pour l'appariement. Les bornes de vitesse `qdot/omega` restent
+inchangées dans ce dernier cas.

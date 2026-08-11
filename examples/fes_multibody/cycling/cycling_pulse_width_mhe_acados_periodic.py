@@ -13269,6 +13269,7 @@ def apply_solution_directly_to_periodic_nmpc_initial_guess(
     periodic_nmpc,
     solution,
     recenter_kinematic_bounds: bool = False,
+    recenter_position_bounds: bool = False,
     recenter_first_node_bounds: bool = False,
 ):
     adapted_solution = _adapt_warmup_solution_to_periodic_nodes(periodic_nmpc, solution)
@@ -13299,8 +13300,13 @@ def apply_solution_directly_to_periodic_nmpc_initial_guess(
             )
         target[:, :] = values
 
-    if recenter_kinematic_bounds:
-        for key in ("q", "qdot", "theta", "omega"):
+    if recenter_kinematic_bounds or recenter_position_bounds:
+        recentered_keys = (
+            ("q", "qdot", "theta", "omega")
+            if recenter_kinematic_bounds
+            else ("q", "theta")
+        )
+        for key in recentered_keys:
             if key in periodic_nmpc.nlp[0].x_bounds.keys():
                 values = np.asarray(
                     periodic_nmpc.nlp[0].x_init[key].init,
@@ -13340,7 +13346,7 @@ def apply_solution_directly_to_periodic_nmpc_initial_guess(
 
 def _common_initial_solution_recenter_modes(
     args, mechanical_bridge: bool
-) -> tuple[bool, bool]:
+) -> tuple[bool, bool, bool]:
     """Separate a formulation bridge from an exact first-node pairing.
 
     A mechanical bridge may require adapting all kinematic boundary columns to
@@ -13349,9 +13355,13 @@ def _common_initial_solution_recenter_modes(
     terminal columns would silently change the physical cadence constraints.
     """
 
+    recenter_first_node = bool(
+        args.common_initial_solution_recenter_first_node_bounds
+    )
     return (
         bool(mechanical_bridge),
-        bool(args.common_initial_solution_recenter_first_node_bounds),
+        bool(recenter_first_node and not mechanical_bridge),
+        recenter_first_node,
     )
 
 
@@ -16470,12 +16480,14 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
         )
         (
             recenter_kinematic_bounds,
+            recenter_position_bounds,
             recenter_first_node_bounds,
         ) = _common_initial_solution_recenter_modes(args, mechanical_bridge)
         apply_solution_directly_to_periodic_nmpc_initial_guess(
             nmpc,
             common_seed,
             recenter_kinematic_bounds=recenter_kinematic_bounds,
+            recenter_position_bounds=recenter_position_bounds,
             recenter_first_node_bounds=recenter_first_node_bounds,
         )
         # Loading any seed can change the first crank angle, including when
@@ -16495,6 +16507,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 f"common_initial_solution: applied ({common_seed_path}, "
                 f"mechanical_bridge={mechanical_bridge}, "
                 f"recenter_kinematic_bounds={recenter_kinematic_bounds}, "
+                f"recenter_position_bounds={recenter_position_bounds}, "
                 f"recenter_first_node_bounds={recenter_first_node_bounds})"
             )
             if terminal_contact_projection is not None:

@@ -10051,10 +10051,51 @@ def test_common_seed_first_node_pairing_does_not_recenter_kinematic_path_bounds(
 
     assert periodic_example._common_initial_solution_recenter_modes(
         args, mechanical_bridge=False
-    ) == (False, True)
+    ) == (False, True, True)
     assert periodic_example._common_initial_solution_recenter_modes(
         args, mechanical_bridge=True
-    ) == (True, True)
+    ) == (True, False, True)
+
+
+def test_common_seed_can_recenter_position_without_changing_velocity_bounds():
+    source = periodic_example._WarmupSolutionAdapter(
+        states={
+            "theta": np.asarray([[-6.0, -9.0, -12.0]]),
+            "omega": np.asarray([[-5.0, -6.0, -7.0]]),
+        },
+        controls={"last_pulse_width_Biceps": np.asarray([[0.0002, 0.0003]])},
+    )
+
+    def guess(values):
+        return SimpleNamespace(init=np.asarray(values, dtype=float))
+
+    theta_bounds = SimpleNamespace(
+        min=np.asarray([[-2.1, -4.0, -8.1]]),
+        max=np.asarray([[-1.9, 0.0, -7.9]]),
+    )
+    omega_bounds = SimpleNamespace(
+        min=np.asarray([[-9.0, -9.0, -9.0]]),
+        max=np.asarray([[-3.0, -3.0, -3.0]]),
+    )
+    nlp = SimpleNamespace(
+        x_init={"theta": guess(np.zeros((1, 3))), "omega": guess(np.zeros((1, 3)))},
+        u_init={"last_pulse_width_Biceps": guess(np.zeros((1, 2)))},
+        x_bounds={"theta": theta_bounds, "omega": omega_bounds},
+    )
+    nmpc = SimpleNamespace(
+        nlp=[nlp],
+        _correct_init_guess_to_fit_bounds=lambda corrected_input: None,
+        _sync_acados_state_bounds=lambda: None,
+    )
+
+    periodic_example.apply_solution_directly_to_periodic_nmpc_initial_guess(
+        nmpc, source, recenter_position_bounds=True
+    )
+
+    np.testing.assert_allclose(theta_bounds.min[:, [0, 2]], [[-6.1, -12.1]])
+    np.testing.assert_allclose(theta_bounds.max[:, [0, 2]], [[-5.9, -11.9]])
+    np.testing.assert_allclose(omega_bounds.min, [[-9.0, -9.0, -9.0]])
+    np.testing.assert_allclose(omega_bounds.max, [[-3.0, -3.0, -3.0]])
 
 
 def test_cycle_boundary_diagnostic_uses_reduced_theta_state():

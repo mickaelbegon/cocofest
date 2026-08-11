@@ -649,6 +649,12 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     `inf_pr=4.281`. Le workflow expose maintenant cette marge : tester d'abord
     `3.0` pour une comparaison à domaine physique identique et conserver
     l'audit dense; la garde conservatrice `2.55` restera une ablation séparée.
+    Le run `31444656648` à `3.0` montre toutefois que la vraie violation
+    dominante est la borne de position absolue `theta` restée dans l'ancien
+    cycle (`5.090 rad` au nœud 29). Le nouveau correctif translate uniquement
+    les bornes `q/theta`, fixe le premier état commun et préserve exactement la
+    boîte physique `qdot/omega`. Relancer d'abord ce cas à `3.0`, puis remettre
+    `2.55` seulement si le rollout/audit inter-nœuds l'exige.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO
