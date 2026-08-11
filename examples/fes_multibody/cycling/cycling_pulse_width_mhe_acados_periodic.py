@@ -16891,6 +16891,7 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
 
     refinement_nmpc = None
     periodic_refinement_accepted = False
+    post_phase_one_refinement_summary = None
     if periodic_cn_sum_approximation and target_periodic_ipopt_refinement_enabled:
         if echo:
             print("running_periodic_ipopt_refinement: True")
@@ -17095,6 +17096,67 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
                 f"{phase_one_summary['state_change_by_block']} "
                 f"scaled_by_block_after="
                 f"{phase_one_summary['scaled_by_block_after']}"
+            )
+
+    if (
+        initial_control_seed_summary is not None
+        and refinement_nmpc is not None
+        and not periodic_refinement_accepted
+    ):
+        # The certified PW pattern and the common Ding state do not describe
+        # the same discrete trajectory. The first refinement above measures
+        # that mismatch; full-dynamics Phase I then reduces it. Re-synchronize
+        # the Radau NLP with the improved primal before handing it to ACADOS.
+        # Do not cache this trajectory under the generic refinement key: its
+        # basin depends explicitly on the external ACADOS control artifact.
+        _copy_periodic_runtime_settings(nmpc, refinement_nmpc)
+        _copy_initial_guesses_and_bounds(nmpc, refinement_nmpc)
+        _copy_objective_targets(nmpc, refinement_nmpc)
+        refinement_nmpc._correct_init_guess_to_fit_bounds(corrected_input="states")
+        refinement_nmpc._correct_init_guess_to_fit_bounds(corrected_input="controls")
+        if echo:
+            print("running_post_phase_one_ipopt_refinement: True")
+        refinement_candidate = run_periodic_ipopt_refinement(
+            refinement_nmpc,
+            target_nmpc=nmpc,
+            max_iterations=args.periodic_ipopt_refinement_iterations,
+            linear_solver=_warmup_ipopt_linear_solver(args),
+            cache_path=None,
+            echo=echo,
+        )
+        if refinement_candidate is not None:
+            accepted = bool(
+                getattr(
+                    refinement_candidate,
+                    "_cocofest_refinement_accepted",
+                    False,
+                )
+            )
+            feasibility = _solution_feasibility_summary(
+                refinement_candidate, 1e-4
+            )
+            post_phase_one_refinement_summary = {
+                "status": refinement_candidate.status,
+                "accepted": accepted,
+                "final_inf_pr": feasibility["final_inf_pr"],
+                "solver_time_s": refinement_candidate.solver_time_to_optimize,
+                "wall_time_s": refinement_candidate.real_time_to_optimize,
+            }
+            if accepted:
+                periodic_ipopt_reference_solution = refinement_candidate
+                periodic_refinement_accepted = True
+        else:
+            post_phase_one_refinement_summary = {
+                "status": None,
+                "accepted": False,
+                "final_inf_pr": None,
+                "solver_time_s": None,
+                "wall_time_s": None,
+            }
+        if echo:
+            print(
+                "post_phase_one_ipopt_refinement_summary: "
+                f"{post_phase_one_refinement_summary}"
             )
 
     if args.solver == "acados" and args.acados_fes_state_trust_radius is not None:
@@ -19165,6 +19227,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             )
         if initial_control_seed_summary is not None:
             summary["initial_control_seed"] = initial_control_seed_summary
+        if post_phase_one_refinement_summary is not None:
+            summary["post_phase_one_ipopt_refinement"] = (
+                post_phase_one_refinement_summary
+            )
         if args.solver == "acados":
             summary["acados_ipopt_recovery"] = {
                 "enabled": bool(args.acados_ipopt_recovery),
@@ -19265,6 +19331,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             )
         if initial_control_seed_summary is not None:
             summary["initial_control_seed"] = initial_control_seed_summary
+        if post_phase_one_refinement_summary is not None:
+            summary["post_phase_one_ipopt_refinement"] = (
+                post_phase_one_refinement_summary
+            )
         if args.solver == "acados":
             summary["acados_ipopt_recovery"] = {
                 "enabled": bool(args.acados_ipopt_recovery),
@@ -19381,6 +19451,10 @@ def solve_case(args: argparse.Namespace, echo: bool = True) -> dict:
             )
         if initial_control_seed_summary is not None:
             summary["initial_control_seed"] = initial_control_seed_summary
+        if post_phase_one_refinement_summary is not None:
+            summary["post_phase_one_ipopt_refinement"] = (
+                post_phase_one_refinement_summary
+            )
         summary["acados_ipopt_recovery"] = {
             "enabled": bool(args.acados_ipopt_recovery),
             "forced_first_rho_for_ci": bool(

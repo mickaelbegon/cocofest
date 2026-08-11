@@ -837,6 +837,7 @@ jobs:
             jq -e '
               .results[0].initial_control_seed.kind == "certified_acados_rho_cycle" and
               .results[0].initial_control_seed.source_cycle == 1 and
+              .results[0].post_phase_one_ipopt_refinement.accepted == true and
               any(.results[0].control_homotopy_summaries[];
                   .accepted == true and .radius != null)
             ' acados-ipopt-hybrid-results/result.json

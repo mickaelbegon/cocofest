@@ -672,7 +672,7 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     contrainte `3.33e-3`. Ne plus réduire le pas. Construire une Phase I depuis
     les PW d'un seed ACADOS déjà certifié à `2.55`, tout en remplaçant son état
     initial par l'état commun; auditer les 20 états Ding avant comparaison.
-26. [implémenté, validation CI en attente] Construire le seed hybride depuis
+26. [premier smoke analysé; second en attente] Construire le seed hybride depuis
     l'état commun du run `31441917891` et le cycle 1 du préfixe ACADOS strict du
     run `31428024125`. Le générateur préserve les 22 blocs d'état, sélectionne
     exactement 30 PW par muscle, valide le profil physique et archive les SHA.
@@ -681,6 +681,12 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     Commencer par 5 RHO. Si ce smoke passe, lancer 145 RHO et régénérer la
     comparaison appariée. S'il échoue, comparer les quatre cycles sources
     `1`, `30`, `100` et `145` avant de modifier les tolérances ou la physique.
+    Le run `31484139710` confirme le transfert, mais montre que le raffinement
+    IPOPT était exécuté avant la Phase I complète : `inf_pr=0.309`, puis défaut
+    scaled réduit à `0.0749`, et enfin `ACADOS_MINSTEP` avec résidu d'égalité
+    `0.1058`. Relancer maintenant IPOPT/Radau-5 depuis ce primal amélioré avant
+    la continuation ACADOS; ne pas relâcher la garde `2.55` ni les critères de
+    certification.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

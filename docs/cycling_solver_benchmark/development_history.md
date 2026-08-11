@@ -5090,3 +5090,22 @@ ne pas biaiser l'optimum de fatigue. Cette distinction est importante : les PW
 proviennent d'une trajectoire physiquement certifiée, mais elles ne sont pas a
 priori faisables avec les 20 états Ding communs; c'est précisément ce que la
 Phase I doit établir.
+
+Le premier smoke de cette stratégie,
+[`31484139710`](https://github.com/mickaelbegon/cocofest/actions/runs/31484139710),
+valide la construction et la provenance du seed, mais échoue avant le premier
+RHO. La projection FES annule son défaut local initial, puis le raffinement
+IPOPT tenté trop tôt reste à `inf_pr=0.309278`. La Phase I complète réduit
+ensuite le défaut discret scaled de `0.235628` à `0.0748742`; comme IPOPT
+n'était pas relancé après cette amélioration, ACADOS recevait encore un résidu
+d'égalité de `0.1058` et une stationnarité de `154.6`. Les étapes contrôles
+fixes, `1e-8 s` et `1e-7 s` atteignent toutes `ACADOS_MINSTEP` dès la première
+itération. Ce résultat invalide l'ordre des opérations, pas encore le patron de
+PW.
+
+Le pipeline relance désormais le même NLP IPOPT/Radau-5 après la Phase I en
+recopiant le primal, les bornes mobiles, les paramètres runtime et les cibles
+d'objectif. Cette seconde restauration n'est pas mise en cache sous la clé
+générique, car son bassin dépend du SHA de la trajectoire ACADOS externe. Son
+statut, son `inf_pr` et ses temps sont exportés séparément avant la Phase I
+ACADOS à rayons de contrôle.
