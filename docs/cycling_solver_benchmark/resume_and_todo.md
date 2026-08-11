@@ -711,6 +711,12 @@ modèle, d'interface ou d'algorithme invalide le résultat négatif précédent.
     `ReducedFesCyclingModel` au custom constraint, sans wrapper `.bio_model`.
     L'accès accepte maintenant les deux interfaces et possède une régression
     ciblée; relancer le même smoke.
+    [smoke validé, run `31491664684`] `5/5` RHO, aucun recovery, médiane chaude
+    `0.354 s` solveur et `0.366 s` murale. La trace IRK dense respecte la borne
+    rapide à `1.2e-9 rad/s` près, contre `0.4000 rad/s` d'overshoot auparavant;
+    erreur angulaire finale `0.00199996 rad`. Lancer 145 RHO depuis le même
+    seed commun, conserver le préfixe certifié, puis comparer contrôles,
+    fatigues finales/AUC et temps à IPOPT et MadNLP sur le préfixe commun.
 
 La question causale est maintenant resserrée : une seule projection au RHO 19
 ne suffit pas, mais la séquence 19--36 conserve le bassin franchissant le RHO

@@ -5161,3 +5161,22 @@ ajouté. Ce prédicteur fige toutefois les forces musculaires pendant le
 demi-pas : c'est une garde économique, pas une preuve continue. L'audit dense
 IRK reste donc obligatoire et décidera si une marge interne plus prudente ou
 un prédicteur d'ordre supérieur est nécessaire.
+
+Le premier smoke réduit strict de cette garde est vert au run
+[`31491664684`](https://github.com/mickaelbegon/cocofest-pedalage/actions/runs/31491664684).
+Les cinq RHO convergent en `7, 10, 10, 8, 6` SQP, sans aucun recovery IPOPT.
+Le temps solveur total est `1.680 s`, le temps mural des solves `1.839 s`, et
+les médianes chaudes valent respectivement `0.354 s` et `0.366 s`. La trace
+IRK dense atteint au plus rapide `-9.283185306 rad/s`, contre une borne de
+`-9.283185307 rad/s`; l'ancien dépassement de `0.4000 rad/s` disparaît donc à
+la précision numérique. La fermeture absolue reste active : l'erreur finale
+vaut `0.00199996 rad` pour une tolérance d'audit de `0.00201 rad`.
+
+La vitesse moyenne reconstruite par différence d'angles dépasse localement la
+boîte de `0.00352 rad/s`, mais ce diagnostic de quadrature est distinct de la
+trace IRK dense et reste très inférieur à la tolérance d'équivalence de
+`0.1 rad/s`. Il devra être surveillé sur le run long. Le setup unique demeure
+dominant (`42.27 s`), alors que la boucle RHO coûte `0.369 s/cycle` murale. Ce
+smoke valide la formulation et autorise maintenant la comparaison appariée sur
+145 RHO; il ne suffit pas encore à conclure sur la fatigue longue ni les sauts
+de PW.
