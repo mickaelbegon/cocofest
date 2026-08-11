@@ -5015,3 +5015,10 @@ avant le suivant; la borne stricte est restaurée dans tous les cas et le résum
 JSON conserve les statuts, résidus et temps de chaque palier. Cette stratégie
 combine le bassin observé à `3.0` avec le domaine physiquement sûr à `2.55`,
 sans certifier ni avancer une fenêtre relaxée.
+
+Le premier lancement de cette continuation,
+[`31446963709`](https://github.com/mickaelbegon/cocofest/actions/runs/31446963709),
+s'est arrêté avant tout palier : `BoundsList.__contains__` ne teste pas les
+noms d'état comme un dictionnaire Python. La détection de `omega` utilise
+désormais explicitement `x_bounds.keys()`; une régression reproduit ce contrat
+du conteneur Bioptim.

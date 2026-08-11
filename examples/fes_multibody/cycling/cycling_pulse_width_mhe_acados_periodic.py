@@ -5870,7 +5870,7 @@ def run_acados_initial_fast_velocity_bound_continuation(
         raise ValueError("Initial cadence-bound margins must be finite and positive.")
     if any(next_value >= value for value, next_value in zip(margins, margins[1:])):
         raise ValueError("Initial cadence-bound margins must be strictly decreasing.")
-    if "omega" not in periodic_nmpc.nlp[0].x_bounds:
+    if "omega" not in periodic_nmpc.nlp[0].x_bounds.keys():
         raise ValueError(
             "Initial cadence-bound continuation requires reduced omega mechanics."
         )

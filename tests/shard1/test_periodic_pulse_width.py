@@ -7313,6 +7313,11 @@ def test_initial_fast_velocity_bound_schedule_reaches_strict_guard():
 
 
 def test_initial_fast_velocity_bound_continuation_preserves_first_node(monkeypatch):
+    class BoundsContainer(dict):
+        # Bioptim's BoundsList membership does not follow dict semantics.
+        def __contains__(self, _key):
+            return False
+
     class Entry:
         def __init__(self, values):
             self.init = np.asarray(values, dtype=float)
@@ -7330,7 +7335,7 @@ def test_initial_fast_velocity_bound_continuation_preserves_first_node(monkeypat
     nmpc = SimpleNamespace(
         nlp=[
             SimpleNamespace(
-                x_bounds={"omega": omega_bounds},
+                x_bounds=BoundsContainer(omega=omega_bounds),
                 x_init={"omega": Entry([[-2.0 * np.pi] * 3])},
                 u_init={"pulse_apparition_time": Entry([[1.4e-4, 1.4e-4]])},
             )
