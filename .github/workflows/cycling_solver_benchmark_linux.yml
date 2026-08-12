@@ -34,6 +34,11 @@ on:
         required: true
         default: "0.00"
         type: string
+      signed_crank_torque_nm:
+        description: Optional signed torque override in N.m (positive resists the negative cycling direction; overrides assistance)
+        required: false
+        default: ""
+        type: string
       terminal_wheel_q_slack:
         description: Absolute cycle-count crank-angle slack in radians
         required: true
@@ -253,8 +258,13 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
           BENCHMARK_CYCLES_PER_WINDOW: ${{ inputs.cycles == 'full_horizon' && '1' || inputs.cycles_per_window }}
+          BENCHMARK_SIGNED_CRANK_TORQUE: ${{ inputs.signed_crank_torque_nm }}
         run: |
           mkdir -p benchmark-seed-result
+          crank_torque_options=(--crank-assistance "${{ inputs.crank_assistance_nm }}")
+          if [[ -n "$BENCHMARK_SIGNED_CRANK_TORQUE" ]]; then
+            crank_torque_options=(--signed-crank-torque "$BENCHMARK_SIGNED_CRANK_TORQUE")
+          fi
           if [[ "$BENCHMARK_CYCLES_PER_WINDOW" != "1" && "$BENCHMARK_CYCLES_PER_WINDOW" != "2" ]]; then
             echo "cycles_per_window must be 1 or 2." >&2
             exit 1
@@ -283,7 +293,7 @@ jobs:
               --stimulations-per-cycle 30 \
               --n-windows "$BENCHMARK_CYCLES_PER_WINDOW" \
               --n-threads "$BENCHMARK_THREADS" \
-              --crank-assistance "${{ inputs.crank_assistance_nm }}" \
+              "${crank_torque_options[@]}" \
               --standard-warmup-seed .github/benchmark-seeds/legacy-resistive-0p22-warmup.npz \
               --legacy-standard-warmup-seed-signed-torque 0.22 \
               --standard-warmup-seed-continuation \
@@ -2261,6 +2271,7 @@ jobs:
       BENCHMARK_RHOS: ${{ matrix.benchmark_rhos }}
       BENCHMARK_CYCLES_PER_WINDOW: ${{ matrix.cycles_per_window }}
       BENCHMARK_ASSISTANCE: ${{ inputs.crank_assistance_nm }}
+      BENCHMARK_SIGNED_CRANK_TORQUE: ${{ inputs.signed_crank_torque_nm }}
       BENCHMARK_Q_SLACK: ${{ inputs.terminal_wheel_q_slack }}
       BENCHMARK_MAX_ITER: ${{ inputs.solver_max_iterations }}
       REFINED_COLLOCATION_RHOS: ${{ inputs.refined_collocation_rhos }}
