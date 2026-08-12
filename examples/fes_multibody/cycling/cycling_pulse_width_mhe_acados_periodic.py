@@ -644,7 +644,14 @@ def parse_objectives(raw_objective: str) -> set[str]:
 
 
 def parse_crank_assistance(raw_assistance: str) -> float:
-    """Convert a non-negative assistance magnitude to the signed cycling torque."""
+    """Convert assistance, or ``signed:<N.m>``, to the cycling torque convention."""
+
+    raw_assistance = str(raw_assistance).strip()
+    if raw_assistance.lower().startswith("signed:"):
+        signed_torque = float(raw_assistance.split(":", maxsplit=1)[1])
+        if not np.isfinite(signed_torque):
+            raise argparse.ArgumentTypeError("Signed crank torque must be finite.")
+        return signed_torque
 
     assistance = float(raw_assistance)
     if not np.isfinite(assistance) or assistance < 0.0:
@@ -1325,7 +1332,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         metavar="N_M",
         help=(
             "Non-negative assistance magnitude in N.m. With the negative cycling "
-            "direction, 0.2 is converted to the signed torque -0.2 N.m."
+            "direction, 0.2 is converted to the signed torque -0.2 N.m. Use "
+            "signed:+0.2 for an explicit resistance."
         ),
     )
     torque_group.add_argument(

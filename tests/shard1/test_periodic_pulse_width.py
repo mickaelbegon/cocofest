@@ -2203,6 +2203,12 @@ def test_solver_clis_distinguish_assistance_magnitude_from_signed_torque():
         == 0.2
     )
     assert (
+        periodic_parser.parse_args(
+            ["--crank-assistance", "signed:0.2"]
+        ).constant_crank_torque
+        == 0.2
+    )
+    assert (
         comparison_parser.parse_args(["--crank-assistance", "0.2"]).resistive_torque
         == -0.2
     )

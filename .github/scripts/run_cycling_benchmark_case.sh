@@ -26,10 +26,6 @@ result="$case_dir/result.json"
 solver_options=()
 initialization_options=(--no-optional-nlp-periodic-ipopt-hot-start)
 trajectory_options=()
-torque_options=(--crank-assistance "${BENCHMARK_ASSISTANCE:?BENCHMARK_ASSISTANCE is required}")
-if [[ -n "${BENCHMARK_SIGNED_CRANK_TORQUE:-}" ]]; then
-  torque_options=(--signed-crank-torque "$BENCHMARK_SIGNED_CRANK_TORQUE")
-fi
 solver_tolerance=1e-6
 nlp_transfer_preparation="${NLP_TRANSFER_PREPARATION:-none}"
 nlp_phase_one_screen_threshold="${NLP_PHASE_ONE_SCREEN_THRESHOLD:-0.001}"
@@ -240,7 +236,7 @@ python "$workspace/examples/fes_multibody/cycling/cycling_fes_solver_comparison.
   --stimulations-per-cycle 30 \
   --n-windows "$case_windows" \
   --n-threads "$BENCHMARK_THREADS" \
-  "${torque_options[@]}" \
+  --crank-assistance "$BENCHMARK_ASSISTANCE" \
   --nlp-tolerance "$solver_tolerance" \
   --primal-feasibility-threshold 1e-5 \
   --max-consecutive-failing 2 \
